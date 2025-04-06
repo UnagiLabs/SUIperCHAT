@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "@/components/theme/theme-provider";
+import "@mysten/dapp-kit/dist/index.css";
+import { ClientProviders } from "@/components/providers/client-providers";
 
 /**
  * Geistサンフォントの設定
@@ -45,25 +46,22 @@ export const viewport: Viewport = {
 /**
  * ルートレイアウトコンポーネント
  *
- * アプリケーション全体のレイアウトを定義し、テーマプロバイダーを適用します。
+ * アプリケーション全体のレイアウトを定義し、クライアントプロバイダーを適用します。
  *
  * @param {Object} props - コンポーネントプロパティ
  * @param {React.ReactNode} props.children - 子コンポーネント
- * @returns {JSX.Element} ルートレイアウト
  */
 export default function RootLayout({
 	children,
 }: Readonly<{
 	children: React.ReactNode;
-}>) {
+}>): React.ReactElement {
 	return (
 		<html lang="ja" suppressHydrationWarning>
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen`}
 			>
-				<ThemeProvider defaultTheme="system" storageKey="suiperchat-theme">
-					{children}
-				</ThemeProvider>
+				<ClientProviders>{children}</ClientProviders>
 			</body>
 		</html>
 	);

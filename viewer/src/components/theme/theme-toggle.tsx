@@ -8,6 +8,7 @@
 
 "use client";
 
+import type React from "react";
 import { useEffect, useState } from "react";
 import { useTheme } from "./theme-provider";
 
@@ -15,7 +16,7 @@ import { useTheme } from "./theme-provider";
  * テーマ切り替えボタンコンポーネント
  * @returns {JSX.Element} テーマ切り替えボタンのUI
  */
-export function ThemeToggle() {
+export function ThemeToggle(): React.ReactElement | null {
 	const { theme, set_theme } = useTheme();
 	const [mounted, set_mounted] = useState(false);
 
