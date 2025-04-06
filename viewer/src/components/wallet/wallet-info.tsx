@@ -11,13 +11,11 @@
 
 import { useWalletAddress } from "@/hooks/wallet/use-wallet-address";
 import { useCurrentAccount } from "@mysten/dapp-kit";
+import type React from "react";
 
 /**
  * ウォレット情報表示コンポーネントのプロパティ
  */
-interface WalletInfoProps {
-    className?: string;
-}
 interface WalletInfoProps {
 	className?: string;
 }
@@ -28,7 +26,9 @@ interface WalletInfoProps {
  * @param {WalletInfoProps} props - コンポーネントプロパティ
  * @returns {JSX.Element|null} ウォレット情報表示、接続されていない場合はnull
  */
-export function WalletInfo({ className = "" }: WalletInfoProps) {
+export function WalletInfo({
+	className = "",
+}: WalletInfoProps): React.ReactElement | null {
 	const account = useCurrentAccount();
 	const address = useWalletAddress();
 
