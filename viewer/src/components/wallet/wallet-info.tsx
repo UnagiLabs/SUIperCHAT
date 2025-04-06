@@ -38,7 +38,7 @@ export function WalletInfo({
 
 	return (
 		<div className={`wallet-info ${className}`}>
-			<p className="text-sm text-muted-foreground mb-1">接続済みウォレット</p>
+			<p className="text-sm text-muted-foreground mb-1">Connected Wallet</p>
 			<p className="font-mono text-xs break-all">{address}</p>
 		</div>
 	);

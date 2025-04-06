@@ -11,18 +11,24 @@
 		"check": "biome check src"
 	},
 	"dependencies": {
+		"@hookform/resolvers": "^5.0.1",
 		"@mysten/dapp-kit": "^0.15.2",
 		"@mysten/sui": "^1.26.1",
+		"@radix-ui/react-label": "^2.1.2",
 		"@radix-ui/react-slot": "^1.1.2",
 		"@tanstack/react-query": "^5.71.10",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"lucide-react": "^0.487.0",
 		"next": "15.2.4",
+		"next-themes": "^0.4.6",
 		"react": "^19.0.0",
 		"react-dom": "^19.0.0",
+		"react-hook-form": "^7.55.0",
+		"sonner": "^2.0.3",
 		"tailwind-merge": "^3.1.0",
-		"tw-animate-css": "^1.2.5"
+		"tw-animate-css": "^1.2.5",
+		"zod": "^3.24.2"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "1.9.4",

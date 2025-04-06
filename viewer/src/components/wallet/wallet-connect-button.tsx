@@ -21,7 +21,7 @@ import type React from "react";
 export function WalletConnectButton(): React.ReactElement {
 	return (
 		<div className="wallet-connect-wrapper">
-			<ConnectButton connectText="ウォレット接続" />
+			<ConnectButton connectText="Connect Wallet" />
 		</div>
 	);
 }
