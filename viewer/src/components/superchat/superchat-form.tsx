@@ -4,7 +4,7 @@
  * 視聴者が配信者にスーパーチャットを送信するためのフォームコンポーネント
  *
  * @remarks
- * - 金額選択UI（1/3/5/10 SUI）
+ * - 金額選択UI（0/1/3/5/10 SUI）
  * - 送付先アドレス入力フィールド
  * - メッセージ入力フィールド
  * - 表示名入力フィールド
@@ -25,7 +25,6 @@ import {
 	Card,
 	CardContent,
 	CardDescription,
-	CardFooter,
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
@@ -43,7 +42,7 @@ import { toast } from "sonner";
 
 // フォームのバリデーションスキーマ
 const superchat_form_schema = z.object({
-	amount: z.number().min(1).max(10),
+	amount: z.number().min(0).max(10),
 	recipient_address: z
 		.string()
 		.min(42, {
@@ -73,6 +72,7 @@ type SuperchatFormValues = z.infer<typeof superchat_form_schema>;
 
 // スーパーチャット金額のオプション
 const amount_options = [
+	{ value: 0, label: "No tips", color: "bg-yellow-500" },
 	{ value: 1, label: "1 SUI", color: "bg-yellow-500" },
 	{ value: 3, label: "3 SUI", color: "bg-yellow-500" },
 	{ value: 5, label: "5 SUI", color: "bg-yellow-500" },
@@ -81,7 +81,7 @@ const amount_options = [
 
 // デフォルトのフォーム値
 const default_values: Partial<SuperchatFormValues> = {
-	amount: 1,
+	amount: 0,
 	recipient_address: "",
 	display_name: "",
 	message: "",
@@ -129,9 +129,15 @@ export function SuperchatForm({ on_send_success }: SuperchatFormProps = {}) {
 		console.log("送信データ:", values);
 
 		// 成功トースト表示
-		toast.success("Super Chat sent successfully!", {
-			description: `${values.amount} SUI has been sent`,
-		});
+		if (values.amount > 0) {
+			toast.success("Super Chat sent successfully!", {
+				description: `${values.amount} SUI has been sent`,
+			});
+		} else {
+			toast.success("Message sent successfully!", {
+				description: "Your message has been sent without SUI",
+			});
+		}
 
 		// 送信成功時のコールバックがあれば呼び出す
 		// 実際の実装では、トランザクションIDも渡す
@@ -164,7 +170,7 @@ export function SuperchatForm({ on_send_success }: SuperchatFormProps = {}) {
 			<CardHeader>
 				<CardTitle>Send a Super Chat</CardTitle>
 				<CardDescription>
-					Send a message and SUI directly to the streamer
+					Send a message and optionally SUI directly to the streamer
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
@@ -177,25 +183,47 @@ export function SuperchatForm({ on_send_success }: SuperchatFormProps = {}) {
 								<FormItem className="space-y-3">
 									<FormLabel>Amount</FormLabel>
 									<FormControl>
-										<div className="flex flex-wrap gap-2">
-											{amount_options.map((option) => (
-												<Button
-													key={option.value}
-													type="button"
-													variant={
-														option.value === field.value ? "default" : "outline"
-													}
-													className={
-														option.value === field.value
-															? `${option.color} text-white`
-															: ""
-													}
-													onClick={() => field.onChange(option.value)}
-												>
-													<Coins className="mr-2 h-4 w-4" />
-													{option.label}
-												</Button>
-											))}
+										<div className="grid grid-cols-1 gap-2">
+											<Button
+												key={amount_options[0].value}
+												type="button"
+												variant={
+													amount_options[0].value === field.value
+														? "default"
+														: "outline"
+												}
+												className={
+													amount_options[0].value === field.value
+														? `${amount_options[0].color} text-white`
+														: ""
+												}
+												onClick={() => field.onChange(amount_options[0].value)}
+											>
+												<Coins className="mr-2 h-4 w-4" />
+												{amount_options[0].label}
+											</Button>
+											<div className="grid grid-cols-4 gap-2">
+												{amount_options.slice(1).map((option) => (
+													<Button
+														key={option.value}
+														type="button"
+														variant={
+															option.value === field.value
+																? "default"
+																: "outline"
+														}
+														className={
+															option.value === field.value
+																? `${option.color} text-white`
+																: ""
+														}
+														onClick={() => field.onChange(option.value)}
+													>
+														<Coins className="mr-2 h-4 w-4" />
+														{option.label}
+													</Button>
+												))}
+											</div>
 										</div>
 									</FormControl>
 									<FormMessage />
