@@ -54,15 +54,7 @@ export function SuperchatComplete({
 	on_close,
 }: SuperchatCompleteProps) {
 	// 金額に応じた背景色クラスを選択
-	let background_color_class = "bg-blue-500";
-
-	if (amount >= 10) {
-		background_color_class = "bg-red-500";
-	} else if (amount >= 5) {
-		background_color_class = "bg-yellow-500";
-	} else if (amount >= 3) {
-		background_color_class = "bg-green-500";
-	}
+	const background_color_class = "bg-yellow-500";
 
 	return (
 		<Card className="w-full max-w-md mx-auto">

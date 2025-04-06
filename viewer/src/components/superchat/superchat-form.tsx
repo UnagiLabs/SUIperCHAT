@@ -73,10 +73,10 @@ type SuperchatFormValues = z.infer<typeof superchat_form_schema>;
 
 // スーパーチャット金額のオプション
 const amount_options = [
-	{ value: 1, label: "1 SUI", color: "bg-blue-500" },
-	{ value: 3, label: "3 SUI", color: "bg-green-500" },
+	{ value: 1, label: "1 SUI", color: "bg-yellow-500" },
+	{ value: 3, label: "3 SUI", color: "bg-yellow-500" },
 	{ value: 5, label: "5 SUI", color: "bg-yellow-500" },
-	{ value: 10, label: "10 SUI", color: "bg-red-500" },
+	{ value: 10, label: "10 SUI", color: "bg-yellow-500" },
 ];
 
 // デフォルトのフォーム値
