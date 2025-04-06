@@ -5,6 +5,7 @@
  *
  * @remarks
  * - 金額選択UI（1/3/5/10 SUI）
+ * - 送付先アドレス入力フィールド
  * - メッセージ入力フィールド
  * - 表示名入力フィールド
  * - 送信確認・送信機能
@@ -43,6 +44,14 @@ import { toast } from "sonner";
 // フォームのバリデーションスキーマ
 const superchat_form_schema = z.object({
 	amount: z.number().min(1).max(10),
+	recipient_address: z
+		.string()
+		.min(42, {
+			message: "Please enter a valid wallet address.",
+		})
+		.max(66, {
+			message: "Please enter a valid wallet address.",
+		}),
 	display_name: z
 		.string()
 		.min(1, {
@@ -73,6 +82,7 @@ const amount_options = [
 // デフォルトのフォーム値
 const default_values: Partial<SuperchatFormValues> = {
 	amount: 1,
+	recipient_address: "",
 	display_name: "",
 	message: "",
 };
@@ -195,6 +205,26 @@ export function SuperchatForm({ on_send_success }: SuperchatFormProps = {}) {
 
 						<FormField
 							control={form.control}
+							name="recipient_address"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>Recipient Address</FormLabel>
+									<FormControl>
+										<Input
+											placeholder="Enter streamer's wallet address"
+											{...field}
+										/>
+									</FormControl>
+									<FormDescription>
+										The wallet address of the streamer
+									</FormDescription>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
+
+						<FormField
+							control={form.control}
 							name="display_name"
 							render={({ field }) => (
 								<FormItem>
@@ -235,6 +265,13 @@ export function SuperchatForm({ on_send_success }: SuperchatFormProps = {}) {
 								<div className="grid grid-cols-3 gap-2 text-sm mb-1">
 									<span className="font-medium">Amount:</span>
 									<span className="col-span-2">{selected_option?.label}</span>
+								</div>
+
+								<div className="grid grid-cols-3 gap-2 text-sm mb-1">
+									<span className="font-medium">To:</span>
+									<span className="col-span-2 font-mono text-xs break-all">
+										{form.getValues("recipient_address")}
+									</span>
 								</div>
 
 								<div className="grid grid-cols-3 gap-2 text-sm mb-1">

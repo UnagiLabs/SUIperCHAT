@@ -1,6 +1,5 @@
 import { Superchat } from "@/components/superchat/superchat";
 import { WalletConnectButton } from "@/components/wallet/wallet-connect-button";
-import { WalletInfo } from "@/components/wallet/wallet-info";
 import Image from "next/image";
 
 export default function Home() {
@@ -14,8 +13,6 @@ export default function Home() {
 			</header>
 
 			<main className="flex flex-col gap-8 w-full">
-				<WalletInfo className="w-full max-w-md mx-auto" />
-
 				<Superchat />
 			</main>
 

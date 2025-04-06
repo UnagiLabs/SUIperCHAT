@@ -14,13 +14,26 @@ import { ConnectButton } from "@mysten/dapp-kit";
 import type React from "react";
 
 /**
+ * ウォレット接続ボタンコンポーネントのプロパティ
+ */
+interface WalletConnectButtonProps {
+	/**
+	 * コンポーネントのクラス名
+	 */
+	className?: string;
+}
+
+/**
  * ウォレット接続ボタンコンポーネント
  *
+ * @param {WalletConnectButtonProps} props - コンポーネントプロパティ
  * @returns {JSX.Element} ウォレット接続ボタン
  */
-export function WalletConnectButton(): React.ReactElement {
+export function WalletConnectButton({
+	className = "",
+}: WalletConnectButtonProps): React.ReactElement {
 	return (
-		<div className="wallet-connect-wrapper">
+		<div className={`wallet-connect-wrapper ${className}`}>
 			<ConnectButton connectText="Connect Wallet" />
 		</div>
 	);
