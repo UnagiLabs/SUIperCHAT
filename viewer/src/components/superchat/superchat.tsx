@@ -99,7 +99,9 @@ export function Superchat({ className = "", on_send_success }: SuperchatProps) {
 					<h3 className="text-xl font-semibold mb-4">
 						Connect your wallet to send a Super Chat
 					</h3>
-					<WalletConnectButton className="mx-auto" />
+					<div className="flex justify-center">
+						<WalletConnectButton className="mx-auto" />
+					</div>
 				</div>
 			) : (
 				<>

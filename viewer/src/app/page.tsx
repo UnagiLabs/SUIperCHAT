@@ -1,5 +1,5 @@
 import { Superchat } from "@/components/superchat/superchat";
-import { WalletConnectButton } from "@/components/wallet/wallet-connect-button";
+import { HeaderWalletButton } from "@/components/wallet/header-wallet-button";
 import Image from "next/image";
 
 export default function Home() {
@@ -8,7 +8,7 @@ export default function Home() {
 			<header className="w-full max-w-4xl mx-auto">
 				<div className="flex items-center justify-between w-full">
 					<h1 className="text-2xl font-bold">SUIperCHAT</h1>
-					<WalletConnectButton />
+					<HeaderWalletButton />
 				</div>
 			</header>
 
