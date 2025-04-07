@@ -30,6 +30,8 @@ type SendState = "form" | "complete";
  */
 interface CompleteInfo {
 	amount: number;
+	display_name: string;
+	message: string;
 	transaction_id?: string;
 }
 
@@ -44,7 +46,12 @@ interface SuperchatProps {
 	/**
 	 * 送信成功時のコールバック関数
 	 */
-	on_send_success?: (amount: number, transaction_id?: string) => void;
+	on_send_success?: (
+		amount: number,
+		display_name: string,
+		message: string,
+		transaction_id?: string,
+	) => void;
 }
 
 /**
@@ -59,6 +66,8 @@ export function Superchat({ className = "", on_send_success }: SuperchatProps) {
 	// 完了情報
 	const [complete_info, set_complete_info] = useState<CompleteInfo>({
 		amount: 0,
+		display_name: "",
+		message: "",
 	});
 
 	// 現在のウォレットアカウント
@@ -68,18 +77,27 @@ export function Superchat({ className = "", on_send_success }: SuperchatProps) {
 	 * 送信成功時のハンドラー
 	 *
 	 * @param amount - 送信金額
+	 * @param display_name - 表示名
+	 * @param message - メッセージ内容
 	 * @param transaction_id - トランザクションID
 	 */
-	function handle_send_success(amount: number, transaction_id?: string) {
+	function handle_send_success(
+		amount: number,
+		display_name: string,
+		message: string,
+		transaction_id?: string,
+	) {
 		set_complete_info({
 			amount,
+			display_name,
+			message,
 			transaction_id,
 		});
 		set_send_state("complete");
 
 		// 親コンポーネントのコールバックがあれば呼び出す
 		if (on_send_success) {
-			on_send_success(amount, transaction_id);
+			on_send_success(amount, display_name, message, transaction_id);
 		}
 	}
 
@@ -112,6 +130,8 @@ export function Superchat({ className = "", on_send_success }: SuperchatProps) {
 					{send_state === "complete" && (
 						<SuperchatComplete
 							amount={complete_info.amount}
+							display_name={complete_info.display_name}
+							message={complete_info.message}
 							transaction_id={complete_info.transaction_id}
 							on_close={handle_close_complete}
 						/>

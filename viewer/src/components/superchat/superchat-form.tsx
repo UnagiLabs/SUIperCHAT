@@ -94,7 +94,12 @@ interface SuperchatFormProps {
 	/**
 	 * 送信成功時のコールバック関数
 	 */
-	on_send_success?: (amount: number, transaction_id?: string) => void;
+	on_send_success?: (
+		amount: number,
+		display_name: string,
+		message: string,
+		transaction_id?: string,
+	) => void;
 }
 
 /**
@@ -142,7 +147,12 @@ export function SuperchatForm({ on_send_success }: SuperchatFormProps = {}) {
 		// 送信成功時のコールバックがあれば呼び出す
 		// 実際の実装では、トランザクションIDも渡す
 		if (on_send_success) {
-			on_send_success(values.amount);
+			on_send_success(
+				values.amount,
+				values.display_name,
+				values.message || "",
+				undefined,
+			);
 		}
 
 		// フォームリセットと確認モード解除

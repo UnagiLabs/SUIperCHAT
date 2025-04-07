@@ -30,6 +30,16 @@ interface SuperchatCompleteProps {
 	transaction_id?: string;
 
 	/**
+	 * 表示名
+	 */
+	display_name: string;
+
+	/**
+	 * コメント内容
+	 */
+	message?: string;
+
+	/**
 	 * 完了画面を閉じる関数
 	 */
 	on_close: () => void;
@@ -44,6 +54,8 @@ interface SuperchatCompleteProps {
 export function SuperchatComplete({
 	amount,
 	transaction_id,
+	display_name,
+	message,
 	on_close,
 }: SuperchatCompleteProps) {
 	// 成功を表す緑色のテキストカラークラス
@@ -69,6 +81,18 @@ export function SuperchatComplete({
 							<p className="text-sm text-muted-foreground mb-1">Amount Sent</p>
 							<p className="text-2xl font-bold">{amount} SUI</p>
 						</div>
+
+						<div className="text-center">
+							<p className="text-sm text-muted-foreground mb-1">Display Name</p>
+							<p className="text-lg font-medium">{display_name}</p>
+						</div>
+
+						{message && (
+							<div className="text-center">
+								<p className="text-sm text-muted-foreground mb-1">Message</p>
+								<p className="text-base italic">{message}</p>
+							</div>
+						)}
 
 						{transaction_id && (
 							<div className="bg-muted p-3 rounded-md">
