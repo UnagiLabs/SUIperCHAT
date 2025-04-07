@@ -193,7 +193,8 @@ export function SuperchatForm({ on_send_success }: SuperchatFormProps = {}) {
 								<FormItem className="space-y-3">
 									<FormLabel>Amount</FormLabel>
 									<FormControl>
-										<div className="grid grid-cols-1 gap-2">
+										<div className="space-y-2">
+											{/* No tips ボタン */}
 											<Button
 												key={amount_options[0].value}
 												type="button"
@@ -202,17 +203,19 @@ export function SuperchatForm({ on_send_success }: SuperchatFormProps = {}) {
 														? "default"
 														: "outline"
 												}
-												className={
+												className={`w-full ${
 													amount_options[0].value === field.value
 														? `${amount_options[0].color} text-white`
 														: ""
-												}
+												}`}
 												onClick={() => field.onChange(amount_options[0].value)}
 											>
 												<Coins className="mr-2 h-4 w-4" />
 												{amount_options[0].label}
 											</Button>
-											<div className="grid grid-cols-4 gap-2">
+
+											{/* SUI金額ボタン */}
+											<div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
 												{amount_options.slice(1).map((option) => (
 													<Button
 														key={option.value}
