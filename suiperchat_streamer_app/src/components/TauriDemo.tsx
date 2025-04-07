@@ -11,7 +11,7 @@
 
 import {
 	getAppVersion,
-	greet,
+	get_greeting_message,
 	startServer,
 	stopServer,
 } from "@/lib/utils/tauri";
@@ -25,7 +25,7 @@ import React, { useState, useEffect } from "react";
 export default function TauriDemo() {
 	// 各種状態管理
 	const [name, set_name] = useState<string>("");
-	const [greeting, set_greeting] = useState<string>("");
+	const [greeting_response, set_greeting_response] = useState<string>("");
 	const [version_info, set_version_info] = useState<{
 		version: string;
 		build_id: string;
@@ -71,23 +71,28 @@ export default function TauriDemo() {
 	};
 
 	/**
-	 * 挨拶メッセージの取得
+	 * 挨拶メッセージを送信するハンドラー関数
 	 */
-	const handleGreet = async () => {
+	const handle_submit_greeting = async () => {
 		if (!name) {
 			set_error("名前を入力してください");
 			return;
 		}
-
+		set_error("");
+		set_greeting_response("");
+		set_loading((prev) => ({ ...prev, greet: true }));
 		try {
-			set_loading((prev) => ({ ...prev, greet: true }));
-			const response = await greet(name);
-			set_greeting(response.message);
-			set_error(null);
+			// get_greeting_message を呼び出し、レスポンスを取得
+			const response = await get_greeting_message(name);
+			// レスポンスオブジェクトから message プロパティを取得してセット
+			set_greeting_response(response.message);
 		} catch (err) {
-			set_error(`挨拶の取得に失敗しました: ${err}`);
-			console.error(err);
+			// エラーメッセージを設定（errがErrorインスタンスか確認）
+			set_error(
+				`挨拶の取得に失敗しました: ${err instanceof Error ? err.message : String(err)}`,
+			);
 		} finally {
+			// ローディング状態を解除
 			set_loading((prev) => ({ ...prev, greet: false }));
 		}
 	};
@@ -168,16 +173,17 @@ export default function TauriDemo() {
 					/>
 					<button
 						type="button"
-						onClick={handleGreet}
+						onClick={handle_submit_greeting}
 						disabled={loading.greet}
 						className="px-4 py-2 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:opacity-50"
 					>
 						{loading.greet ? "送信中..." : "送信"}
 					</button>
 				</div>
-				{greeting && (
-					<div className="bg-green-100 text-green-800 p-3 rounded dark:bg-green-900 dark:text-green-100">
-						{greeting}
+				{/* 挨拶メッセージ表示エリア */}
+				{greeting_response && (
+					<div className="mt-4 rounded bg-blue-100 p-4 text-blue-700">
+						{greeting_response}
 					</div>
 				)}
 			</div>

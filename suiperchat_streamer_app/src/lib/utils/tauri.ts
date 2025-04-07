@@ -8,19 +8,36 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+// import { type AppInfo } from "@/types/app-info"; // 未使用のためコメントアウト
 
 /**
- * バックエンドからの挨拶メッセージを取得
- * 
- * @param {string} name - 挨拶する相手の名前
- * @returns {Promise<{message: string, timestamp: number}>} 挨拶メッセージと時刻
+ * Tauriのグリーティングレスポンスの型定義
  */
-export async function greet(name: string): Promise<{message: string, timestamp: number}> {
+interface GreetingResponse {
+    message: string;
+    timestamp: number; // Rust の u64 は TypeScript の number に対応
+}
+
+/**
+ * 指定された名前を使用して挨拶メッセージを取得します。
+ *
+ * @param {string} name - 挨拶する相手の名前。
+ * @returns {Promise<GreetingResponse>} 挨拶メッセージとタイムスタンプを含む Promise オブジェクト。
+ * @throws {Error} 挨拶メッセージの取得に失敗した場合にエラーをスローします。
+ */
+export async function get_greeting_message(name: string): Promise<GreetingResponse> {
+    // バックエンドの greet コマンドは request: { name: string } という形式の引数を期待している
     try {
-        return await invoke('greet', { name });
+        // invoke<T> で戻り値の型を指定
+        return await invoke<GreetingResponse>("greet", { request: { name } });
     } catch (error) {
         console.error('挨拶の取得に失敗しました:', error);
-        throw new Error(`挨拶の取得に失敗しました: ${error}`);
+        // エラーオブジェクトをそのままスローするか、より具体的なエラーメッセージを作成
+        if (error instanceof Error) {
+            throw new Error(`挨拶の取得に失敗しました: ${error.message}`);
+        }
+        // 上のif文で throw new Error しているので、else は不要
+        throw new Error(`挨拶の取得に失敗しました: 不明なエラーが発生しました ${String(error)}`);
     }
 }
 
