@@ -176,9 +176,10 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
 	 */
 	const connect = useCallback(
 		(url: string) => {
-			// 既に接続している場合は切断してから再接続
+			// 既に接続している場合は切断
 			if (socketRef.current) {
-				disconnect();
+				socketRef.current.close(1000, "意図的な切断");
+				socketRef.current = null;
 			}
 
 			dispatch({ type: ActionType.CONNECT, payload: { url } });
@@ -232,7 +233,16 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
 
 					// 異常切断の場合、再接続を試みる
 					if (!event.wasClean && state.retryCount < maxRetries) {
-						handleReconnect(url);
+						dispatch({ type: ActionType.RECONNECTING });
+						if (reconnectTimeoutRef.current) {
+							clearTimeout(reconnectTimeoutRef.current);
+						}
+						reconnectTimeoutRef.current = setTimeout(() => {
+							console.log(
+								`再接続を試みています... (${state.retryCount + 1}/${maxRetries})`,
+							);
+							connect(url);
+						}, retryInterval);
 					}
 				};
 
@@ -245,7 +255,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
 				});
 			}
 		},
-		[maxRetries, state.retryCount],
+		[maxRetries, state.retryCount, retryInterval],
 	);
 
 	/**
@@ -266,29 +276,6 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
 			socketRef.current = null;
 		}
 	}, []);
-
-	/**
-	 * 再接続処理を行う関数
-	 */
-	const handleReconnect = useCallback(
-		(url: string) => {
-			dispatch({ type: ActionType.RECONNECTING });
-
-			// 前回のタイムアウトをクリア
-			if (reconnectTimeoutRef.current) {
-				clearTimeout(reconnectTimeoutRef.current);
-			}
-
-			// 指定された間隔後に再接続を試みる
-			reconnectTimeoutRef.current = setTimeout(() => {
-				console.log(
-					`再接続を試みています... (${state.retryCount + 1}/${maxRetries})`,
-				);
-				connect(url);
-			}, retryInterval);
-		},
-		[connect, maxRetries, retryInterval, state.retryCount],
-	);
 
 	/**
 	 * チャットメッセージを送信する関数

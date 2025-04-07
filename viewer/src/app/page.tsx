@@ -1,6 +1,5 @@
 import { Superchat } from "@/components/superchat/superchat";
 import { HeaderWalletButton } from "@/components/wallet/header-wallet-button";
-import Image from "next/image";
 
 export default function Home() {
 	return (
