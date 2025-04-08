@@ -1,0 +1,66 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "sqlite"
+    url      = env("DATABASE_URL") // .env ファイルで DATABASE_URL="file:./dev.db"
+}
+
+// --- SUIperCHAT Schema ---
+
+/// @model Message
+/// スーパーチャットメッセージや通常メッセージの情報を格納します。
+model Message {
+    /// @property id {Int} - メッセージの一意な識別子 (主キー)
+    id             Int      @id @default(autoincrement())
+    /// @property session_id {Int} - 関連する配信セッションのID (外部キー)
+    session_id     Int
+    /// @property wallet_address {String?} - 送信者のSUIウォレットアドレス (スパチャの場合必須、通常メッセージはNULL)
+    wallet_address String?
+    /// @property display_name {String} - 視聴者が入力した表示名
+    display_name   String
+    /// @property message {String} - メッセージ内容
+    message        String
+    /// @property amount {Float} - スパチャ金額 (SUI単位、スパチャなしは0)
+    amount         Float    @default(0)
+    /// @property tx_hash {String?} - SUIトランザクションハッシュ (スパチャの場合必須、通常メッセージはNULL)
+    tx_hash        String?
+    /// @property timestamp {DateTime} - メッセージ受信日時
+    timestamp      DateTime @default(now())
+
+    /// @relation session {Session} - 関連する配信セッション
+    /// Session削除時に紐づくMessageも削除されます (onDelete: Cascade)
+    session Session @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+    /// @@index [session_id] - session_idによる検索を高速化
+    @@index([session_id])
+    /// @@index [wallet_address] - ウォレットアドレスによる検索を高速化 (NG設定用)
+    @@index([wallet_address])
+    /// @@map("messages") - テーブル名を複数形のスネークケースに
+    @@map("messages")
+}
+
+/// @model Session
+/// 配信セッションの情報を格納します。
+model Session {
+    /// @property id {Int} - セッションの一意な識別子 (主キー)
+    id         Int       @id @default(autoincrement())
+    /// @property start_time {DateTime} - セッション開始日時
+    start_time DateTime  @default(now())
+    /// @property end_time {DateTime?} - セッション終了日時 (NULLの場合は配信中)
+    end_time   DateTime?
+    /// @property created_at {DateTime} - レコード作成日時
+    created_at DateTime  @default(now())
+    /// @property updated_at {DateTime} - レコード更新日時
+    updated_at DateTime  @updatedAt
+
+    /// @relation messages {Message[]} - このセッションに含まれるメッセージのリスト
+    messages Message[]
+
+    /// @@map("sessions") - テーブル名を複数形のスネークケースに
+    @@map("sessions")
+}
