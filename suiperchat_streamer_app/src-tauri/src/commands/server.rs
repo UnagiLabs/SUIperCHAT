@@ -6,7 +6,15 @@
  *
  * @module commands/server
  */
+use crate::websocket::server::WebSocketServer;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex as TokioMutex;
+
+// グローバルなWebSocketサーバーインスタンス
+lazy_static::lazy_static! {
+    static ref WS_SERVER: Arc<TokioMutex<Option<WebSocketServer>>> = Arc::new(TokioMutex::new(None));
+}
 
 /// サーバー状態レスポンス
 #[derive(Serialize)]
@@ -55,18 +63,46 @@ pub async fn start_server(request: ServerStartRequest) -> ServerStatusResponse {
     let port = request.port.unwrap_or(8080);
     let host = request.host.unwrap_or_else(|| "localhost".to_string());
 
-    // ここで実際のサーバー起動処理を実装
-    // 現在は成功を模擬しています
+    // サーバーの状態をチェック
+    let mut server_guard = WS_SERVER.lock().await;
 
-    // TODO: 実際のWebSocketサーバー実装を追加
-    // let server_result = start_websocket_server(host.clone(), port).await;
+    // サーバーがすでに起動している場合
+    if let Some(server) = server_guard.as_ref() {
+        if server.is_running() {
+            return ServerStatusResponse {
+                is_running: true,
+                port: Some(server.port),
+                host: Some(server.host.clone()),
+                message: format!(
+                    "サーバーはすでに起動しています ({}:{})",
+                    server.host, server.port
+                ),
+            };
+        }
+    }
 
-    // 擬似的な成功レスポンス
-    ServerStatusResponse {
-        is_running: true,
-        port: Some(port),
-        host: Some(host),
-        message: format!("サーバーの起動に成功しました（ポート: {}）", port),
+    // 新しいWebSocketサーバーインスタンスを作成
+    let mut server = WebSocketServer::new(host.clone(), port);
+
+    // サーバーを起動
+    match server.start().await {
+        Ok(_) => {
+            // グローバル変数にサーバーインスタンスを保存
+            *server_guard = Some(server);
+
+            ServerStatusResponse {
+                is_running: true,
+                port: Some(port),
+                host: Some(host.clone()),
+                message: format!("WebSocketサーバーの起動に成功しました ({}:{})", host, port),
+            }
+        }
+        Err(e) => ServerStatusResponse {
+            is_running: false,
+            port: None,
+            host: None,
+            message: format!("WebSocketサーバーの起動に失敗しました: {}", e),
+        },
     }
 }
 
@@ -85,17 +121,38 @@ pub async fn start_server(request: ServerStartRequest) -> ServerStatusResponse {
 /// ```
 #[tauri::command]
 pub async fn stop_server() -> ServerStatusResponse {
-    // ここで実際のサーバー停止処理を実装
-    // 現在は成功を模擬しています
+    // グローバル変数からサーバーインスタンスを取得
+    let mut server_guard = WS_SERVER.lock().await;
 
-    // TODO: 実際のWebSocketサーバー停止実装を追加
-    // let stop_result = stop_websocket_server().await;
+    // サーバーが存在しない場合
+    if server_guard.is_none() {
+        return ServerStatusResponse {
+            is_running: false,
+            port: None,
+            host: None,
+            message: "サーバーは起動していません".to_string(),
+        };
+    }
 
-    // 擬似的な成功レスポンス
-    ServerStatusResponse {
-        is_running: false,
-        port: None,
-        host: None,
-        message: "サーバーを停止しました".to_string(),
+    // サーバーが存在する場合
+    let mut server = server_guard.take().unwrap();
+
+    // サーバーを停止
+    match server.stop().await {
+        Ok(_) => ServerStatusResponse {
+            is_running: false,
+            port: None,
+            host: None,
+            message: "WebSocketサーバーを停止しました".to_string(),
+        },
+        Err(e) => {
+            // エラーが発生した場合でもインスタンスは削除
+            ServerStatusResponse {
+                is_running: false,
+                port: None,
+                host: None,
+                message: format!("WebSocketサーバーの停止中にエラーが発生しました: {}", e),
+            }
+        }
     }
 }

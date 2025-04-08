@@ -24,3 +24,11 @@ log = "0.4"
 tauri = { version = "2.4.1", features = [] }
 tauri-plugin-log = "2.0.0-rc"
 chrono = "0.4"
+
+# WebSocketサーバー実装に必要な依存関係
+tokio = { version = "1.36.0", features = ["full"] }
+tokio-tungstenite = "0.21.0"
+futures-util = "0.3.30"
+uuid = { version = "1.7.0", features = ["v4", "serde"] }
+futures-channel = "0.3.30"
+lazy_static = "1.4.0"
