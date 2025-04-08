@@ -24,7 +24,7 @@ import type React from "react";
 export default function RootPage(): React.ReactNode {
 	return (
 		<div className="container mx-auto p-4 space-y-6">
-			<h1 className="text-3xl font-bold">配信者ダッシュボード</h1>
+			<h1 className="text-3xl font-bold">SUIperCHAT Streamer</h1>
 
 			{/* サーバー制御コンポーネント */}
 			<ServerControl />
