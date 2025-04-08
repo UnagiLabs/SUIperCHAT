@@ -4,11 +4,10 @@
  * フロントエンドからTauriのRustバックエンドを呼び出すための
  * ユーティリティ関数を提供します。
  *
- * @module lib/utils/tauri
+ * @module lib/tauriUtils
  */
 
 import { invoke } from "@tauri-apps/api/core";
-// import { type AppInfo } from "@/types/app-info"; // 未使用のためコメントアウト
 
 /**
  * Tauriのグリーティングレスポンスの型定義
@@ -105,7 +104,7 @@ export async function stopServer(): Promise<{
 }> {
 	try {
 		// バックエンドの stop_server コマンドも request キーを期待している可能性があるため修正
-		return await invoke("stop_server", { request: {} });
+		return await invoke("stop_server", { request: {} }); // 空のrequestオブジェクトを渡す
 	} catch (error) {
 		console.error("サーバーの停止に失敗しました:", error);
 		if (error instanceof Error) {

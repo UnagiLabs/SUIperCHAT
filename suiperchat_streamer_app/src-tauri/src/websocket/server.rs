@@ -14,6 +14,7 @@ use futures_channel::mpsc::unbounded;
 use futures_util::{stream::TryStreamExt, SinkExt, StreamExt};
 use log::{error, info};
 use serde_json::json;
+use std::io;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
@@ -50,16 +51,28 @@ impl WebSocketServer {
     }
 
     /// WebSocketサーバーを起動
+    ///
+    /// # 戻り値
+    ///
+    /// * `Result<()>` - サーバーの起動が成功したかどうかの結果。
+    ///
+    /// エラーの場合、具体的な `tokio_tungstenite::tungstenite::Error` を返します。
     pub async fn start(&mut self) -> Result<()> {
         // サーバーのアドレスを構築
-        let addr = format!("{}:{}", self.host, self.port)
+        let addr_str = format!("{}:{}", self.host, self.port);
+        let addr = addr_str
             .parse::<SocketAddr>()
-            .map_err(|_| Error::ConnectionClosed)?;
+            // アドレス解析失敗時は I/O エラー (InvalidInput) とする
+            .map_err(|e| {
+                error!("アドレス '{}' の解析に失敗: {}", addr_str, e);
+                Error::Io(io::Error::new(io::ErrorKind::InvalidInput, e))
+            })?;
 
         // TCPリスナーを作成
         let listener = TcpListener::bind(&addr).await.map_err(|e| {
             error!("{}:{} へのバインドに失敗: {}", self.host, self.port, e);
-            Error::ConnectionClosed
+            // 具体的な I/O エラーを返す
+            Error::Io(e)
         })?;
 
         info!("WebSocketサーバーを起動しました: {}", addr);
@@ -130,7 +143,7 @@ impl WebSocketServer {
         // システムメッセージをブロードキャスト
         let system_msg = WebSocketMessage::new_system("サーバーが停止しました".to_string());
         let json_msg = serde_json::to_string(&system_msg).unwrap_or_default();
-        broadcast_message(&self.clients, Message::Text(json_msg));
+        broadcast_message(&self.clients, Message::Text(json_msg.into()));
 
         info!("WebSocketサーバーの停止が完了しました");
         Ok(())
@@ -177,7 +190,7 @@ async fn handle_connection(stream: TcpStream, clients: ClientsMap) -> Result<()>
     })?;
 
     // 接続応答メッセージを送信するフューチャー
-    let connection_send = ws_sender.send(Message::Text(response_json)).await;
+    let connection_send = ws_sender.send(Message::Text(response_json.into())).await;
     if let Err(e) = connection_send {
         error!("接続応答の送信に失敗: {}", e);
         remove_client(&clients, &client_id_for_log);
@@ -202,14 +215,15 @@ async fn handle_connection(stream: TcpStream, clients: ClientsMap) -> Result<()>
                 if let Ok(ws_msg) = serde_json::from_str::<WebSocketMessage>(&text) {
                     // WebSocketMessageをJSON文字列に変換して送信
                     if let Ok(json_msg) = serde_json::to_string(&ws_msg) {
-                        broadcast_message(&clients_for_closure, Message::Text(json_msg));
+                        broadcast_message(&clients_for_closure, Message::Text(json_msg.into()));
                     }
                 } else {
                     // JSONパースに失敗した場合はエラーメッセージを送信
                     let error_msg = json!({
                         "error": "無効なメッセージ形式です"
                     });
-                    let _ = tx_for_closure.unbounded_send(Message::Text(error_msg.to_string()));
+                    let _ =
+                        tx_for_closure.unbounded_send(Message::Text(error_msg.to_string().into()));
                 }
             }
 
