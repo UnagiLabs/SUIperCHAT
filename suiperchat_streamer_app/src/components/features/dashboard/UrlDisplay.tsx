@@ -13,11 +13,12 @@ import { Check, ClipboardCopy } from "lucide-react";
  * @module components/features/dashboard/UrlDisplay
  * @returns {JSX.Element} URL表示コンポーネント
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-// TODO: 実際のウォレットアドレスやポートを取得するロジックが必要
-const WALLET_ADDRESS_PLACEHOLDER = "YOUR_WALLET_ADDRESS_PLACEHOLDER";
+// ローカルストレージのキー
+const WALLET_ADDRESS_KEY = "suiperchat_wallet_address";
+const DEFAULT_WALLET_PLACEHOLDER = "YOUR_WALLET_ADDRESS";
 const SERVER_PORT = 3001; // 仮定のポート番号、サーバー状態から取得する方が望ましい
 
 /**
@@ -27,11 +28,23 @@ const SERVER_PORT = 3001; // 仮定のポート番号、サーバー状態から
 export default function UrlDisplay() {
 	const [obsCopied, setObsCopied] = useState(false);
 	const [viewerCopied, setViewerCopied] = useState(false);
+	const [walletAddress, setWalletAddress] = useState(
+		DEFAULT_WALLET_PLACEHOLDER,
+	);
 
-	// TODO: サーバーの状態に応じてポート番号を動的に設定する
-	// TODO: 設定などからウォレットアドレスを取得する
-	const obs_url = `http://localhost:${SERVER_PORT}/overlay?walletAddress=${WALLET_ADDRESS_PLACEHOLDER}`;
-	const viewer_url = `https://suiperchat.app/chat?streamer=${WALLET_ADDRESS_PLACEHOLDER}`;
+	/**
+	 * コンポーネントマウント時にローカルストレージからウォレットアドレスを読み込む
+	 */
+	useEffect(() => {
+		const saved_address = localStorage.getItem(WALLET_ADDRESS_KEY);
+		if (saved_address) {
+			setWalletAddress(saved_address);
+		}
+	}, []);
+
+	// URL生成
+	const obs_url = `http://localhost:${SERVER_PORT}/overlay?walletAddress=${walletAddress}`;
+	const viewer_url = `https://suiperchat.app/chat?streamer=${walletAddress}`;
 
 	/**
 	 * テキストをクリップボードにコピーする関数
@@ -58,6 +71,9 @@ export default function UrlDisplay() {
 		}
 	};
 
+	// ウォレットアドレスが設定されているかどうかをチェック
+	const isWalletConfigured = walletAddress !== DEFAULT_WALLET_PLACEHOLDER;
+
 	return (
 		<Card>
 			<CardHeader>
@@ -74,6 +90,7 @@ export default function UrlDisplay() {
 							onClick={() =>
 								copy_to_clipboard(obs_url, () => setObsCopied(true))
 							}
+							disabled={!isWalletConfigured}
 						>
 							{obsCopied ? (
 								<Check className="h-4 w-4" />
@@ -93,6 +110,7 @@ export default function UrlDisplay() {
 							onClick={() =>
 								copy_to_clipboard(viewer_url, () => setViewerCopied(true))
 							}
+							disabled={!isWalletConfigured}
 						>
 							{viewerCopied ? (
 								<Check className="h-4 w-4" />
@@ -102,9 +120,14 @@ export default function UrlDisplay() {
 						</Button>
 					</div>
 				</div>
+				{!isWalletConfigured && (
+					<p className="text-sm text-red-500">
+						ウォレットアドレスが設定されていません。上部のウォレットアドレス設定から設定してください。
+					</p>
+				)}
 				<p className="text-sm text-muted-foreground">
 					注意:
-					上記URLのウォレットアドレスとポート番号は現在プレースホルダーです。実際の値を取得・設定する機能が必要です。
+					これらのURLを使用して、OBSでスーパーチャット表示を設定したり、視聴者にリンクを共有したりできます。
 				</p>
 			</CardContent>
 		</Card>
