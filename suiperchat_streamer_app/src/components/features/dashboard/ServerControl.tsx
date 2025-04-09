@@ -19,7 +19,7 @@ import { Loader2, Play, StopCircle, Wifi, WifiOff } from "lucide-react";
  * @module components/features/dashboard/ServerControl
  * @returns {JSX.Element} サーバー制御コンポーネント
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 /**
@@ -44,20 +44,20 @@ interface ServerStatusResponse {
  */
 export default function ServerControl() {
 	const [is_loading, set_is_loading] = useState(false);
-	const [server_status, set_server_status] =
-		useState<ServerStatusResponse | null>(null);
-
-	// TODO: コンポーネントマウント時に現在のサーバー状態を取得するIPC呼び出しを追加
+	// サーバーの実行状態のみを管理 (起動中: true, 停止中: false)
+	const [is_server_running, set_is_server_running] = useState(false);
+	// サーバーのアドレス情報 (例: "127.0.0.1:8080")、起動時に設定
+	const [server_address, set_server_address] = useState<string | null>(null);
+	// TODO: アプリ起動時にサーバーの実際の状態を確認するコマンドを実装・呼び出す
 	// useEffect(() => {
-	//   const fetch_status = async () => {
-	//     try {
-	//       const status = await invoke<ServerStatusResponse>("get_server_status");
-	//       set_server_status(status);
-	//     } catch (error) {
-	//       console.error("サーバー状態の取得に失敗しました:", error);
-	//     }
+	//   const check_initial_status = async () => {
+	//      try {
+	//          // 例: const status = await invoke<boolean>("is_websocket_server_running");
+	//          // set_is_server_running(status);
+	//          // if (status) set_server_address("127.0.0.1:8080"); // 仮
+	//      } catch (e) { console.error(e); }
 	//   };
-	//   fetch_status();
+	//   check_initial_status();
 	// }, []);
 
 	/**
@@ -66,26 +66,21 @@ export default function ServerControl() {
 	const handle_start_server = async () => {
 		set_is_loading(true);
 		try {
-			// TODO: ポート番号やホスト名をユーザーが設定できるようにする
-			const response = await invoke<ServerStatusResponse>("start_server", {
-				port: 8080,
-			});
-			set_server_status(response);
-			toast(response.is_running ? "サーバー起動成功" : "サーバー起動失敗", {
-				description: response.message,
+			// Rust側のコマンド `start_websocket_server` を呼び出す
+			await invoke("start_websocket_server");
+			set_is_server_running(true);
+			set_server_address("127.0.0.1:8080"); // TODO: 動的に取得 or 設定値を使用
+			toast.success("サーバー起動成功", {
+				description: "WebSocket サーバーが起動しました。",
 			});
 		} catch (error) {
 			const error_message =
 				error instanceof Error ? error.message : String(error);
-			console.error("サーバーの起動に失敗しました:", error);
-			set_server_status({
-				is_running: false,
-				port: null,
-				host: null,
-				message: `起動エラー: ${error_message}`,
-			});
+			console.error("サーバーの起動に失敗しました:", error_message);
+			set_is_server_running(false);
+			set_server_address(null);
 			toast.error("サーバー起動エラー", {
-				description: `サーバーの起動中にエラーが発生しました: ${error_message}`,
+				description: `サーバーの起動に失敗しました: ${error_message}`,
 			});
 		} finally {
 			set_is_loading(false);
@@ -98,38 +93,31 @@ export default function ServerControl() {
 	const handle_stop_server = async () => {
 		set_is_loading(true);
 		try {
-			const response = await invoke<ServerStatusResponse>("stop_server");
-			set_server_status(response);
-			toast("サーバー停止", {
-				description: response.message,
+			// Rust側のコマンド `stop_websocket_server` を呼び出す
+			await invoke("stop_websocket_server");
+			set_is_server_running(false);
+			set_server_address(null);
+			toast.info("サーバー停止", {
+				description: "WebSocket サーバーを停止しました。",
 			});
 		} catch (error) {
 			const error_message =
 				error instanceof Error ? error.message : String(error);
-			console.error("サーバーの停止に失敗しました:", error);
-			// 停止失敗時でも状態は停止として扱うことが多いが、UI上はエラーを示す
-			set_server_status({
-				is_running: false,
-				port: null,
-				host: null,
-				message: `停止エラー: ${error_message}`,
-			});
+			console.error("サーバーの停止に失敗しました:", error_message);
+			// 停止失敗の場合でも、UI上は停止として扱う（ハンドルがないため再停止不可）
+			set_is_server_running(false);
+			set_server_address(null);
 			toast.error("サーバー停止エラー", {
-				description: `サーバーの停止中にエラーが発生しました: ${error_message}`,
+				description: `サーバーの停止に失敗しました: ${error_message}`,
 			});
 		} finally {
 			set_is_loading(false);
 		}
 	};
 
-	// 現在のサーバー状態に基づいて表示を決定
-	const is_running = server_status?.is_running ?? false;
-	const display_message =
-		server_status?.message ?? "サーバーの状態は不明です。";
-	const display_address =
-		is_running && server_status?.host && server_status?.port
-			? `${server_status.host}:${server_status.port}`
-			: "-";
+	// サーバー状態に基づく表示テキスト
+	const status_text = is_server_running ? "実行中" : "停止中";
+	const address_text = server_address ?? "-";
 
 	return (
 		<Card>
@@ -143,9 +131,10 @@ export default function ServerControl() {
 				<div className="flex items-center space-x-4">
 					<Button
 						onClick={handle_start_server}
-						disabled={is_loading || is_running}
+						// サーバー実行中、またはローディング中は無効
+						disabled={is_loading || is_server_running}
 					>
-						{is_loading && !is_running ? (
+						{is_loading && !is_server_running ? (
 							<Loader2 className="mr-2 h-4 w-4 animate-spin" />
 						) : (
 							<Play className="mr-2 h-4 w-4" />
@@ -155,9 +144,10 @@ export default function ServerControl() {
 					<Button
 						variant="destructive"
 						onClick={handle_stop_server}
-						disabled={is_loading || !is_running}
+						// サーバー停止中、またはローディング中は無効
+						disabled={is_loading || !is_server_running}
 					>
-						{is_loading && is_running ? (
+						{is_loading && is_server_running ? (
 							<Loader2 className="mr-2 h-4 w-4 animate-spin" />
 						) : (
 							<StopCircle className="mr-2 h-4 w-4" />
@@ -166,15 +156,16 @@ export default function ServerControl() {
 					</Button>
 				</div>
 				<div className="flex items-center space-x-2 text-sm">
-					{is_running ? (
+					{is_server_running ? (
 						<Wifi className="h-5 w-5 text-green-500" />
 					) : (
 						<WifiOff className="h-5 w-5 text-red-500" />
 					)}
-					<span>状態: {is_running ? "実行中" : "停止中"}</span>
-					<span className="text-muted-foreground">({display_address})</span>
+					<span>状態: {status_text}</span>
+					<span className="text-muted-foreground">({address_text})</span>
 				</div>
-				<p className="text-sm text-muted-foreground">{display_message}</p>
+				{/* エラーなどの詳細メッセージ表示エリア (必要であれば追加) */}
+				{/* <p className="text-sm text-muted-foreground">{display_message}</p> */}
 			</CardContent>
 		</Card>
 	);

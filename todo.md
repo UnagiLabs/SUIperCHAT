@@ -51,7 +51,7 @@
   - セッション管理テーブル作成
   - 見積時間：4時間
 
-- 🔴 [x] 3.3 WebView：配信者用ダッシュボード実装
+- 🔴 [~] 3.3 WebView：配信者用ダッシュボード実装
   - サーバー開始/停止機能 (IPCスタブ必要)
   - OBS用URL生成
   - 視聴者用リンク生成
@@ -59,7 +59,7 @@
 
 - 🟡 [ ] 3.4 Rustバックエンド：WebSocketサーバー実装 (Actix-Webベース)
   - [x] 3.4.1 actix-web, actix-web-actors のセットアップ (tokioランタイム)
-  - [ ] 3.4.2 WebSocket接続用アクター (`Actor`, `StreamHandler`) の基本実装
+  - [x] 3.4.2 WebSocket接続用アクター (`Actor`, `StreamHandler`) の基本実装
   - [ ] 3.4.3 メッセージハンドリング (`ws::Message` 分岐: 通常/スパチャ等)
   - [ ] 3.4.4 基本的な接続管理 (接続/切断処理、フロントエンドIPCスタブ)
   - [ ] 3.4.5 高度な接続管理
