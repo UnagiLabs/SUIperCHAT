@@ -30,7 +30,7 @@ import { useCallback, useState } from "react";
  *
  * @returns {JSX.Element} WebSocketテストページ
  */
-export default function WebSocketTestPage() {
+export default function WebSocketTestPage(): React.ReactElement {
 	const { state, actions } = useWebSocket();
 	const [url, set_url] = useState("ws://127.0.0.1:8080/ws"); // デフォルトURL
 	const [display_name, set_display_name] = useState("");

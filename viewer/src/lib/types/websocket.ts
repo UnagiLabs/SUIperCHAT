@@ -66,9 +66,13 @@ export interface ChatMessage extends BaseMessage {
  * スーパーチャットメッセージインターフェース
  * スパチャを含むメッセージの構造
  */
-export interface SuperchatMessage extends ChatMessage {
+export interface SuperchatMessage extends BaseMessage {
 	/** メッセージの種類（スーパーチャット） */
 	type: MessageType.SUPERCHAT;
+	/** 表示名 */
+	display_name: string;
+	/** メッセージ内容 */
+	message: string;
 	/** スーパーチャットデータ */
 	superchat: SuperchatData;
 }
