@@ -74,7 +74,7 @@ export default function UrlDisplay() {
 				setNeedsConfiguration(false);
 				console.log("Server is not running, will display appropriate message");
 			} else {
-				setError(`配信者情報の取得中にエラーが発生しました: ${error_message}`);
+				setError(`Error while fetching streamer information: ${error_message}`);
 				setNeedsConfiguration(false);
 			}
 			setStreamerInfo(null);
@@ -93,7 +93,9 @@ export default function UrlDisplay() {
 		// --- ウォレットアドレス更新イベントをリッスン --- ★★★
 		const unlisten_wallet = listen<void>("wallet_address_updated", (event) => {
 			console.log("Received wallet_address_updated event:", event);
-			toast.info("ウォレットアドレスが更新されました。URL情報を再取得します。");
+			toast.info(
+				"Wallet address has been updated. Refreshing URL information.",
+			);
 			fetch_streamer_info(); // イベントを受け取ったら再取得
 		});
 
@@ -105,9 +107,9 @@ export default function UrlDisplay() {
 				const is_running = event.payload;
 
 				if (is_running) {
-					toast.info("サーバーが起動しました。URL情報を再取得します。");
+					toast.info("Server has started. Refreshing URL information.");
 				} else {
-					toast.info("サーバーが停止しました。URL情報をクリアします。");
+					toast.info("Server has stopped. Clearing URL information.");
 				}
 
 				// サーバー状態に関わらず情報を更新（起動中なら新情報取得、停止中ならクリア）
@@ -139,7 +141,7 @@ export default function UrlDisplay() {
 			viewer_url = `${VIEWER_APP_BASE_URL}?wsUrl=${encodedWsUrl}&streamerAddress=${encodedWalletAddress}`;
 		} catch (encodeError) {
 			console.error("Failed to encode URL parameters:", encodeError);
-			setError("URLパラメータのエンコードに失敗しました。");
+			setError("Failed to encode URL parameters.");
 			setStreamerInfo(null);
 		}
 	}
@@ -151,8 +153,8 @@ export default function UrlDisplay() {
 		try {
 			await navigator.clipboard.writeText(text);
 			on_success();
-			toast("コピーしました", {
-				description: "URLをクリップボードにコピーしました。",
+			toast("Copied", {
+				description: "URL has been copied to clipboard.",
 			});
 			// アイコンを元に戻すタイマー
 			setTimeout(() => {
@@ -161,8 +163,8 @@ export default function UrlDisplay() {
 			}, 2000);
 		} catch (err) {
 			console.error("クリップボードへのコピーに失敗しました:", err);
-			toast.error("コピー失敗", {
-				description: "クリップボードへのコピーに失敗しました。",
+			toast.error("Copy Failed", {
+				description: "Failed to copy to clipboard.",
 			});
 		}
 	};
@@ -176,7 +178,9 @@ export default function UrlDisplay() {
 				{isLoading && (
 					<div className="flex items-center justify-center py-4">
 						<Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-						<span className="ml-2 text-muted-foreground">情報を取得中...</span>
+						<span className="ml-2 text-muted-foreground">
+							Loading information...
+						</span>
 					</div>
 				)}
 				{error && !isLoading && (
@@ -189,7 +193,8 @@ export default function UrlDisplay() {
 					<div className="flex items-center text-blue-600 bg-blue-100 p-3 rounded-md">
 						<Info className="h-5 w-5 mr-2" />
 						<p className="text-sm font-medium">
-							ウォレットアドレスが設定されていません。上の設定欄から入力・保存してください。
+							Wallet address is not set. Please enter and save it in the
+							settings above.
 						</p>
 					</div>
 				)}
@@ -197,14 +202,15 @@ export default function UrlDisplay() {
 					<div className="flex items-center text-amber-600 bg-amber-50 p-3 rounded-md">
 						<Info className="h-5 w-5 mr-2" />
 						<p className="text-sm font-medium">
-							サーバーが起動していません。上のサーバー制御から開始してください。
+							Server is not running. Please start it from the server control
+							above.
 						</p>
 					</div>
 				)}
 				{!isLoading && !error && !needsConfiguration && streamerInfo && (
 					<>
 						<div className="space-y-2">
-							<Label htmlFor="obs-url">OBSブラウザソース用URL</Label>
+							<Label htmlFor="obs-url">OBS Browser Source URL</Label>
 							<div className="flex space-x-2">
 								<Input id="obs-url" value={obs_url} readOnly />
 								<Button
@@ -224,7 +230,7 @@ export default function UrlDisplay() {
 							</div>
 						</div>
 						<div className="space-y-2">
-							<Label htmlFor="viewer-url">視聴者共有用リンク</Label>
+							<Label htmlFor="viewer-url">Viewer Share Link</Label>
 							<div className="flex space-x-2">
 								<Input id="viewer-url" value={viewer_url} readOnly />
 								<Button
@@ -244,8 +250,8 @@ export default function UrlDisplay() {
 							</div>
 						</div>
 						<p className="text-sm text-muted-foreground">
-							注意:
-							これらのURLを使用して、OBSでスーパーチャット表示を設定したり、視聴者にリンクを共有したりできます。
+							Note: You can use these URLs to set up superchat display in OBS
+							and share links with viewers.
 						</p>
 					</>
 				)}

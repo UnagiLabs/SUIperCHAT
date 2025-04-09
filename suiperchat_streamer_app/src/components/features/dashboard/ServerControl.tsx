@@ -55,8 +55,8 @@ export default function ServerControl() {
 			await invoke("start_websocket_server");
 			set_is_server_running(true);
 			set_server_address("127.0.0.1:8080"); // TODO: 動的に取得 or 設定値を使用
-			toast.success("サーバー起動成功", {
-				description: "WebSocket サーバーが起動しました。",
+			toast.success("Server Started", {
+				description: "WebSocket server has started.",
 			});
 		} catch (error) {
 			const error_message =
@@ -64,8 +64,8 @@ export default function ServerControl() {
 			console.error("サーバーの起動に失敗しました:", error_message);
 			set_is_server_running(false);
 			set_server_address(null);
-			toast.error("サーバー起動エラー", {
-				description: `サーバーの起動に失敗しました: ${error_message}`,
+			toast.error("Server Start Error", {
+				description: `Failed to start server: ${error_message}`,
 			});
 		} finally {
 			set_is_loading(false);
@@ -82,8 +82,8 @@ export default function ServerControl() {
 			await invoke("stop_websocket_server");
 			set_is_server_running(false);
 			set_server_address(null);
-			toast.info("サーバー停止", {
-				description: "WebSocket サーバーを停止しました。",
+			toast.info("Server Stopped", {
+				description: "WebSocket server has been stopped.",
 			});
 		} catch (error) {
 			const error_message =
@@ -92,8 +92,8 @@ export default function ServerControl() {
 			// 停止失敗の場合でも、UI上は停止として扱う（ハンドルがないため再停止不可）
 			set_is_server_running(false);
 			set_server_address(null);
-			toast.error("サーバー停止エラー", {
-				description: `サーバーの停止に失敗しました: ${error_message}`,
+			toast.error("Server Stop Error", {
+				description: `Failed to stop server: ${error_message}`,
 			});
 		} finally {
 			set_is_loading(false);
@@ -111,13 +111,13 @@ export default function ServerControl() {
 
 			if (is_running) {
 				set_server_address("127.0.0.1:8080"); // TODO: 動的に取得
-				toast.success("サーバー起動状態に更新", {
-					description: "WebSocket サーバーが起動しました。",
+				toast.success("Server Status Updated to Running", {
+					description: "WebSocket server has started.",
 				});
 			} else {
 				set_server_address(null);
-				toast.info("サーバー停止状態に更新", {
-					description: "WebSocket サーバーが停止しました。",
+				toast.info("Server Status Updated to Stopped", {
+					description: "WebSocket server has stopped.",
 				});
 			}
 		},
@@ -140,15 +140,15 @@ export default function ServerControl() {
 	}, [handle_server_status_event]);
 
 	// サーバー状態に基づく表示テキスト
-	const status_text = is_server_running ? "実行中" : "停止中";
+	const status_text = is_server_running ? "Running" : "Stopped";
 	const address_text = server_address ?? "-";
 
 	return (
 		<Card>
 			<CardHeader>
-				<CardTitle>サーバー制御</CardTitle>
+				<CardTitle>Server Control</CardTitle>
 				<CardDescription>
-					ローカルWebSocketサーバーを開始・停止します。
+					Start and stop the local WebSocket server.
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="space-y-4">
@@ -163,7 +163,7 @@ export default function ServerControl() {
 						) : (
 							<Play className="mr-2 h-4 w-4" />
 						)}
-						開始
+						Start
 					</Button>
 					<Button
 						variant="destructive"
@@ -176,7 +176,7 @@ export default function ServerControl() {
 						) : (
 							<StopCircle className="mr-2 h-4 w-4" />
 						)}
-						停止
+						Stop
 					</Button>
 				</div>
 				<div className="flex items-center space-x-2 text-sm">
@@ -185,7 +185,7 @@ export default function ServerControl() {
 					) : (
 						<WifiOff className="h-5 w-5 text-red-500" />
 					)}
-					<span>状態: {status_text}</span>
+					<span>Status: {status_text}</span>
 					<span className="text-muted-foreground">({address_text})</span>
 				</div>
 				{/* エラーなどの詳細メッセージ表示エリア (必要であれば追加) */}

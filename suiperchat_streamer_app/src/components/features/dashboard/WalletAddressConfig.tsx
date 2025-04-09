@@ -33,18 +33,18 @@ const WALLET_ADDRESS_KEY = "suiperchat_wallet_address";
 function validate_sui_address(address: string): string | null {
 	const trimmed_address = address.trim();
 	if (!trimmed_address) {
-		return "ウォレットアドレスを入力してください。";
+		return "Please enter a wallet address.";
 	}
 	if (!trimmed_address.startsWith("0x")) {
-		return "無効なSUIウォレットアドレス: '0x' で始まる必要があります。";
+		return "Invalid SUI wallet address: must start with '0x'.";
 	}
 	if (trimmed_address.length !== 66) {
-		return `無効なSUIウォレットアドレス: 長さが66文字である必要があります (現在 ${trimmed_address.length} 文字)。`;
+		return `Invalid SUI wallet address: must be 66 characters long (currently ${trimmed_address.length} characters).`;
 	}
 	// "0x" 以降が16進数文字のみかチェック (正規表現を使用)
 	const hex_pattern = /^[a-fA-F0-9]+$/;
 	if (!hex_pattern.test(trimmed_address.substring(2))) {
-		return "無効なSUIウォレットアドレス: '0x' の後に16進数以外の文字が含まれています。";
+		return "Invalid SUI wallet address: contains non-hexadecimal characters after '0x'.";
 	}
 	return null; // 有効
 }
@@ -76,7 +76,7 @@ export default function WalletAddressConfig() {
 		// --- フロントエンドバリデーション ---
 		const validation_error = validate_sui_address(address_to_save);
 		if (validation_error) {
-			toast.error("入力エラー", { description: validation_error });
+			toast.error("Input Error", { description: validation_error });
 			return;
 		}
 		// --- バリデーションここまで ---
@@ -93,8 +93,8 @@ export default function WalletAddressConfig() {
 			localStorage.setItem(WALLET_ADDRESS_KEY, address_to_save);
 
 			// --- 成功トースト表示 ---
-			toast.success("保存完了", {
-				description: "ウォレットアドレスを保存しました。",
+			toast.success("Saved", {
+				description: "Wallet address has been saved.",
 			});
 		} catch (error) {
 			// --- エラーハンドリング ---
@@ -105,8 +105,8 @@ export default function WalletAddressConfig() {
 					: typeof error === "string"
 						? error
 						: "不明なエラーが発生しました。";
-			toast.error("保存エラー", {
-				description: `ウォレットアドレスの保存に失敗しました: ${error_message}`,
+			toast.error("Save Error", {
+				description: `Failed to save wallet address: ${error_message}`,
 			});
 		} finally {
 			set_is_saving(false);
@@ -116,14 +116,15 @@ export default function WalletAddressConfig() {
 	return (
 		<Card>
 			<CardHeader>
-				<CardTitle>ウォレットアドレス設定</CardTitle>
+				<CardTitle>Wallet Address Configuration</CardTitle>
 				<CardDescription>
-					配信者のSUIウォレットアドレスを設定します。視聴者からのスーパーチャットはこのアドレスに送信されます。
+					Set your SUI wallet address as a streamer. Superchats from viewers
+					will be sent to this address.
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="space-y-4">
 				<div className="space-y-2">
-					<Label htmlFor="wallet-address">SUIウォレットアドレス</Label>
+					<Label htmlFor="wallet-address">SUI Wallet Address</Label>
 					<div className="flex space-x-2">
 						<Input
 							id="wallet-address"
@@ -133,13 +134,13 @@ export default function WalletAddressConfig() {
 						/>
 						<Button onClick={handle_save_address} disabled={is_saving}>
 							<Save className="mr-2 h-4 w-4" />
-							保存
+							Save
 						</Button>
 					</div>
 				</div>
 				<p className="text-sm text-muted-foreground">
-					注意:
-					このアドレスはOBSオーバーレイと視聴者向けURLに使用されます。必ず正確なアドレスを入力してください。
+					Note: This address will be used for OBS overlay and viewer URLs.
+					Please enter an accurate address.
 				</p>
 			</CardContent>
 		</Card>

@@ -35,11 +35,11 @@ export async function get_greeting_message(
 		console.error("挨拶の取得に失敗しました:", error);
 		// エラーオブジェクトをそのままスローするか、より具体的なエラーメッセージを作成
 		if (error instanceof Error) {
-			throw new Error(`挨拶の取得に失敗しました: ${error.message}`);
+			throw new Error(`Failed to get greeting: ${error.message}`);
 		}
 		// 上のif文で throw new Error しているので、else は不要
 		throw new Error(
-			`挨拶の取得に失敗しました: 不明なエラーが発生しました ${String(error)}`,
+			`Failed to get greeting: Unknown error occurred ${String(error)}`,
 		);
 	}
 }
@@ -58,7 +58,7 @@ export async function getAppVersion(): Promise<{
 		return await invoke("get_app_version");
 	} catch (error) {
 		console.error("バージョン情報の取得に失敗しました:", error);
-		throw new Error(`バージョン情報の取得に失敗しました: ${error}`);
+		throw new Error(`Failed to get version information: ${error}`);
 	}
 }
 
@@ -85,10 +85,10 @@ export async function startServer(options?: {
 	} catch (error) {
 		console.error("サーバーの起動に失敗しました:", error);
 		if (error instanceof Error) {
-			throw new Error(`サーバーの起動に失敗しました: ${error.message}`);
+			throw new Error(`Failed to start server: ${error.message}`);
 		}
 		throw new Error(
-			`サーバーの起動に失敗しました: 不明なエラーが発生しました ${String(error)}`,
+			`Failed to start server: Unknown error occurred ${String(error)}`,
 		);
 	}
 }
@@ -108,10 +108,10 @@ export async function stopServer(): Promise<{
 	} catch (error) {
 		console.error("サーバーの停止に失敗しました:", error);
 		if (error instanceof Error) {
-			throw new Error(`サーバーの停止に失敗しました: ${error.message}`);
+			throw new Error(`Failed to stop server: ${error.message}`);
 		}
 		throw new Error(
-			`サーバーの停止に失敗しました: 不明なエラーが発生しました ${String(error)}`,
+			`Failed to stop server: Unknown error occurred ${String(error)}`,
 		);
 	}
 }
