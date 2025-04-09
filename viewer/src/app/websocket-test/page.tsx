@@ -4,72 +4,152 @@
  * WebSocketの接続・通信テストを行うためのページです。
  * 開発用として使用し、WebSocketの接続状態表示や
  * メッセージ送信機能をテストすることができます。
+ * このページはメッセージの送信テスト専用であり、受信メッセージの表示機能はありません。
  *
  * @module app/websocket-test/page
  */
 
-import { WebSocketMessage } from "@/components/websocket/WebSocketMessage";
-import { WebSocketMessageDisplay } from "@/components/websocket/WebSocketMessageDisplay";
-import { WebSocketStatus } from "@/components/websocket/WebSocketStatus";
+"use client";
+
+import { useWebSocket } from "@/components/providers/WebSocketProvider";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+	Card,
+	CardContent,
+	CardFooter,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ConnectionStatus } from "@/lib/types/websocket";
+import { useCallback, useState } from "react";
 
 /**
  * WebSocketテストページコンポーネント
  *
  * @returns {JSX.Element} WebSocketテストページ
  */
-export default function WebSocketTestPage(): React.ReactElement {
+export default function WebSocketTestPage() {
+	const { state, actions } = useWebSocket();
+	const [url, set_url] = useState("ws://127.0.0.1:8080/ws"); // デフォルトURL
+	const [display_name, set_display_name] = useState("");
+	const [message, set_message] = useState("");
+
+	/**
+	 * 接続ボタンハンドラ
+	 */
+	const handle_connect = useCallback(() => {
+		actions.connect(url);
+	}, [actions, url]);
+
+	/**
+	 * 切断ボタンハンドラ
+	 */
+	const handle_disconnect = useCallback(() => {
+		actions.disconnect();
+	}, [actions]);
+
+	/**
+	 * メッセージ送信ハンドラ
+	 */
+	const handle_send_message = useCallback(
+		(e: React.FormEvent<HTMLFormElement>) => {
+			e.preventDefault();
+			if (message.trim() && display_name.trim()) {
+				// ここでは簡単のためチャットメッセージのみ送信
+				actions.sendChatMessage(display_name, message);
+				set_message(""); // 送信後に入力欄をクリア
+			}
+		},
+		[actions, display_name, message],
+	);
+
 	return (
-		<div className="flex justify-center min-h-screen">
-			<div className="w-full max-w-7xl px-4 sm:px-6 py-8">
-				<h1 className="text-3xl font-bold mb-6 text-center">WebSocketテスト</h1>
-
-				{/* テスト手順 - モバイルでは上部に表示 */}
-				<div className="lg:hidden mb-8 p-6 border rounded mx-auto dark:border-gray-700 dark:bg-gray-800/50 bg-gray-50">
-					<h2 className="text-lg font-medium mb-3">テスト手順</h2>
-					<ol className="list-decimal list-inside space-y-1 text-sm">
-						<li>接続状態から「接続」をクリックしてWebSocket接続を開始</li>
-						<li>メッセージ送信フォームから送信テスト</li>
-						<li>スーパーチャット金額を選択してスパチャメッセージを送信</li>
-						<li>メッセージ履歴エリアで受信を確認</li>
-					</ol>
-				</div>
-
-				{/* メインコンテンツ */}
-				<div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-					<div className="flex flex-col gap-8">
-						<WebSocketStatus defaultUrl="ws://localhost:8080" />
-						<WebSocketMessage walletAddress="0x1234567890abcdef1234567890abcdef12345678" />
+		<div className="container mx-auto p-4">
+			<Card className="w-full max-w-2xl mx-auto">
+				<CardHeader>
+					<CardTitle>WebSocket テスト</CardTitle>
+					<div className="flex items-center space-x-2">
+						<Input
+							placeholder="WebSocket URL (例: ws://127.0.0.1:8080/ws)"
+							value={url}
+							onChange={(e) => set_url(e.target.value)}
+							disabled={
+								state.status === ConnectionStatus.CONNECTED ||
+								state.status === ConnectionStatus.CONNECTING
+							}
+						/>
+						<Button
+							onClick={handle_connect}
+							disabled={
+								state.status === ConnectionStatus.CONNECTED ||
+								state.status === ConnectionStatus.CONNECTING
+							}
+						>
+							接続
+						</Button>
+						<Button
+							variant="destructive"
+							onClick={handle_disconnect}
+							disabled={state.status !== ConnectionStatus.CONNECTED}
+						>
+							切断
+						</Button>
 					</div>
-
-					<div>
-						<WebSocketMessageDisplay />
+					<div className="mt-2">
+						<Badge
+							variant={
+								state.status === ConnectionStatus.CONNECTED
+									? "default"
+									: "secondary"
+							}
+						>
+							状態: {state.status}
+						</Badge>
+						{state.error && (
+							<Badge variant="destructive" className="ml-2">
+								エラー: {state.error}
+							</Badge>
+						)}
 					</div>
-				</div>
-
-				{/* テスト手順 - デスクトップでは下部に表示 */}
-				<div className="hidden lg:block mt-12 p-6 border rounded mx-auto dark:border-gray-700 dark:bg-gray-800/50 bg-gray-50">
-					<h2 className="text-lg font-medium mb-4">テスト手順</h2>
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-						<div>
-							<ol className="list-decimal list-inside space-y-2">
-								<li>接続状態から「接続」をクリックしてWebSocket接続を開始</li>
-								<li>メッセージ送信フォームから送信テスト</li>
-								<li>スーパーチャット金額を選択してスパチャメッセージを送信</li>
-								<li>メッセージ履歴エリアで受信を確認</li>
-							</ol>
-						</div>
-
-						<div className="text-sm text-gray-600 dark:text-gray-400">
-							<p className="font-medium mb-2">注意事項:</p>
-							<ul className="list-disc list-inside space-y-1">
-								<li>テスト用WebSocketサーバーが必要です</li>
-								<li>実際のSUI送金は行われません</li>
-								<li>テスト用トランザクションハッシュが自動生成されます</li>
-							</ul>
-						</div>
-					</div>
-				</div>
-			</div>
+				</CardHeader>
+				<CardContent>
+					<p className="text-sm text-muted-foreground">
+						このページではメッセージの受信・表示は行いません。
+					</p>
+				</CardContent>
+				<CardFooter>
+					<form
+						onSubmit={handle_send_message}
+						className="flex w-full items-center space-x-2"
+					>
+						<Input
+							placeholder="表示名"
+							value={display_name}
+							onChange={(e) => set_display_name(e.target.value)}
+							disabled={state.status !== ConnectionStatus.CONNECTED}
+							className="w-32"
+						/>
+						<Input
+							placeholder="メッセージを入力..."
+							value={message}
+							onChange={(e) => set_message(e.target.value)}
+							disabled={state.status !== ConnectionStatus.CONNECTED}
+						/>
+						<Button
+							type="submit"
+							disabled={
+								state.status !== ConnectionStatus.CONNECTED ||
+								!message.trim() ||
+								!display_name.trim()
+							}
+						>
+							送信
+						</Button>
+					</form>
+				</CardFooter>
+			</Card>
 		</div>
 	);
 }

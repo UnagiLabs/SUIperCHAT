@@ -51,9 +51,7 @@ export function ClientProviders({
 			<SuiClientProvider networks={networkConfig} defaultNetwork="mainnet">
 				<WalletProvider>
 					<ThemeProvider defaultTheme="system" storageKey="suiperchat-theme">
-						<WebSocketProvider maxRetries={5} retryInterval={3000}>
-							{children}
-						</WebSocketProvider>
+						<WebSocketProvider>{children}</WebSocketProvider>
 					</ThemeProvider>
 				</WalletProvider>
 			</SuiClientProvider>

@@ -1,414 +1,330 @@
 "use client";
 
-/**
- * WebSocketProvider
- * WebSocketの接続・通信管理を行うコンテキストプロバイダーコンポーネント
- *
- * SUIperCHATの視聴者向けUIからWebSocketを通じてメッセージ送信機能を提供します。
- * クライアント側のWebSocketコンテキストとして、接続管理、メッセージ送信、状態管理を担当します。
- */
-
 import {
-	type ChatMessage,
 	ConnectionStatus,
-	MessageType,
 	type SuperchatData,
-	type SuperchatMessage,
 	type WebSocketContextType,
 	type WebSocketState,
 } from "@/lib/types/websocket";
-import type React from "react";
+import { MessageType } from "@/lib/types/websocket";
 import {
 	createContext,
 	useCallback,
 	useContext,
 	useEffect,
-	useReducer,
+	useMemo,
 	useRef,
+	useState,
 } from "react";
-import { v4 as uuidv4 } from "uuid";
+import { toast } from "sonner";
+
+// --- 定数 --- (TODO: 設定ファイルなどに移動)
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_INTERVAL = 5000; // ms
 
 /**
- * WebSocket関連のアクションタイプを定義
+ * WebSocketコンテキスト
+ * アプリケーション全体でWebSocketの状態と操作を共有するために使用
  */
-enum ActionType {
-	CONNECT = "CONNECT",
-	CONNECTED = "CONNECTED",
-	DISCONNECT = "DISCONNECT",
-	DISCONNECTED = "DISCONNECTED",
-	RECONNECTING = "RECONNECTING",
-	ERROR = "ERROR",
-	ADD_MESSAGE = "ADD_MESSAGE",
-	RESET = "RESET",
-}
+const WebSocketContext = createContext<WebSocketContextType | undefined>(
+	undefined,
+);
 
 /**
- * WebSocketの状態更新に使用するアクション型
+ * WebSocketプロバイダーコンポーネント
+ * WebSocket接続の管理、メッセージの送受信、状態の更新を行う
+ *
+ * @param {React.PropsWithChildren} props - 子コンポーネント
+ * @returns {JSX.Element} WebSocketコンテキストを提供するプロバイダー
  */
-type Action =
-	| { type: ActionType.CONNECT; payload: { url: string } }
-	| { type: ActionType.CONNECTED }
-	| { type: ActionType.DISCONNECT }
-	| { type: ActionType.DISCONNECTED }
-	| { type: ActionType.RECONNECTING }
-	| { type: ActionType.ERROR; payload: { error: string } }
-	| {
-			type: ActionType.ADD_MESSAGE;
-			payload: { message: ChatMessage | SuperchatMessage };
-	  }
-	| { type: ActionType.RESET };
+export function WebSocketProvider({ children }: React.PropsWithChildren) {
+	const [state, set_state] = useState<WebSocketState>({
+		status: ConnectionStatus.DISCONNECTED,
+		url: null,
+		error: null,
+		retryCount: 0,
+		messages: [],
+	});
+	const ws_ref = useRef<WebSocket | null>(null);
+	const reconnect_timeout_ref = useRef<NodeJS.Timeout | null>(null);
 
-/**
- * WebSocketの初期状態
- */
-const initialState: WebSocketState = {
-	status: ConnectionStatus.DISCONNECTED,
-	url: null,
-	error: null,
-	retryCount: 0,
-	messages: [],
-};
-
-/**
- * WebSocketのコンテキスト初期値
- */
-const initialContext: WebSocketContextType = {
-	state: initialState,
-	actions: {
-		connect: () => {},
-		disconnect: () => {},
-		sendChatMessage: () => {},
-		sendSuperchatMessage: () => {},
-	},
-};
-
-/**
- * WebSocketのReducer関数
- * 状態の更新ロジックを定義
- */
-function reducer(state: WebSocketState, action: Action): WebSocketState {
-	switch (action.type) {
-		case ActionType.CONNECT:
-			return {
-				...state,
-				status: ConnectionStatus.CONNECTING,
-				url: action.payload.url,
-				error: null,
-			};
-		case ActionType.CONNECTED:
-			return {
-				...state,
-				status: ConnectionStatus.CONNECTED,
-				error: null,
-				retryCount: 0,
-			};
-		case ActionType.DISCONNECT:
-			return {
-				...state,
-				status: ConnectionStatus.DISCONNECTING,
-			};
-		case ActionType.DISCONNECTED:
-			return {
-				...state,
-				status: ConnectionStatus.DISCONNECTED,
-			};
-		case ActionType.RECONNECTING:
-			return {
-				...state,
-				status: ConnectionStatus.RECONNECTING,
-				retryCount: state.retryCount + 1,
-			};
-		case ActionType.ERROR:
-			return {
-				...state,
-				status: ConnectionStatus.ERROR,
-				error: action.payload.error,
-			};
-		case ActionType.ADD_MESSAGE:
-			return {
-				...state,
-				messages: [...state.messages, action.payload.message],
-			};
-		case ActionType.RESET:
-			return initialState;
-		default:
-			return state;
-	}
-}
-
-/**
- * WebSocketコンテキストの作成
- */
-const WebSocketContext = createContext<WebSocketContextType>(initialContext);
-
-/**
- * WebSocketコンテキストプロバイダーのプロパティ
- */
-interface WebSocketProviderProps {
-	children: React.ReactNode;
-	/**
-	 * 自動再接続を試みる最大回数
-	 * @default 5
-	 */
-	maxRetries?: number;
-	/**
-	 * 再接続の間隔（ミリ秒）
-	 * @default 3000
-	 */
-	retryInterval?: number;
-}
-
-/**
- * WebSocketコンテキストプロバイダーコンポーネント
- * WebSocketの接続・通信管理を提供するプロバイダー
- */
-export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
-	children,
-	maxRetries = 5,
-	retryInterval = 3000,
-}) => {
-	const [state, dispatch] = useReducer(reducer, initialState);
-	const socketRef = useRef<WebSocket | null>(null);
-	const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+	// --- Refs for functions to break circular dependency ---
+	const connect_ref = useRef<(url: string) => void>(() => {});
+	const attempt_reconnect_ref = useRef<() => void>(() => {});
+	// ----------------------------------------------------
 
 	/**
-	 * WebSocket接続を確立する関数
+	 * 接続状態を更新する関数
+	 * @param {ConnectionStatus} status - 新しい接続状態
+	 * @param {string | null} [error=null] - エラーメッセージ (エラー時)
 	 */
-	const connect = useCallback(
-		(url: string) => {
-			// 既に接続している場合は切断
-			if (socketRef.current) {
-				socketRef.current.close(1000, "意図的な切断");
-				socketRef.current = null;
-			}
-
-			dispatch({ type: ActionType.CONNECT, payload: { url } });
-
-			try {
-				// WebSocket接続を作成
-				const socket = new WebSocket(url);
-
-				// 接続時のイベントハンドラ
-				socket.onopen = () => {
-					console.log("WebSocket接続が確立されました");
-					dispatch({ type: ActionType.CONNECTED });
-				};
-
-				// メッセージ受信時のイベントハンドラ
-				socket.onmessage = (event) => {
-					try {
-						const data = JSON.parse(event.data);
-
-						if (
-							data.type === MessageType.CHAT ||
-							data.type === MessageType.SUPERCHAT
-						) {
-							dispatch({
-								type: ActionType.ADD_MESSAGE,
-								payload: { message: data },
-							});
-						}
-					} catch (error) {
-						console.error("メッセージの解析に失敗しました:", error);
-					}
-				};
-
-				// エラー発生時のイベントハンドラ
-				socket.onerror = (error) => {
-					console.error("WebSocketエラー:", error);
-					dispatch({
-						type: ActionType.ERROR,
-						payload: { error: "WebSocket接続エラーが発生しました" },
-					});
-				};
-
-				// 接続切断時のイベントハンドラ
-				socket.onclose = (event) => {
-					console.log(
-						"WebSocket接続が閉じられました:",
-						event.code,
-						event.reason,
-					);
-					dispatch({ type: ActionType.DISCONNECTED });
-
-					// 異常切断の場合、再接続を試みる
-					if (!event.wasClean && state.retryCount < maxRetries) {
-						dispatch({ type: ActionType.RECONNECTING });
-						if (reconnectTimeoutRef.current) {
-							clearTimeout(reconnectTimeoutRef.current);
-						}
-						reconnectTimeoutRef.current = setTimeout(() => {
-							console.log(
-								`再接続を試みています... (${state.retryCount + 1}/${maxRetries})`,
-							);
-							connect(url);
-						}, retryInterval);
-					}
-				};
-
-				socketRef.current = socket;
-			} catch (error) {
-				console.error("WebSocket接続の作成に失敗しました:", error);
-				dispatch({
-					type: ActionType.ERROR,
-					payload: { error: "WebSocket接続の作成に失敗しました" },
-				});
-			}
+	const update_status = useCallback(
+		(status: ConnectionStatus, error: string | null = null) => {
+			set_state((prev) => ({
+				...prev,
+				status,
+				error: error ?? prev.error, // エラーが指定されていれば更新
+			}));
 		},
-		[maxRetries, state.retryCount, retryInterval],
+		[],
 	);
 
 	/**
-	 * WebSocket接続を切断する関数
+	 * 再接続を試みる関数
 	 */
-	const disconnect = useCallback(() => {
-		if (socketRef.current) {
-			dispatch({ type: ActionType.DISCONNECT });
+	const attempt_reconnect = useCallback(() => {
+		if (
+			reconnect_timeout_ref.current ||
+			!state.url ||
+			state.status === ConnectionStatus.CONNECTING ||
+			state.status === ConnectionStatus.CONNECTED ||
+			state.status === ConnectionStatus.RECONNECTING ||
+			state.status === ConnectionStatus.DISCONNECTING ||
+			state.retryCount >= MAX_RECONNECT_ATTEMPTS
+		) {
+			return;
+		}
 
-			// タイムアウトをクリア
-			if (reconnectTimeoutRef.current) {
-				clearTimeout(reconnectTimeoutRef.current);
-				reconnectTimeoutRef.current = null;
+		update_status(ConnectionStatus.RECONNECTING);
+		toast.info(
+			`WebSocket 再接続試行 (${state.retryCount + 1}/${MAX_RECONNECT_ATTEMPTS})`,
+		);
+
+		reconnect_timeout_ref.current = setTimeout(() => {
+			set_state((prev) => ({ ...prev, retryCount: prev.retryCount + 1 }));
+			connect_ref.current(state.url as string); // connect -> connect_ref.current
+			reconnect_timeout_ref.current = null;
+		}, RECONNECT_INTERVAL);
+	}, [state.url, state.status, state.retryCount, update_status]);
+
+	/**
+	 * WebSocket接続を開く関数
+	 * @param {string} url - 接続先WebSocketサーバーのURL
+	 */
+	const connect = useCallback(
+		(url: string) => {
+			if (ws_ref.current && ws_ref.current.readyState < WebSocket.CLOSING) {
+				console.warn("WebSocket is already connected or connecting.");
+				return;
 			}
 
-			// 正常に接続が閉じられるようにする
-			socketRef.current.close(1000, "意図的な切断");
-			socketRef.current = null;
+			// 既存の再接続タイマーをクリア
+			if (reconnect_timeout_ref.current) {
+				clearTimeout(reconnect_timeout_ref.current);
+				reconnect_timeout_ref.current = null;
+			}
+
+			update_status(ConnectionStatus.CONNECTING);
+			set_state((prev) => ({ ...prev, url })); // URL を保存
+			toast.info(`WebSocket 接続中: ${url}`);
+
+			try {
+				ws_ref.current = new WebSocket(url);
+
+				ws_ref.current.onopen = () => {
+					console.log("WebSocket connection opened");
+					update_status(ConnectionStatus.CONNECTED);
+					set_state((prev) => ({ ...prev, retryCount: 0, error: null })); // 接続成功時にリトライカウントとエラーをリセット
+					toast.success("WebSocket 接続成功");
+				};
+
+				ws_ref.current.onmessage = (event) => {
+					console.log("WebSocket message received:", event.data);
+					try {
+						const message_data = JSON.parse(event.data); // TODO: 型ガードを追加
+						// サーバーからの PING/PONG は Rust 側で処理されるため、ここでは主にメッセージを処理
+						if (
+							message_data.type === MessageType.CHAT ||
+							message_data.type === MessageType.SUPERCHAT
+						) {
+							set_state((prev) => ({
+								...prev,
+								messages: [...prev.messages, message_data],
+							}));
+						}
+						// TODO: 他のメッセージタイプ (ERROR, CONNECTION_STATUS 等) の処理を追加
+					} catch (parse_error) {
+						console.error("Failed to parse WebSocket message:", parse_error);
+						toast.error("受信メッセージの解析に失敗しました");
+					}
+				};
+
+				ws_ref.current.onerror = (event) => {
+					const error_msg = "WebSocket エラーが発生しました";
+					console.error(error_msg, event);
+					update_status(ConnectionStatus.ERROR, error_msg);
+					toast.error(error_msg);
+					// エラー発生時も再接続を試みる (ネットワークエラーなど)
+					attempt_reconnect_ref.current(); // attempt_reconnect -> attempt_reconnect_ref.current
+				};
+
+				ws_ref.current.onclose = (event) => {
+					console.log("WebSocket connection closed:", event.code, event.reason);
+					// 意図しない切断の場合、再接続を試みる
+					if (
+						!event.wasClean &&
+						state.status !== ConnectionStatus.DISCONNECTING
+					) {
+						update_status(
+							ConnectionStatus.DISCONNECTED,
+							"予期せず接続が切断されました",
+						);
+						toast.warning("WebSocket 接続が予期せず切断されました");
+						attempt_reconnect_ref.current(); // attempt_reconnect -> attempt_reconnect_ref.current
+					} else {
+						// 意図的な切断 or 再接続上限
+						update_status(ConnectionStatus.DISCONNECTED);
+						if (state.retryCount >= MAX_RECONNECT_ATTEMPTS) {
+							toast.error("WebSocket の再接続に失敗しました");
+						}
+					}
+					ws_ref.current = null;
+				};
+			} catch (error) {
+				const error_msg = `WebSocket 接続の初期化に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
+				console.error(error_msg);
+				update_status(ConnectionStatus.ERROR, error_msg);
+				toast.error("WebSocket 接続開始エラー", {
+					description: error_msg,
+				});
+				// 初期化失敗時もリトライ
+				attempt_reconnect_ref.current(); // attempt_reconnect -> attempt_reconnect_ref.current
+			}
+		},
+		[update_status, state.status, state.retryCount],
+	);
+
+	/**
+	 * WebSocket接続を閉じる関数
+	 */
+	const disconnect = useCallback(() => {
+		if (!ws_ref.current) {
+			return;
+		}
+		// 再接続タイマーをクリア
+		if (reconnect_timeout_ref.current) {
+			clearTimeout(reconnect_timeout_ref.current);
+			reconnect_timeout_ref.current = null;
+		}
+		update_status(ConnectionStatus.DISCONNECTING);
+		ws_ref.current.close(1000, "User disconnected"); // 正常終了コード
+		console.log("WebSocket connection closing initiated by user.");
+		// onclose ハンドラで最終的な状態更新と ws_ref.current = null が行われる
+	}, [update_status]);
+
+	// --- Update refs whenever functions change ---
+	useEffect(() => {
+		connect_ref.current = connect;
+	}, [connect]);
+
+	useEffect(() => {
+		attempt_reconnect_ref.current = attempt_reconnect;
+	}, [attempt_reconnect]);
+	// --------------------------------------------
+
+	// --- メッセージ送信関数 --- (
+	/**
+	 * WebSocketサーバーにメッセージを送信する共通関数
+	 * @param {Record<string, any>} message_data - 送信するメッセージオブジェクト
+	 */
+	const send_message = useCallback((message_data: Record<string, unknown>) => {
+		if (ws_ref.current && ws_ref.current.readyState === WebSocket.OPEN) {
+			try {
+				// IDとタイムスタンプを付与
+				const message_with_meta = {
+					...message_data,
+					id: crypto.randomUUID(),
+					timestamp: Date.now(),
+				};
+				ws_ref.current.send(JSON.stringify(message_with_meta));
+				console.log("WebSocket message sent:", message_with_meta);
+			} catch (error) {
+				console.error("Failed to send WebSocket message:", error);
+				toast.error("メッセージの送信に失敗しました");
+			}
+		} else {
+			console.warn("WebSocket is not connected. Cannot send message.");
+			toast.warning("WebSocket が接続されていません");
 		}
 	}, []);
 
 	/**
 	 * チャットメッセージを送信する関数
+	 * @param {string} display_name - 表示名
+	 * @param {string} message - メッセージ内容
 	 */
-	const sendChatMessage = useCallback(
-		(displayName: string, message: string) => {
-			if (socketRef.current && state.status === ConnectionStatus.CONNECTED) {
-				const chatMessage: ChatMessage = {
-					type: MessageType.CHAT,
-					id: uuidv4(),
-					timestamp: Date.now(),
-					display_name: displayName,
-					message: message,
-				};
-
-				try {
-					socketRef.current.send(JSON.stringify(chatMessage));
-					dispatch({
-						type: ActionType.ADD_MESSAGE,
-						payload: { message: chatMessage },
-					});
-				} catch (error) {
-					console.error("メッセージの送信に失敗しました:", error);
-					dispatch({
-						type: ActionType.ERROR,
-						payload: { error: "メッセージの送信に失敗しました" },
-					});
-				}
-			} else {
-				console.error(
-					"WebSocketが接続されていないため、メッセージを送信できません",
-				);
-				dispatch({
-					type: ActionType.ERROR,
-					payload: {
-						error:
-							"WebSocketが接続されていないため、メッセージを送信できません",
-					},
-				});
-			}
+	const send_chat_message = useCallback(
+		(display_name: string, message: string) => {
+			send_message({
+				type: MessageType.CHAT,
+				display_name,
+				message,
+			});
 		},
-		[state.status],
+		[send_message],
 	);
 
 	/**
 	 * スーパーチャットメッセージを送信する関数
+	 * @param {string} display_name - 表示名
+	 * @param {string} message - メッセージ内容
+	 * @param {SuperchatData} superchat_data - スーパーチャットデータ
 	 */
-	const sendSuperchatMessage = useCallback(
-		(displayName: string, message: string, superchatData: SuperchatData) => {
-			if (socketRef.current && state.status === ConnectionStatus.CONNECTED) {
-				const superchatMessage: SuperchatMessage = {
-					type: MessageType.SUPERCHAT,
-					id: uuidv4(),
-					timestamp: Date.now(),
-					display_name: displayName,
-					message: message,
-					superchat: superchatData,
-				};
-
-				try {
-					socketRef.current.send(JSON.stringify(superchatMessage));
-					dispatch({
-						type: ActionType.ADD_MESSAGE,
-						payload: { message: superchatMessage },
-					});
-				} catch (error) {
-					console.error(
-						"スーパーチャットメッセージの送信に失敗しました:",
-						error,
-					);
-					dispatch({
-						type: ActionType.ERROR,
-						payload: {
-							error: "スーパーチャットメッセージの送信に失敗しました",
-						},
-					});
-				}
-			} else {
-				console.error(
-					"WebSocketが接続されていないため、スーパーチャットメッセージを送信できません",
-				);
-				dispatch({
-					type: ActionType.ERROR,
-					payload: {
-						error:
-							"WebSocketが接続されていないため、スーパーチャットメッセージを送信できません",
-					},
-				});
-			}
+	const send_superchat_message = useCallback(
+		(display_name: string, message: string, superchat_data: SuperchatData) => {
+			send_message({
+				type: MessageType.SUPERCHAT,
+				display_name,
+				message,
+				superchat: superchat_data,
+			});
 		},
-		[state.status],
+		[send_message],
 	);
+	// --- メッセージ送信関数ここまで --- )
 
 	/**
-	 * コンポーネントのアンマウント時に接続を切断
+	 * コンポーネントのアンマウント時に接続を閉じる
 	 */
 	useEffect(() => {
-		return () => {
-			disconnect();
-		};
+		disconnect();
 	}, [disconnect]);
 
-	// コンテキスト値の作成
-	const contextValue: WebSocketContextType = {
-		state,
-		actions: {
-			connect,
-			disconnect,
-			sendChatMessage,
-			sendSuperchatMessage,
-		},
-	};
+	/**
+	 * コンテキストに渡す値
+	 * state と actions を含む
+	 */
+	const context_value = useMemo<WebSocketContextType>(
+		() => ({
+			state,
+			actions: {
+				connect,
+				disconnect,
+				sendChatMessage: send_chat_message,
+				sendSuperchatMessage: send_superchat_message,
+			},
+		}),
+		[state, connect, disconnect, send_chat_message, send_superchat_message],
+	);
 
 	return (
-		<WebSocketContext.Provider value={contextValue}>
+		<WebSocketContext.Provider value={context_value}>
 			{children}
 		</WebSocketContext.Provider>
 	);
-};
+}
 
 /**
  * WebSocketコンテキストを使用するためのカスタムフック
- * @returns WebSocketコンテキスト
- * @throws コンテキストがプロバイダー外で使用された場合にエラー
+ * コンテキストが未定義の場合にエラーをスローする
+ *
+ * @returns {WebSocketContextType} WebSocketコンテキストの値
+ * @throws {Error} WebSocketProvider内で使用されていない場合にエラーをスロー
  */
-export const useWebSocket = (): WebSocketContextType => {
+export function useWebSocket() {
 	const context = useContext(WebSocketContext);
-
 	if (context === undefined) {
-		throw new Error(
-			"useWebSocketはWebSocketProviderの中で使用する必要があります",
-		);
+		throw new Error("useWebSocket must be used within a WebSocketProvider");
 	}
-
 	return context;
-};
+}

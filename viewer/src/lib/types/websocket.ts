@@ -20,6 +20,7 @@ export enum MessageType {
 	ERROR = "error",
 	/** 接続状態の更新 */
 	CONNECTION_STATUS = "connection_status",
+	DISCONNECTED = "DISCONNECTED",
 }
 
 /**
