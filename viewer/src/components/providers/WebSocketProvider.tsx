@@ -33,9 +33,6 @@ const WebSocketContext = createContext<WebSocketContextType | undefined>(
 /**
  * WebSocketプロバイダーコンポーネント
  * WebSocket接続の管理、メッセージの送受信、状態の更新を行う
- *
- * @param {React.PropsWithChildren} props - 子コンポーネント
- * @returns {JSX.Element} WebSocketコンテキストを提供するプロバイダー
  */
 export function WebSocketProvider({ children }: React.PropsWithChildren) {
 	const [state, set_state] = useState<WebSocketState>({
