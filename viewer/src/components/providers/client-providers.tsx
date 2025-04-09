@@ -10,7 +10,6 @@
 "use client";
 
 import { WebSocketProvider } from "@/components/providers/WebSocketProvider";
-import { ThemeProvider } from "@/components/theme/theme-provider";
 import {
 	SuiClientProvider,
 	WalletProvider,
@@ -50,9 +49,7 @@ export function ClientProviders({
 		<QueryClientProvider client={queryClient}>
 			<SuiClientProvider networks={networkConfig} defaultNetwork="mainnet">
 				<WalletProvider>
-					<ThemeProvider defaultTheme="system" storageKey="suiperchat-theme">
-						<WebSocketProvider>{children}</WebSocketProvider>
-					</ThemeProvider>
+					<WebSocketProvider>{children}</WebSocketProvider>
 				</WalletProvider>
 			</SuiClientProvider>
 		</QueryClientProvider>
