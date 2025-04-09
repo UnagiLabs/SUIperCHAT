@@ -34,7 +34,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::start_websocket_server,
             commands::stop_websocket_server,
-            commands::set_wallet_address // commands::get_streamer_info // 後で追加
+            commands::set_wallet_address,
+            commands::get_streamer_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -5,9 +5,10 @@ use crate::ws_server;
 use actix_web::{get, Error, HttpRequest, HttpResponse};
 use actix_web::{App, HttpServer};
 use actix_web_actors::ws;
+use serde::Serialize;
 use std::sync::Arc;
 use tauri::{command, State}; // Manager を追加
-use tokio::runtime::Runtime;
+use tokio::runtime::Runtime; // <--- 追加
 
 /// ## WebSocket ルートハンドラー
 ///
@@ -42,13 +43,15 @@ async fn websocket_route(
 /// - `Result<(), String>`: 成功した場合は `Ok(())`、エラーの場合はエラーメッセージ
 #[command]
 pub fn start_websocket_server(
-    app_state: State<AppState>,
-    _app_handle: tauri::AppHandle, // app_handle は現在未使用だが、将来のために残す
+    app_state: State<'_, AppState>,
+    _app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     println!("Attempting to start WebSocket server...");
 
     let server_handle_arc = Arc::clone(&app_state.server_handle);
-    let runtime_handle_arc = Arc::clone(&app_state.runtime_handle); // runtime_handle もクローン
+    let runtime_handle_arc = Arc::clone(&app_state.runtime_handle);
+    let host_arc = Arc::clone(&app_state.host); // <--- host Arc をクローン
+    let port_arc = Arc::clone(&app_state.port); // <--- port Arc をクローン
 
     // 既にサーバーが起動しているかチェック
     {
@@ -81,51 +84,69 @@ pub fn start_websocket_server(
         }
 
         rt.block_on(async {
-            let host = "127.0.0.1"; // TODO: 設定可能にする
-            let port = 8080; // TODO: 設定可能にする
+            // --- ホストとポートを定義 (将来的には設定から読み込む) ---
+            let host = "127.0.0.1";
+            let port = 8080;
             println!("Starting WebSocket server at ws://{}:{}", host, port);
 
             let server_result =
-                HttpServer::new(|| App::new().service(websocket_route)).bind((host, port));
+                HttpServer::new(|| App::new().service(websocket_route)).bind((host, port)); // host と port を使用
 
             let server = match server_result {
                 Ok(srv) => srv.run(),
                 Err(e) => {
                     eprintln!("Failed to bind server: {}", e);
-                    // --- バインド失敗時もランタイムハンドルをクリア ---
-                    let mut rt_handle_guard = runtime_handle_arc
+                    // --- バインド失敗時は各種ハンドルをクリア ---
+                    // runtime_handle クリア (変更なし)
+                    // host, port もクリア
+                    let mut host_guard = host_arc
                         .lock()
-                        .expect("Failed to lock runtime handle mutex after bind error");
-                    *rt_handle_guard = None;
-                    println!("Tokio runtime handle cleared due to bind error.");
+                        .expect("Failed to lock host after bind error");
+                    *host_guard = None;
+                    let mut port_guard = port_arc
+                        .lock()
+                        .expect("Failed to lock port after bind error");
+                    *port_guard = None;
+                    println!("Host and Port cleared due to bind error.");
                     return;
                 }
             };
 
-            // サーバーハンドルを状態に保存
+            // --- サーバーハンドル、ホスト、ポートを状態に保存 ---
             {
                 let mut handle_guard = server_handle_arc
                     .lock()
-                    .expect("Failed to lock server handle mutex for storing");
+                    .expect("Failed to lock server handle for storing");
                 *handle_guard = Some(server.handle());
-                println!("WebSocket server started and handle stored.");
+
+                let mut host_guard = host_arc.lock().expect("Failed to lock host for storing");
+                *host_guard = Some(host.to_string()); // host を保存
+
+                let mut port_guard = port_arc.lock().expect("Failed to lock port for storing");
+                *port_guard = Some(port); // port を保存
+
+                println!("WebSocket server started and handle, host, port stored.");
             }
 
             // サーバーを await して実行
             if let Err(e) = server.await {
                 eprintln!("WebSocket server run error: {}", e);
             }
-            // --- サーバー終了時 (正常・エラー問わず) に両ハンドルをクリア ---
-            println!("WebSocket server finished running. Clearing handles...");
+            // --- サーバー終了時に全ハンドル/情報をクリア ---
+            println!("WebSocket server finished running. Clearing handles and info...");
             let mut handle_guard = server_handle_arc
                 .lock()
-                .expect("Failed to lock server handle mutex after run");
+                .expect("Failed to lock server handle after run");
             *handle_guard = None;
             let mut rt_handle_guard = runtime_handle_arc
                 .lock()
-                .expect("Failed to lock runtime handle mutex after run");
+                .expect("Failed to lock runtime handle after run");
             *rt_handle_guard = None;
-            println!("Server and runtime handles cleared.");
+            let mut host_guard = host_arc.lock().expect("Failed to lock host after run");
+            *host_guard = None;
+            let mut port_guard = port_arc.lock().expect("Failed to lock port after run");
+            *port_guard = None;
+            println!("Server handle, runtime handle, host, and port cleared.");
         });
         // block_on が終了したら、このスレッドも終了
         println!("WebSocket server thread finished.");
@@ -244,4 +265,66 @@ pub fn set_wallet_address(app_state: State<'_, AppState>, address: String) -> Re
     // TODO: データベースなどへの永続化処理をここに追加
 
     Ok(())
+}
+
+/// ## フロントエンドに渡す配信者情報
+///
+/// WebSocketの接続URLと配信者のウォレットアドレスを含みます。
+#[derive(Serialize, Clone)] // Serialize と Clone を derive
+pub struct StreamerInfo {
+    /// WebSocketサーバーの完全なURL (例: "ws://127.0.0.1:8080")
+    ws_url: String,
+    /// 配信者のSUIウォレットアドレス
+    wallet_address: String,
+}
+
+/// ## 配信者情報を取得する Tauri コマンド
+///
+/// 現在設定されている配信者のウォレットアドレスと、
+/// 稼働中の（またはデフォルトの）WebSocketサーバーURLを取得して返します。
+///
+/// ### Arguments
+/// - `app_state`: Tauri の管理するアプリケーション状態 (`State<AppState>`)
+///
+/// ### Returns
+/// - `Result<StreamerInfo, String>`: 成功した場合は `StreamerInfo`、失敗した場合はエラーメッセージ
+#[command]
+pub fn get_streamer_info(app_state: State<'_, AppState>) -> Result<StreamerInfo, String> {
+    println!("Getting streamer info...");
+
+    // --- ウォレットアドレスを取得 ---
+    let wallet_addr_guard = app_state
+        .wallet_address
+        .lock()
+        .map_err(|_| "Failed to lock wallet address mutex".to_string())?;
+    let wallet_address = wallet_addr_guard
+        .as_ref()
+        .ok_or_else(|| "Wallet address is not set. Please configure it first.".to_string())?
+        .clone();
+
+    // --- WebSocket URLをAppStateから構築 ---
+    let host_guard = app_state
+        .host
+        .lock()
+        .map_err(|_| "Failed to lock host mutex".to_string())?;
+    let host = host_guard.as_ref().ok_or_else(|| {
+        "WebSocket server host is not available (server not running?).".to_string()
+    })?;
+
+    let port_guard = app_state
+        .port
+        .lock()
+        .map_err(|_| "Failed to lock port mutex".to_string())?;
+    let port = port_guard.ok_or_else(|| {
+        "WebSocket server port is not available (server not running?).".to_string()
+    })?;
+
+    // WebSocket URL を構築
+    let ws_url = format!("ws://{}:{}", host, port);
+    println!("Constructed ws_url from AppState: {}", ws_url);
+
+    Ok(StreamerInfo {
+        ws_url,
+        wallet_address,
+    })
 }
