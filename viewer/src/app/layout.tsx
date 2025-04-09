@@ -57,7 +57,7 @@ export default function RootLayout({
 	children: React.ReactNode;
 }>): React.ReactElement {
 	return (
-		<html lang="ja" suppressHydrationWarning>
+		<html lang="ja" className="dark">
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen`}
 			>
