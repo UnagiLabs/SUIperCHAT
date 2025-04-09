@@ -25,7 +25,6 @@ const OBS_OVERLAY_BASE_URL = "http://localhost:3001/overlay";
 /**
  * URL表示コンポーネント
  * Rustバックエンドから取得した情報をもとにURLを生成・表示します。
- * @returns {JSX.Element} コンポーネント
  */
 export default function UrlDisplay() {
 	const [obsCopied, setObsCopied] = useState(false);

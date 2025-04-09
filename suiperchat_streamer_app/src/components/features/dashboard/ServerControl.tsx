@@ -22,10 +22,8 @@ import { Loader2, Play, StopCircle, Wifi, WifiOff } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-
 /**
  * サーバー制御コンポーネント
- * @returns {JSX.Element} コンポーネント
  */
 export default function ServerControl() {
 	const [is_loading, set_is_loading] = useState(false);

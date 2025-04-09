@@ -3,9 +3,6 @@
  *
  * 配信者のSUIウォレットアドレスを設定し、保存するためのフォームを提供します。
  * ローカルストレージを使用してアドレスを保存します。
- *
- * @module components/features/dashboard/WalletAddressConfig
- * @returns {JSX.Element} ウォレットアドレス設定コンポーネント
  */
 
 "use client";
