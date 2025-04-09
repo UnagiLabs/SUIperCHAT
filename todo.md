@@ -58,7 +58,7 @@
   - 見積時間：12時間
 
 - 🟡 [ ] 3.4 Rustバックエンド：WebSocketサーバー実装 (Actix-Webベース)
-  - [ ] 3.4.1 actix-web, actix-web-actors のセットアップ (tokioランタイム)
+  - [x] 3.4.1 actix-web, actix-web-actors のセットアップ (tokioランタイム)
   - [ ] 3.4.2 WebSocket接続用アクター (`Actor`, `StreamHandler`) の基本実装
   - [ ] 3.4.3 メッセージハンドリング (`ws::Message` 分岐: 通常/スパチャ等)
   - [ ] 3.4.4 基本的な接続管理 (接続/切断処理、フロントエンドIPCスタブ)

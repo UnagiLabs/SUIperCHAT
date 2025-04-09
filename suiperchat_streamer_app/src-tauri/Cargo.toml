@@ -26,10 +26,12 @@ tauri-plugin-log = "2.0.0-rc"
 chrono = "0.4"
 
 # WebSocketサーバー実装に必要な依存関係
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["full", "macros", "rt-multi-thread"] }
 tokio-tungstenite = "0.26"
 futures-util = "0.3"
 uuid = { version = "1", features = ["v4", "serde"] }
 futures-channel = "0.3"
 lazy_static = "1"
 url = "2.5"
+actix-web = "4.10"
+actix-web-actors = "4.3"
