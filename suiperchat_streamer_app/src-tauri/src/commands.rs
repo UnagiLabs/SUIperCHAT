@@ -7,7 +7,7 @@ use actix_web::{App, HttpServer};
 use actix_web_actors::ws;
 use serde::Serialize;
 use std::sync::Arc;
-use tauri::{command, State}; // Manager を追加
+use tauri::{command, Emitter, State}; // Emitter と Manager を use
 use tokio::runtime::Runtime; // <--- 追加
 
 /// ## WebSocket ルートハンドラー
@@ -226,11 +226,16 @@ pub fn stop_websocket_server(
 /// ### Arguments
 /// - `app_state`: Tauri の管理するアプリケーション状態 (`State<AppState>`)
 /// - `address`: 設定するウォレットアドレス (`String`)
+/// - `app_handle`: Tauri アプリケーションハンドル (`tauri::AppHandle`)
 ///
 /// ### Returns
 /// - `Result<(), String>`: 成功した場合は `Ok(())`、エラーの場合はエラーメッセージ
 #[command]
-pub fn set_wallet_address(app_state: State<'_, AppState>, address: String) -> Result<(), String> {
+pub fn set_wallet_address(
+    app_state: State<'_, AppState>,
+    address: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
     println!("Setting wallet address to: {}", address);
 
     let trimmed_address = address.trim();
@@ -254,15 +259,20 @@ pub fn set_wallet_address(app_state: State<'_, AppState>, address: String) -> Re
     }
     // --- バリデーションここまで ---
 
-    let wallet_address_arc = Arc::clone(&app_state.wallet_address);
-    let mut wallet_guard = wallet_address_arc
+    // --- アドレスを AppState に保存 ---
+    let mut wallet_addr = app_state
+        .wallet_address
         .lock()
         .map_err(|_| "Failed to lock wallet address mutex".to_string())?;
+    *wallet_addr = Some(trimmed_address.to_string());
 
-    *wallet_guard = Some(address.trim().to_string());
-
-    println!("Wallet address stored in AppState.");
-    // TODO: データベースなどへの永続化処理をここに追加
+    // --- イベントを発行 --- ★★★
+    // Emitter トレイトの emit メソッドを使用
+    app_handle.emit("wallet_address_updated", ()).map_err(|e| {
+        eprintln!("Failed to emit wallet_address_updated event: {}", e);
+        "Failed to notify frontend about wallet address update".to_string()
+    })?;
+    println!("Wallet address saved and event 'wallet_address_updated' emitted.");
 
     Ok(())
 }

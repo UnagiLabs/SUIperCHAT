@@ -5,7 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, Check, ClipboardCopy, Loader2 } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
+import {
+	AlertTriangle,
+	Check,
+	ClipboardCopy,
+	Info,
+	Loader2,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -21,6 +28,8 @@ const VIEWER_APP_BASE_URL =
 	process.env.NEXT_PUBLIC_VIEWER_APP_BASE_URL || "https://suiperchat.app/chat";
 // TODO: OBSオーバーレイのポートも動的に取得・設定可能にする
 const OBS_OVERLAY_BASE_URL = "http://localhost:3001/overlay";
+const WALLET_NOT_SET_ERROR =
+	"Wallet address is not set. Please configure it first.";
 
 /**
  * URL表示コンポーネント
@@ -32,6 +41,7 @@ export default function UrlDisplay() {
 	const [streamerInfo, setStreamerInfo] = useState<StreamerInfo | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [needsConfiguration, setNeedsConfiguration] = useState(false);
 
 	/**
 	 * バックエンドから配信者情報を取得する関数
@@ -39,6 +49,7 @@ export default function UrlDisplay() {
 	const fetch_streamer_info = useCallback(async () => {
 		setIsLoading(true);
 		setError(null);
+		setNeedsConfiguration(false);
 		try {
 			const info = await invoke<StreamerInfo>("get_streamer_info");
 			setStreamerInfo(info);
@@ -51,8 +62,14 @@ export default function UrlDisplay() {
 					: typeof err === "string"
 						? err
 						: "不明なエラーが発生しました。";
-			setError(`配信者情報の取得に失敗: ${error_message}`);
-			setStreamerInfo(null); // エラー時は情報をクリア
+			if (error_message === WALLET_NOT_SET_ERROR) {
+				setNeedsConfiguration(true);
+				setError(null);
+			} else {
+				setError(`配信者情報の取得中にエラーが発生しました: ${error_message}`);
+				setNeedsConfiguration(false);
+			}
+			setStreamerInfo(null);
 		} finally {
 			setIsLoading(false);
 		}
@@ -60,16 +77,27 @@ export default function UrlDisplay() {
 
 	/**
 	 * コンポーネントマウント時に情報を取得
-	 * TODO: サーバー状態やウォレットアドレス変更時にも再取得する仕組み
+	 * TODO: サーバー状態変更時にも再取得する仕組み
 	 */
 	useEffect(() => {
 		fetch_streamer_info();
+
+		// --- ウォレットアドレス更新イベントをリッスン --- ★★★
+		const unlisten = listen<void>("wallet_address_updated", (event) => {
+			console.log("Received wallet_address_updated event:", event);
+			toast.info("ウォレットアドレスが更新されました。URL情報を再取得します。");
+			fetch_streamer_info(); // イベントを受け取ったら再取得
+		});
+
+		// クリーンアップ関数
+		return () => {
+			unlisten.then((unlistenFn) => unlistenFn());
+		};
 	}, [fetch_streamer_info]);
 
 	// --- URL生成ロジック ---
 	let obs_url = "";
 	let viewer_url = "";
-	let isDataAvailable = false;
 
 	if (streamerInfo) {
 		const { ws_url, wallet_address } = streamerInfo;
@@ -82,12 +110,10 @@ export default function UrlDisplay() {
 
 			// 視聴者 URL
 			viewer_url = `${VIEWER_APP_BASE_URL}?wsUrl=${encodedWsUrl}&streamerAddress=${encodedWalletAddress}`;
-
-			isDataAvailable = true;
 		} catch (encodeError) {
 			console.error("Failed to encode URL parameters:", encodeError);
 			setError("URLパラメータのエンコードに失敗しました。");
-			isDataAvailable = false;
+			setStreamerInfo(null);
 		}
 	}
 
@@ -126,13 +152,21 @@ export default function UrlDisplay() {
 						<span className="ml-2 text-muted-foreground">情報を取得中...</span>
 					</div>
 				)}
-				{error && (
+				{error && !isLoading && (
 					<div className="flex items-center text-red-600 bg-red-100 p-3 rounded-md">
 						<AlertTriangle className="h-5 w-5 mr-2" />
 						<p className="text-sm font-medium">{error}</p>
 					</div>
 				)}
-				{!isLoading && !error && (
+				{needsConfiguration && !isLoading && !error && (
+					<div className="flex items-center text-blue-600 bg-blue-100 p-3 rounded-md">
+						<Info className="h-5 w-5 mr-2" />
+						<p className="text-sm font-medium">
+							ウォレットアドレスが設定されていません。上の設定欄から入力・保存してください。
+						</p>
+					</div>
+				)}
+				{!isLoading && !error && !needsConfiguration && streamerInfo && (
 					<>
 						<div className="space-y-2">
 							<Label htmlFor="obs-url">OBSブラウザソース用URL</Label>
@@ -144,7 +178,7 @@ export default function UrlDisplay() {
 									onClick={() =>
 										copy_to_clipboard(obs_url, () => setObsCopied(true))
 									}
-									disabled={!isDataAvailable}
+									disabled={!streamerInfo}
 								>
 									{obsCopied ? (
 										<Check className="h-4 w-4" />
@@ -164,7 +198,7 @@ export default function UrlDisplay() {
 									onClick={() =>
 										copy_to_clipboard(viewer_url, () => setViewerCopied(true))
 									}
-									disabled={!isDataAvailable}
+									disabled={!streamerInfo}
 								>
 									{viewerCopied ? (
 										<Check className="h-4 w-4" />
