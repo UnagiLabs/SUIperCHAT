@@ -92,48 +92,53 @@ pub fn start_websocket_server(
             let server_result =
                 HttpServer::new(|| App::new().service(websocket_route)).bind((host, port)); // host と port を使用
 
-            let server = match server_result {
-                Ok(srv) => srv.run(),
-                Err(e) => {
-                    eprintln!("Failed to bind server: {}", e);
-                    // --- バインド失敗時は各種ハンドルをクリア ---
-                    // runtime_handle クリア (変更なし)
-                    // host, port もクリア
-                    let mut host_guard = host_arc
-                        .lock()
-                        .expect("Failed to lock host after bind error");
-                    *host_guard = None;
-                    let mut port_guard = port_arc
-                        .lock()
-                        .expect("Failed to lock port after bind error");
-                    *port_guard = None;
-                    println!("Host and Port cleared due to bind error.");
-                    return;
+            match server_result {
+                Ok(server) => {
+                    // サーバー起動成功時の処理
+                    println!("WebSocket server bound successfully to {}:{}", host, port);
+
+                    // --- サーバーを起動して、ハンドルを保存 ---
+                    let server = server.run();
+                    let server_handle = server.handle(); // このServerインスタンスからハンドルを取得
+
+                    // --- ホストとポートを保存 ---
+                    {
+                        let mut host_guard = host_arc
+                            .lock()
+                            .expect("Failed to lock host mutex for storing");
+                        *host_guard = Some(host.to_string());
+                        println!("Host stored in AppState: {}", host);
+                    }
+                    {
+                        let mut port_guard = port_arc
+                            .lock()
+                            .expect("Failed to lock port mutex for storing");
+                        *port_guard = Some(port);
+                        println!("Port stored in AppState: {}", port);
+                    }
+
+                    // --- サーバーハンドルを保存 --- (一番重要)
+                    {
+                        let mut handle_guard = server_handle_arc
+                            .lock()
+                            .expect("Failed to lock server handle mutex for storing");
+                        *handle_guard = Some(server_handle);
+                        println!("Server handle stored in AppState.");
+                    }
+
+                    // ここでサーバーが実行され、.await によってブロックされる
+                    if let Err(e) = server.await {
+                        eprintln!("WebSocket server error: {}", e);
+                    }
+                    println!("WebSocket server stopped gracefully.");
                 }
-            };
-
-            // --- サーバーハンドル、ホスト、ポートを状態に保存 ---
-            {
-                let mut handle_guard = server_handle_arc
-                    .lock()
-                    .expect("Failed to lock server handle for storing");
-                *handle_guard = Some(server.handle());
-
-                let mut host_guard = host_arc.lock().expect("Failed to lock host for storing");
-                *host_guard = Some(host.to_string()); // host を保存
-
-                let mut port_guard = port_arc.lock().expect("Failed to lock port for storing");
-                *port_guard = Some(port); // port を保存
-
-                println!("WebSocket server started and handle, host, port stored.");
+                Err(e) => {
+                    // 起動失敗時のエラーハンドリング
+                    eprintln!("Failed to bind WebSocket server: {}", e);
+                }
             }
 
-            // サーバーを await して実行
-            if let Err(e) = server.await {
-                eprintln!("WebSocket server run error: {}", e);
-            }
-            // --- サーバー終了時に全ハンドル/情報をクリア ---
-            println!("WebSocket server finished running. Clearing handles and info...");
+            // --- サーバー終了時のクリーンアップ処理 ---
             let mut handle_guard = server_handle_arc
                 .lock()
                 .expect("Failed to lock server handle after run");
@@ -152,6 +157,15 @@ pub fn start_websocket_server(
         println!("WebSocket server thread finished.");
     });
 
+    // サーバー起動開始イベントを発行
+    _app_handle
+        .emit("server_status_updated", true)
+        .map_err(|e| {
+            eprintln!("Failed to emit server_status_updated event: {}", e);
+            "Failed to notify frontend about server start".to_string()
+        })?;
+    println!("Server start initiated and event 'server_status_updated' emitted.");
+
     Ok(())
 }
 
@@ -162,13 +176,14 @@ pub fn start_websocket_server(
 ///
 /// ### Arguments
 /// - `app_state`: Tauri の管理するアプリケーション状態 (`State<AppState>`)
+/// - `app_handle`: Tauri アプリケーションハンドル (`tauri::AppHandle`)
 ///
 /// ### Returns
 /// - `Result<(), String>`: 成功した場合は `Ok(())`、エラーの場合はエラーメッセージ
 #[command]
 pub fn stop_websocket_server(
     app_state: State<AppState>,
-    // app_handle は不要になったので削除
+    app_handle: tauri::AppHandle, // app_handleパラメータを追加
 ) -> Result<(), String> {
     println!("Attempting to stop WebSocket server...");
 
@@ -206,6 +221,16 @@ pub fn stop_websocket_server(
                 println!("Server stop signal sent and awaited.");
             });
             println!("WebSocket server stop initiated.");
+
+            // サーバー停止イベントを発行
+            app_handle
+                .emit("server_status_updated", false)
+                .map_err(|e| {
+                    eprintln!("Failed to emit server_status_updated event: {}", e);
+                    "Failed to notify frontend about server stop".to_string()
+                })?;
+            println!("Event 'server_status_updated' emitted for server stop.");
+
             Ok(())
         } else {
             // ServerHandle はあったが RuntimeHandle がなかった場合 (通常は起こらないはず)

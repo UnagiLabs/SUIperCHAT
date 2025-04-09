@@ -9,17 +9,19 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { Loader2, Play, StopCircle, Wifi, WifiOff } from "lucide-react";
 /**
  * サーバー制御コンポーネント
  *
  * WebSocketサーバーの開始・停止ボタンと状態表示を提供します。
  * TauriのIPCを呼び出してサーバーを制御します。
+ * サーバー状態の変更時にイベントを検知し、URL情報を更新します。
  *
  * @module components/features/dashboard/ServerControl
  * @returns {JSX.Element} サーバー制御コンポーネント
  */
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 /**
@@ -97,6 +99,45 @@ export default function ServerControl() {
 			set_is_loading(false);
 		}
 	};
+
+	/**
+	 * バックエンドからのサーバーステータス更新イベントを処理する関数
+	 */
+	const handle_server_status_event = useCallback(
+		(event: { payload: boolean }) => {
+			console.log("Received server_status_updated event:", event);
+			const is_running = event.payload;
+			set_is_server_running(is_running);
+
+			if (is_running) {
+				set_server_address("127.0.0.1:8080"); // TODO: 動的に取得
+				toast.success("サーバー起動状態に更新", {
+					description: "WebSocket サーバーが起動しました。",
+				});
+			} else {
+				set_server_address(null);
+				toast.info("サーバー停止状態に更新", {
+					description: "WebSocket サーバーが停止しました。",
+				});
+			}
+		},
+		[],
+	);
+
+	/**
+	 * コンポーネントマウント時にイベントリスナーを登録
+	 */
+	useEffect(() => {
+		// サーバーステータス更新イベントをリッスン
+		const unlisten = listen<boolean>("server_status_updated", (event) => {
+			handle_server_status_event(event);
+		});
+
+		// アンマウント時にリスナーをクリーンアップ
+		return () => {
+			unlisten.then((unlistenFn) => unlistenFn());
+		};
+	}, [handle_server_status_event]);
 
 	// サーバー状態に基づく表示テキスト
 	const status_text = is_server_running ? "実行中" : "停止中";

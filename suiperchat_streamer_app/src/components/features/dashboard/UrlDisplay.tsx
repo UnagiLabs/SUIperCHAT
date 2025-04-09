@@ -83,15 +83,34 @@ export default function UrlDisplay() {
 		fetch_streamer_info();
 
 		// --- ウォレットアドレス更新イベントをリッスン --- ★★★
-		const unlisten = listen<void>("wallet_address_updated", (event) => {
+		const unlisten_wallet = listen<void>("wallet_address_updated", (event) => {
 			console.log("Received wallet_address_updated event:", event);
 			toast.info("ウォレットアドレスが更新されました。URL情報を再取得します。");
 			fetch_streamer_info(); // イベントを受け取ったら再取得
 		});
 
+		// --- サーバー状態更新イベントをリッスン --- ★★★
+		const unlisten_server = listen<boolean>(
+			"server_status_updated",
+			(event) => {
+				console.log("Received server_status_updated event:", event);
+				const is_running = event.payload;
+
+				if (is_running) {
+					toast.info("サーバーが起動しました。URL情報を再取得します。");
+				} else {
+					toast.info("サーバーが停止しました。URL情報をクリアします。");
+				}
+
+				// サーバー状態に関わらず情報を更新（起動中なら新情報取得、停止中ならクリア）
+				fetch_streamer_info();
+			},
+		);
+
 		// クリーンアップ関数
 		return () => {
-			unlisten.then((unlistenFn) => unlistenFn());
+			unlisten_wallet.then((unlistenFn) => unlistenFn());
+			unlisten_server.then((unlistenFn) => unlistenFn());
 		};
 	}, [fetch_streamer_info]);
 
