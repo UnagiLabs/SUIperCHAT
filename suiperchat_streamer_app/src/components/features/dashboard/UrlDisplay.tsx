@@ -65,6 +65,14 @@ export default function UrlDisplay() {
 			if (error_message === WALLET_NOT_SET_ERROR) {
 				setNeedsConfiguration(true);
 				setError(null);
+			} else if (
+				error_message.includes("WebSocket server host is not available") ||
+				error_message.includes("server not running")
+			) {
+				// サーバーが起動していない場合はエラーではなく、情報表示として扱う
+				setError(null);
+				setNeedsConfiguration(false);
+				console.log("Server is not running, will display appropriate message");
 			} else {
 				setError(`配信者情報の取得中にエラーが発生しました: ${error_message}`);
 				setNeedsConfiguration(false);
@@ -182,6 +190,14 @@ export default function UrlDisplay() {
 						<Info className="h-5 w-5 mr-2" />
 						<p className="text-sm font-medium">
 							ウォレットアドレスが設定されていません。上の設定欄から入力・保存してください。
+						</p>
+					</div>
+				)}
+				{!isLoading && !error && !needsConfiguration && !streamerInfo && (
+					<div className="flex items-center text-amber-600 bg-amber-50 p-3 rounded-md">
+						<Info className="h-5 w-5 mr-2" />
+						<p className="text-sm font-medium">
+							サーバーが起動していません。上のサーバー制御から開始してください。
 						</p>
 					</div>
 				)}
