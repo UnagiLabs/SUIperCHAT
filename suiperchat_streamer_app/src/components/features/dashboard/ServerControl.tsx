@@ -19,24 +19,9 @@ import { Loader2, Play, StopCircle, Wifi, WifiOff } from "lucide-react";
  * @module components/features/dashboard/ServerControl
  * @returns {JSX.Element} サーバー制御コンポーネント
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
-/**
- * Rust側からのサーバー状態レスポンスの型定義
- *
- * @interface ServerStatusResponse
- * @property {boolean} is_running - サーバーが実行中かどうか
- * @property {number | null} port - サーバーのポート番号 (実行中の場合)
- * @property {string | null} host - サーバーのホスト名 (実行中の場合)
- * @property {string} message - 状態メッセージ
- */
-interface ServerStatusResponse {
-	is_running: boolean;
-	port: number | null;
-	host: string | null;
-	message: string;
-}
 
 /**
  * サーバー制御コンポーネント

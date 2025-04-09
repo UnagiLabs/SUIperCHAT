@@ -32,8 +32,9 @@ fn main() {
         .manage(AppState::new())
         // --- Tauri コマンドハンドラーを登録 ---
         .invoke_handler(tauri::generate_handler![
-            commands::start_websocket_server, // 開始コマンド
-            commands::stop_websocket_server   // 停止コマンド
+            commands::start_websocket_server,
+            commands::stop_websocket_server,
+            commands::set_wallet_address // commands::get_streamer_info // 後で追加
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -197,3 +197,51 @@ pub fn stop_websocket_server(
         Err("WebSocket server is not running or already stopping.".to_string())
     }
 }
+
+/// ## ウォレットアドレスを設定する Tauri コマンド
+///
+/// フロントエンドから受け取ったウォレットアドレスを `AppState` に保存します。
+///
+/// ### Arguments
+/// - `app_state`: Tauri の管理するアプリケーション状態 (`State<AppState>`)
+/// - `address`: 設定するウォレットアドレス (`String`)
+///
+/// ### Returns
+/// - `Result<(), String>`: 成功した場合は `Ok(())`、エラーの場合はエラーメッセージ
+#[command]
+pub fn set_wallet_address(app_state: State<'_, AppState>, address: String) -> Result<(), String> {
+    println!("Setting wallet address to: {}", address);
+
+    let trimmed_address = address.trim();
+
+    // --- SUIウォレットアドレス形式のバリデーション ---
+    if !trimmed_address.starts_with("0x") {
+        return Err("Invalid SUI wallet address: Must start with '0x'.".to_string());
+    }
+    if trimmed_address.len() != 66 {
+        // "0x" + 64 hex characters
+        return Err(format!(
+            "Invalid SUI wallet address: Expected length 66, got {}.",
+            trimmed_address.len()
+        ));
+    }
+    if !trimmed_address[2..].chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(
+            "Invalid SUI wallet address: Contains non-hexadecimal characters after '0x'."
+                .to_string(),
+        );
+    }
+    // --- バリデーションここまで ---
+
+    let wallet_address_arc = Arc::clone(&app_state.wallet_address);
+    let mut wallet_guard = wallet_address_arc
+        .lock()
+        .map_err(|_| "Failed to lock wallet address mutex".to_string())?;
+
+    *wallet_guard = Some(address.trim().to_string());
+
+    println!("Wallet address stored in AppState.");
+    // TODO: データベースなどへの永続化処理をここに追加
+
+    Ok(())
+}

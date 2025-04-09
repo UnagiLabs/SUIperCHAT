@@ -17,6 +17,7 @@ pub struct AppState {
     /// WebSocket サーバースレッドで使用される Tokio ランタイムへのハンドル。
     /// サーバー停止時にこのハンドルを使って非同期タスクを spawn する。
     pub runtime_handle: Arc<Mutex<Option<TokioHandle>>>,
+    pub wallet_address: Arc<Mutex<Option<String>>>,
 }
 
 impl AppState {
@@ -28,6 +29,7 @@ impl AppState {
         Self {
             server_handle: Arc::new(Mutex::new(None)),
             runtime_handle: Arc::new(Mutex::new(None)),
+            wallet_address: Arc::new(Mutex::new(None)),
         }
     }
 }

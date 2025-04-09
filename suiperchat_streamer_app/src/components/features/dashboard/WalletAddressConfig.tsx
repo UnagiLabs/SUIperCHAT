@@ -20,12 +20,37 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { invoke } from "@tauri-apps/api/core";
 import { Save } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 // ローカルストレージのキー
 const WALLET_ADDRESS_KEY = "suiperchat_wallet_address";
+
+/**
+ * SUIウォレットアドレスの形式を検証する関数
+ * @param {string} address - 検証するアドレス文字列
+ * @returns {string | null} - エラーメッセージ (無効な場合) または null (有効な場合)
+ */
+function validate_sui_address(address: string): string | null {
+	const trimmed_address = address.trim();
+	if (!trimmed_address) {
+		return "ウォレットアドレスを入力してください。";
+	}
+	if (!trimmed_address.startsWith("0x")) {
+		return "無効なSUIウォレットアドレス: '0x' で始まる必要があります。";
+	}
+	if (trimmed_address.length !== 66) {
+		return `無効なSUIウォレットアドレス: 長さが66文字である必要があります (現在 ${trimmed_address.length} 文字)。`;
+	}
+	// "0x" 以降が16進数文字のみかチェック (正規表現を使用)
+	const hex_pattern = /^[a-fA-F0-9]+$/;
+	if (!hex_pattern.test(trimmed_address.substring(2))) {
+		return "無効なSUIウォレットアドレス: '0x' の後に16進数以外の文字が含まれています。";
+	}
+	return null; // 有効
+}
 
 /**
  * ウォレットアドレス設定コンポーネント
@@ -46,33 +71,45 @@ export default function WalletAddressConfig() {
 	}, []);
 
 	/**
-	 * ウォレットアドレスを保存する関数
+	 * ウォレットアドレスを保存する関数 (Rustバックエンドとローカルストレージ)
 	 */
-	const handle_save_address = () => {
-		// 入力値の簡易バリデーション
-		if (!wallet_address.trim()) {
-			toast.error("エラー", {
-				description: "ウォレットアドレスを入力してください。",
-			});
+	const handle_save_address = async () => {
+		const address_to_save = wallet_address; // trim は validation 関数内で行う
+
+		// --- フロントエンドバリデーション ---
+		const validation_error = validate_sui_address(address_to_save);
+		if (validation_error) {
+			toast.error("入力エラー", { description: validation_error });
 			return;
 		}
+		// --- バリデーションここまで ---
 
 		set_is_saving(true);
 
 		try {
-			// ローカルストレージに保存
-			localStorage.setItem(WALLET_ADDRESS_KEY, wallet_address.trim());
+			// Rust バックエンドに保存
+			await invoke("set_wallet_address", { address: address_to_save.trim() }); // 送信する前に trim
+			console.log("Wallet address sent to backend.");
 
-			// 成功トースト表示
+			// --- ローカルストレージにも保存 (フォールバック/即時反映用) ---
+			// 将来的にはRust側からの取得を主とし、不要になる可能性あり
+			localStorage.setItem(WALLET_ADDRESS_KEY, address_to_save);
+
+			// --- 成功トースト表示 ---
 			toast.success("保存完了", {
 				description: "ウォレットアドレスを保存しました。",
 			});
-
-			// TODO: 後で実装：Rustバックエンドへの保存や他の状態更新処理をここで行う
 		} catch (error) {
+			// --- エラーハンドリング ---
 			console.error("ウォレットアドレスの保存に失敗しました:", error);
+			const error_message =
+				error instanceof Error
+					? error.message
+					: typeof error === "string"
+						? error
+						: "不明なエラーが発生しました。";
 			toast.error("保存エラー", {
-				description: "ウォレットアドレスの保存に失敗しました。",
+				description: `ウォレットアドレスの保存に失敗しました: ${error_message}`,
 			});
 		} finally {
 			set_is_saving(false);
