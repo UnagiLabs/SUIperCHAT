@@ -1,8 +1,10 @@
 "use client";
 
 import {
+	type ChatMessage,
 	ConnectionStatus,
 	type SuperchatData,
+	type SuperchatMessage,
 	type WebSocketContextType,
 	type WebSocketState,
 } from "@/lib/types/websocket";
@@ -100,8 +102,15 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 	 */
 	const connect = useCallback(
 		(url: string) => {
+			// 接続開始のログ
+			console.log("WebSocket接続開始:", {
+				url,
+				currentState: state.status,
+				timestamp: new Date().toISOString(),
+			});
+
 			// URLの検証
-			if (!url.trim()) {
+			if (!url || !url.trim()) {
 				const error_msg = "WebSocket URLが空です";
 				console.error(error_msg);
 				update_status(ConnectionStatus.ERROR, error_msg);
@@ -125,9 +134,29 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 				);
 			}
 
-			if (ws_ref.current && ws_ref.current.readyState < WebSocket.CLOSING) {
-				console.warn("WebSocket is already connected or connecting.");
-				return;
+			// 既に接続中または接続状態の場合は処理をスキップ
+			if (ws_ref.current) {
+				const current_state = ws_ref.current.readyState;
+				if (
+					current_state === WebSocket.CONNECTING ||
+					current_state === WebSocket.OPEN
+				) {
+					console.warn("WebSocketは既に接続中または接続済みです", {
+						url: ws_ref.current.url,
+						readyState: current_state,
+						status: state.status,
+					});
+					return;
+				}
+
+				if (current_state === WebSocket.CLOSING) {
+					console.warn("WebSocketは切断処理中です。切断完了後に再接続します");
+					// 切断完了を待つため、現在の接続は維持
+					return;
+				}
+
+				// CLOSED状態の場合は新しい接続を作成するため、現在の参照をクリア
+				ws_ref.current = null;
 			}
 
 			// 既存の再接続タイマーをクリア
@@ -136,113 +165,336 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 				reconnect_timeout_ref.current = null;
 			}
 
+			// 状態を接続中に更新
 			update_status(ConnectionStatus.CONNECTING);
 			set_state((prev) => ({ ...prev, url })); // URL を保存
-			console.log(`Connecting to WebSocket at URL: ${url}`);
-			// toast.info(`WebSocket 接続中: ${url}`);
 
 			try {
-				// WebSocketインスタンスの作成前に詳細なログを出力
-				// biome-ignore lint/style/noUnusedTemplateLiteral: <explanation>
-				console.log(`WebSocket接続の詳細:`, {
-					url,
-					protocol: url.split("://")[0],
-					host: new URL(url).host,
-					pathname: new URL(url).pathname,
-					timestamp: new Date().toISOString(),
-				});
+				// URLが有効かどうかを事前検証
+				let parsed_url: URL;
+				try {
+					parsed_url = new URL(url);
+					console.log("WebSocket URL検証成功:", {
+						protocol: parsed_url.protocol,
+						host: parsed_url.host,
+						pathname: parsed_url.pathname,
+					});
+				} catch (urlError) {
+					throw new Error(`無効なWebSocket URL: ${url} - ${urlError}`);
+				}
 
+				// WebSocketインスタンス作成
+				console.log("WebSocketインスタンス作成中...");
 				ws_ref.current = new WebSocket(url);
-				console.log("WebSocket instance created, setting up event handlers");
+				console.log(
+					"WebSocketインスタンス作成完了、イベントハンドラーを設定中",
+				);
+
+				// この時点でエラーがなければ接続プロセスは継続中
+				console.log("WebSocket接続処理が正常に開始されました");
 
 				ws_ref.current.onopen = () => {
-					console.log("WebSocket connection opened successfully");
+					// 接続成功のログを出力
+					console.log("WebSocket接続が正常に開かれました", {
+						url: ws_ref.current ? ws_ref.current.url : "unknown",
+						readyState: ws_ref.current ? ws_ref.current.readyState : "unknown",
+						protocol: ws_ref.current ? ws_ref.current.protocol : "unknown",
+						timestamp: new Date().toISOString(),
+					});
+
+					// 状態を更新
 					update_status(ConnectionStatus.CONNECTED);
 					set_state((prev) => ({ ...prev, retryCount: 0, error: null })); // 接続成功時にリトライカウントとエラーをリセット
-					// toast.success("WebSocket 接続成功"); // 接続成功の通知を非表示
+
+					// 接続成功後に初期化メッセージを送信（オプション）
+					try {
+						if (
+							ws_ref.current &&
+							ws_ref.current.readyState === WebSocket.OPEN
+						) {
+							const init_message = {
+								type: "init",
+								timestamp: Date.now(),
+								id: crypto.randomUUID(),
+							};
+							ws_ref.current.send(JSON.stringify(init_message));
+							console.log("WebSocket初期化メッセージを送信:", init_message);
+						}
+					} catch (initError) {
+						console.warn("WebSocket初期化メッセージの送信に失敗:", initError);
+					}
 				};
 
 				ws_ref.current.onmessage = (event) => {
-					console.log("WebSocket message received:", event.data);
+					console.log(
+						"WebSocketメッセージ受信:",
+						event.data.substring(0, 100) +
+							(event.data.length > 100 ? "..." : ""),
+					);
 					try {
-						const message_data = JSON.parse(event.data); // TODO: 型ガードを追加
+						// 受信データが空の場合は無視
+						if (!event.data) {
+							console.warn("空のWebSocketメッセージを受信しました");
+							return;
+						}
+
+						// 初期型は不明だが、パース後に適切な型に変換する
+						let parsed_data: Record<string, unknown>;
+						try {
+							parsed_data = JSON.parse(event.data);
+						} catch (parseError) {
+							console.error(
+								"WebSocketメッセージのJSON解析に失敗:",
+								event.data,
+								parseError,
+							);
+							toast.error("メッセージの解析に失敗しました");
+							return;
+						}
+
+						// メッセージタイプの検証
+						if (!parsed_data.type || typeof parsed_data.type !== "string") {
+							console.error(
+								"WebSocketメッセージにtypeフィールドがないか、文字列ではありません:",
+								parsed_data,
+							);
+							return;
+						}
+
+						const message_type = parsed_data.type as string;
+
 						// サーバーからの PING/PONG は Rust 側で処理されるため、ここでは主にメッセージを処理
 						if (
-							message_data.type === MessageType.CHAT ||
-							message_data.type === MessageType.SUPERCHAT
+							message_type === MessageType.CHAT ||
+							message_type === MessageType.SUPERCHAT
 						) {
-							set_state((prev) => ({
-								...prev,
-								messages: [...prev.messages, message_data],
-							}));
+							console.log(`${message_type}メッセージを処理中...`);
+
+							// 型を安全に変換
+							// チャットメッセージまたはスーパーチャットメッセージとして必要なフィールドを検証
+							if (
+								typeof parsed_data.display_name !== "string" ||
+								typeof parsed_data.message !== "string" ||
+								!parsed_data.id ||
+								!parsed_data.timestamp
+							) {
+								console.error(
+									"WebSocketメッセージに必要なフィールドがありません:",
+									parsed_data,
+								);
+								return;
+							}
+
+							// 基本メッセージ構造の作成
+							const base_message: Partial<ChatMessage | SuperchatMessage> = {
+								type: message_type as MessageType.CHAT | MessageType.SUPERCHAT,
+								display_name: parsed_data.display_name as string,
+								message: parsed_data.message as string,
+								id: parsed_data.id as string,
+								timestamp: Number(parsed_data.timestamp),
+							};
+
+							// スーパーチャットの場合は追加フィールドを検証
+							if (message_type === MessageType.SUPERCHAT) {
+								if (
+									!parsed_data.superchat ||
+									typeof parsed_data.superchat !== "object" ||
+									typeof (parsed_data.superchat as Record<string, unknown>)
+										.amount !== "number" ||
+									typeof (parsed_data.superchat as Record<string, unknown>)
+										.tx_hash !== "string" ||
+									typeof (parsed_data.superchat as Record<string, unknown>)
+										.wallet_address !== "string"
+								) {
+									console.error(
+										"スーパーチャットメッセージに必要なフィールドがありません:",
+										parsed_data,
+									);
+									return;
+								}
+
+								// スーパーチャット情報を追加
+								(base_message as Partial<SuperchatMessage>).superchat = {
+									amount: (parsed_data.superchat as Record<string, unknown>)
+										.amount as number,
+									tx_hash: (parsed_data.superchat as Record<string, unknown>)
+										.tx_hash as string,
+									wallet_address: (
+										parsed_data.superchat as Record<string, unknown>
+									).wallet_address as string,
+								};
+							}
+
+							// 状態に追加
+							set_state((prev) => {
+								// 型を適切にキャストして追加
+								const message =
+									message_type === MessageType.CHAT
+										? (base_message as ChatMessage)
+										: (base_message as SuperchatMessage);
+
+								const newMessages = [...prev.messages, message];
+								console.log(
+									`メッセージを状態に追加しました。現在のメッセージ数: ${newMessages.length}`,
+								);
+								return {
+									...prev,
+									messages: newMessages,
+								};
+							});
+						} else if (message_type === MessageType.ERROR) {
+							// エラーメッセージの処理
+							if (typeof parsed_data.message === "string") {
+								console.error(
+									"サーバーからエラーメッセージを受信:",
+									parsed_data.message,
+								);
+								toast.error(`サーバーエラー: ${parsed_data.message}`);
+							} else {
+								console.error(
+									"サーバーからエラーメッセージを受信しましたが、メッセージフィールドが不正です:",
+									parsed_data,
+								);
+								toast.error("サーバーから不正なエラーメッセージを受信しました");
+							}
+						} else if (message_type === MessageType.CONNECTION_STATUS) {
+							// 接続状態メッセージの処理
+							console.log(
+								"接続状態更新:",
+								typeof parsed_data.status === "string"
+									? parsed_data.status
+									: "不明",
+								parsed_data.info ? parsed_data.info : "",
+							);
+						} else if (
+							message_type === MessageType.PING ||
+							message_type === MessageType.PONG
+						) {
+							// PING/PONGは通常ログ出力しない
+							console.debug(`${message_type}メッセージを受信`);
+						} else {
+							console.warn("未知のメッセージタイプを受信:", message_type);
 						}
-						// TODO: 他のメッセージタイプ (ERROR, CONNECTION_STATUS 等) の処理を追加
 					} catch (parse_error) {
-						console.error("Failed to parse WebSocket message:", parse_error);
-						toast.error("受信メッセージの解析に失敗しました");
+						console.error(
+							"WebSocketメッセージ処理中にエラー発生:",
+							parse_error,
+						);
+						toast.error("メッセージの処理に失敗しました");
 					}
 				};
 
 				ws_ref.current.onerror = (event) => {
-					// エラーメッセージをより具体的に
+					// WebSocketの状態を確認
+					const is_already_connected =
+						state.status === ConnectionStatus.CONNECTED;
+					const ws_status = ws_ref.current ? ws_ref.current.readyState : -1;
+
+					// WebSocketが既に接続済みかつ正常な状態であれば、エラーをログのみに留める
+					if (is_already_connected && ws_status === WebSocket.OPEN) {
+						console.warn(
+							"WebSocketが接続済みですが、エラーイベントが発生しました",
+							{
+								eventType: event.type,
+								readyState: ws_status,
+								url: ws_ref.current ? ws_ref.current.url : "unknown",
+							},
+						);
+						return; // 既に接続されている場合は処理を終了
+					}
+
+					// エラーメッセージ
 					const error_msg = "WebSocketサーバーに接続できませんでした";
 
-					// 詳細なエラー情報をコンソールに1回だけ表示
-					console.error("WebSocket接続エラー:", {
-						message: error_msg,
-						eventType: event.type,
-						webSocketState: {
-							readyState: ws_ref.current
-								? ws_ref.current.readyState
-								: "unknown",
-							url: ws_ref.current ? ws_ref.current.url : "unknown",
-						},
+					// 詳細なエラー情報をコンソールに表示
+					console.error("WebSocket接続エラー:", error_msg);
+
+					// WebSocketの状態情報をログに出力（事前に変数で確認してから出力）
+					const event_type = event ? event.type : "unknown";
+					const current_ws = ws_ref.current;
+					const ready_state = current_ws ? current_ws.readyState : "unknown";
+					const ws_url = current_ws ? current_ws.url : "unknown";
+
+					console.error("WebSocket状態:", {
+						eventType: event_type,
+						readyState: ready_state,
+						url: ws_url,
 						connectionState: state.status,
 						retryCount: state.retryCount,
 						retryMax: MAX_RECONNECT_ATTEMPTS,
 						timestamp: new Date().toISOString(),
 					});
 
-					// 状態を更新
-					update_status(ConnectionStatus.ERROR, error_msg);
+					// 既に接続済みおよび再接続中の場合は状態を更新しない
+					if (
+						state.status !== ConnectionStatus.CONNECTED &&
+						state.status !== ConnectionStatus.RECONNECTING
+					) {
+						// 状態を更新
+						update_status(ConnectionStatus.ERROR, error_msg);
 
-					// ユーザーへのエラー通知 (より具体的な情報とアクションを提案)
-					toast.error(error_msg, {
-						description:
-							"サーバーが起動しているか確認してください。再接続を試みています...",
-						duration: 5000,
-					});
+						// ユーザーへのエラー通知
+						toast.error(error_msg, {
+							description:
+								"サーバーが起動しているか確認してください。再接続を試みています...",
+							duration: 5000,
+						});
 
-					// エラー発生時も再接続を試みる
-					attempt_reconnect_ref.current();
+						// エラー発生時も再接続を試みる
+						attempt_reconnect_ref.current();
+					}
 				};
 
 				ws_ref.current.onclose = (event) => {
-					console.log("WebSocket connection closed:", event.code, event.reason);
-					console.log("WebSocket Close Event Details:", {
+					// 接続終了情報を構造化して出力
+					const close_details = {
 						code: event.code,
-						reason: event.reason,
+						reason: event.reason || "理由なし",
 						wasClean: event.wasClean,
 						type: event.type,
 						url: ws_ref.current?.url,
-					});
+						currentState: state.status,
+						timestamp: new Date().toISOString(),
+					};
+
+					console.log("WebSocket接続が終了しました:", close_details);
+
+					// 理由に応じたメッセージを表示
+					let close_message = "WebSocket接続が終了しました";
+					if (event.code === 1000) {
+						close_message = "WebSocketが正常に切断されました";
+					} else if (event.code === 1001) {
+						close_message = "ページを離れたためWebSocketが終了しました";
+					} else if (event.code === 1006) {
+						close_message = "WebSocket接続が異常終了しました";
+					}
+
+					console.log(close_message, `(コード: ${event.code})`);
 
 					// 意図しない切断の場合、再接続を試みる
 					if (
 						!event.wasClean &&
 						state.status !== ConnectionStatus.DISCONNECTING
 					) {
+						const unexpected_disconnect_msg = "予期せず接続が切断されました";
 						update_status(
 							ConnectionStatus.DISCONNECTED,
-							"予期せず接続が切断されました",
+							unexpected_disconnect_msg,
 						);
-						// toast.warning("WebSocket 接続が予期せず切断されました");
-						attempt_reconnect_ref.current(); // attempt_reconnect -> attempt_reconnect_ref.current
+						console.warn(unexpected_disconnect_msg, close_details);
+
+						// 再接続試行
+						attempt_reconnect_ref.current();
 					} else {
 						// 意図的な切断 or 再接続上限
 						update_status(ConnectionStatus.DISCONNECTED);
 						if (state.retryCount >= MAX_RECONNECT_ATTEMPTS) {
-							toast.error("WebSocket の再接続に失敗しました");
+							const reconnect_fail_msg = "WebSocketの再接続に失敗しました";
+							console.error(reconnect_fail_msg, {
+								retryCount: state.retryCount,
+								maxRetries: MAX_RECONNECT_ATTEMPTS,
+							});
+							toast.error(reconnect_fail_msg);
 						}
 					}
 					ws_ref.current = null;
