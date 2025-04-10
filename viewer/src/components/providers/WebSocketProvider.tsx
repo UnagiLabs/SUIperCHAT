@@ -1,3 +1,9 @@
+/**
+ * WebSocketプロバイダー
+ * チャットやスーパーチャットの送受信を管理するWebSocketコンテキストを提供する
+ *
+ * @file WebSocketプロバイダーの実装
+ */
 "use client";
 
 import {
@@ -669,9 +675,6 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 /**
  * WebSocketコンテキストを使用するためのカスタムフック
  * コンテキストが未定義の場合にエラーをスローする
- *
- * @returns {WebSocketContextType} WebSocketコンテキストの値
- * @throws {Error} WebSocketProvider内で使用されていない場合にエラーをスロー
  */
 export function useWebSocket() {
 	const context = useContext(WebSocketContext);
