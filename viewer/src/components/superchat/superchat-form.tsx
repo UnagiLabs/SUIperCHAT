@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
+import { useWebSocket } from "@/components/providers/WebSocketProvider";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -120,6 +121,9 @@ export function SuperchatForm({
 	// 確認モード状態管理
 	const [confirm_mode, set_confirm_mode] = useState(false);
 
+	// WebSocketコンテキストを取得
+	const { actions } = useWebSocket();
+
 	// フォーム作成
 	const form = useForm<SuperchatFormValues>({
 		resolver: zodResolver(superchat_form_schema),
@@ -151,12 +155,30 @@ export function SuperchatForm({
 		// 実際の送信処理
 		console.log("送信データ:", values);
 
-		// 成功トースト表示
+		// WebSocketを通じてメッセージを送信
 		if (values.amount > 0) {
+			// スーパーチャットメッセージを送信
+			// 注: 実際のSUI送金機能は別途実装が必要
+			// この例ではダミーのスーパーチャットデータを使用
+			const superchat_data = {
+				amount: values.amount,
+				tx_hash: "dummy-transaction-hash",
+				wallet_address: "dummy-wallet-address",
+			};
+
+			actions.sendSuperchatMessage(
+				values.display_name,
+				values.message || "",
+				superchat_data,
+			);
+
 			toast.success("Super Chat sent successfully!", {
 				description: `${values.amount} SUI has been sent`,
 			});
 		} else {
+			// 通常のチャットメッセージを送信
+			actions.sendChatMessage(values.display_name, values.message || "");
+
 			toast.success("Message sent successfully!", {
 				description: "Your message has been sent without SUI",
 			});
