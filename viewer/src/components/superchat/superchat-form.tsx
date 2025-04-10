@@ -16,7 +16,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Coins } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
@@ -100,6 +100,11 @@ interface SuperchatFormProps {
 		message: string,
 		transaction_id?: string,
 	) => void;
+
+	/**
+	 * 初期受取人ウォレットアドレス
+	 */
+	initial_recipient_address?: string;
 }
 
 /**
@@ -108,15 +113,28 @@ interface SuperchatFormProps {
  * @param props - コンポーネントのプロパティ
  * @returns スーパーチャットフォームのJSXエレメント
  */
-export function SuperchatForm({ on_send_success }: SuperchatFormProps = {}) {
+export function SuperchatForm({
+	on_send_success,
+	initial_recipient_address = "",
+}: SuperchatFormProps = {}) {
 	// 確認モード状態管理
 	const [confirm_mode, set_confirm_mode] = useState(false);
 
 	// フォーム作成
 	const form = useForm<SuperchatFormValues>({
 		resolver: zodResolver(superchat_form_schema),
-		defaultValues: default_values,
+		defaultValues: {
+			...default_values,
+			recipient_address: initial_recipient_address,
+		},
 	});
+
+	// 初期アドレスが変更された場合にフォームを更新
+	useEffect(() => {
+		if (initial_recipient_address) {
+			form.setValue("recipient_address", initial_recipient_address);
+		}
+	}, [initial_recipient_address, form]);
 
 	/**
 	 * フォーム送信ハンドラー
@@ -156,7 +174,10 @@ export function SuperchatForm({ on_send_success }: SuperchatFormProps = {}) {
 		}
 
 		// フォームリセットと確認モード解除
-		form.reset(default_values);
+		form.reset({
+			...default_values,
+			recipient_address: initial_recipient_address,
+		});
 		set_confirm_mode(false);
 	}
 
@@ -254,10 +275,18 @@ export function SuperchatForm({ on_send_success }: SuperchatFormProps = {}) {
 										<Input
 											placeholder="Enter streamer's wallet address"
 											{...field}
+											disabled={!!initial_recipient_address}
+											className={
+												initial_recipient_address
+													? "bg-muted cursor-not-allowed"
+													: ""
+											}
 										/>
 									</FormControl>
 									<FormDescription>
-										The wallet address of the streamer
+										{initial_recipient_address
+											? "The streamer's wallet address (automatically filled)"
+											: "The wallet address of the streamer"}
 									</FormDescription>
 									<FormMessage />
 								</FormItem>

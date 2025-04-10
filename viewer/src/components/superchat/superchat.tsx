@@ -11,6 +11,7 @@
  */
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Toaster } from "sonner";
 
@@ -61,6 +62,10 @@ interface SuperchatProps {
  * @returns スーパーチャットコンポーネントのJSXエレメント
  */
 export function Superchat({ className = "", on_send_success }: SuperchatProps) {
+	// URLパラメータから配信者のウォレットアドレスを取得
+	const search_params = useSearchParams();
+	const streamer_address = search_params.get("streamerAddress") || "";
+
 	// 現在の表示状態
 	const [send_state, set_send_state] = useState<SendState>("form");
 	// 完了情報
@@ -124,7 +129,10 @@ export function Superchat({ className = "", on_send_success }: SuperchatProps) {
 			) : (
 				<>
 					{send_state === "form" && (
-						<SuperchatForm on_send_success={handle_send_success} />
+						<SuperchatForm
+							on_send_success={handle_send_success}
+							initial_recipient_address={streamer_address}
+						/>
 					)}
 
 					{send_state === "complete" && (
