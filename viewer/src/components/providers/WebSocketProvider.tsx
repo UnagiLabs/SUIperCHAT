@@ -18,11 +18,11 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { toast } from "sonner";
 
 // --- 定数 --- (TODO: 設定ファイルなどに移動)
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_INTERVAL = 5000; // ms
+const ERROR_SUPPRESSION_TIME = 2000; // 接続成功後のエラー抑制時間(ms)
 
 /**
  * WebSocketコンテキスト
@@ -46,6 +46,8 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 	});
 	const ws_ref = useRef<WebSocket | null>(null);
 	const reconnect_timeout_ref = useRef<NodeJS.Timeout | null>(null);
+	// 接続成功からの経過時間を追跡するための参照
+	const connected_at_ref = useRef<number | null>(null);
 
 	// --- Refs for functions to break circular dependency ---
 	const connect_ref = useRef<(url: string) => void>(() => {});
@@ -64,6 +66,12 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 				status,
 				error: error ?? prev.error, // エラーが指定されていれば更新
 			}));
+			// エラー状態の場合はコンソールにログ出力
+			if (error) {
+				console.warn(`WebSocket状態更新: ${status}`, error);
+			} else {
+				console.debug(`WebSocket状態更新: ${status}`);
+			}
 		},
 		[],
 	);
@@ -72,6 +80,7 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 	 * 再接続を試みる関数
 	 */
 	const attempt_reconnect = useCallback(() => {
+		// 既に再接続処理が進行中、または再接続不可能な場合は何もしない
 		if (
 			reconnect_timeout_ref.current ||
 			!state.url ||
@@ -84,14 +93,37 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 			return;
 		}
 
+		// 再接続状態に更新
 		update_status(ConnectionStatus.RECONNECTING);
-		// toast.info(
-		// 	`WebSocket 再接続試行 (${state.retryCount + 1}/${MAX_RECONNECT_ATTEMPTS})`,
-		// );
 
+		// 再接続試行回数に応じた情報を表示
+		const retry_count = state.retryCount + 1;
+		const is_last_attempt = retry_count >= MAX_RECONNECT_ATTEMPTS;
+
+		// 最終試行または中間試行でユーザーに適切な情報を表示
+		if (is_last_attempt) {
+			// 最後の再接続試行の場合、より明確なメッセージを状態に保存
+			update_status(
+				ConnectionStatus.RECONNECTING,
+				`最終接続試行中 (${retry_count}/${MAX_RECONNECT_ATTEMPTS})`,
+			);
+		} else {
+			// 通常の再接続試行はエラーメッセージなしで状態のみ更新
+			update_status(ConnectionStatus.RECONNECTING);
+		}
+
+		// デバッグ情報はコンソールにのみ出力
+		console.debug("WebSocket再接続試行:", {
+			attempt: retry_count,
+			maxAttempts: MAX_RECONNECT_ATTEMPTS,
+			url: state.url,
+			delay: RECONNECT_INTERVAL,
+		});
+
+		// 再接続タイマーを設定
 		reconnect_timeout_ref.current = setTimeout(() => {
 			set_state((prev) => ({ ...prev, retryCount: prev.retryCount + 1 }));
-			connect_ref.current(state.url as string); // connect -> connect_ref.current
+			connect_ref.current(state.url as string);
 			reconnect_timeout_ref.current = null;
 		}, RECONNECT_INTERVAL);
 	}, [state.url, state.status, state.retryCount, update_status]);
@@ -114,7 +146,6 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 				const error_msg = "WebSocket URLが空です";
 				console.error(error_msg);
 				update_status(ConnectionStatus.ERROR, error_msg);
-				toast.error(error_msg);
 				return;
 			}
 
@@ -123,7 +154,6 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 				const error_msg = `WebSocket URLは 'ws://' または 'wss://' で始まる必要があります: ${url}`;
 				console.error(error_msg);
 				update_status(ConnectionStatus.ERROR, error_msg);
-				toast.error(error_msg);
 				return;
 			}
 
@@ -194,6 +224,9 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 				console.log("WebSocket接続処理が正常に開始されました");
 
 				ws_ref.current.onopen = () => {
+					// 接続成功時刻を記録
+					connected_at_ref.current = Date.now();
+
 					// 接続成功のログを出力
 					console.log("WebSocket接続が正常に開かれました", {
 						url: ws_ref.current ? ws_ref.current.url : "unknown",
@@ -248,7 +281,7 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 								event.data,
 								parseError,
 							);
-							toast.error("メッセージの解析に失敗しました");
+							update_status(state.status, "メッセージの解析に失敗しました");
 							return;
 						}
 
@@ -349,13 +382,20 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 									"サーバーからエラーメッセージを受信:",
 									parsed_data.message,
 								);
-								toast.error(`サーバーエラー: ${parsed_data.message}`);
+								// エラーメッセージを状態に保存
+								update_status(
+									state.status,
+									`サーバーエラー: ${parsed_data.message}`,
+								);
 							} else {
 								console.error(
 									"サーバーからエラーメッセージを受信しましたが、メッセージフィールドが不正です:",
 									parsed_data,
 								);
-								toast.error("サーバーから不正なエラーメッセージを受信しました");
+								update_status(
+									state.status,
+									"サーバーから不正なエラーメッセージを受信しました",
+								);
 							}
 						} else if (message_type === MessageType.CONNECTION_STATUS) {
 							// 接続状態メッセージの処理
@@ -380,7 +420,7 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 							"WebSocketメッセージ処理中にエラー発生:",
 							parse_error,
 						);
-						toast.error("メッセージの処理に失敗しました");
+						update_status(state.status, "メッセージの処理に失敗しました");
 					}
 				};
 
@@ -390,38 +430,34 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 						state.status === ConnectionStatus.CONNECTED;
 					const ws_status = ws_ref.current ? ws_ref.current.readyState : -1;
 
-					// WebSocketが既に接続済みかつ正常な状態であれば、エラーをログのみに留める
-					if (is_already_connected && ws_status === WebSocket.OPEN) {
-						console.warn(
-							"WebSocketが接続済みですが、エラーイベントが発生しました",
-							{
-								eventType: event.type,
-								readyState: ws_status,
-								url: ws_ref.current ? ws_ref.current.url : "unknown",
-							},
-						);
-						return; // 既に接続されている場合は処理を終了
+					// 接続直後の一時的なエラーを無視するための判定
+					const connection_time = connected_at_ref.current;
+					const is_recent_connection =
+						connection_time &&
+						Date.now() - connection_time < ERROR_SUPPRESSION_TIME;
+
+					// 既に接続済み、または接続直後のエラーは無視
+					if (is_already_connected || is_recent_connection) {
+						console.debug("WebSocketエラーイベントを無視します", {
+							isConnected: is_already_connected,
+							isRecentConnection: is_recent_connection,
+							timeSinceConnection: connection_time
+								? Date.now() - connection_time
+								: null,
+							eventType: event.type,
+							readyState: ws_status,
+						});
+						return; // エラー表示をせずに処理を終了
 					}
 
 					// エラーメッセージ
 					const error_msg = "WebSocketサーバーに接続できませんでした";
 
-					// 詳細なエラー情報をコンソールに表示
-					console.error("WebSocket接続エラー:", error_msg);
-
-					// WebSocketの状態情報をログに出力（事前に変数で確認してから出力）
-					const event_type = event ? event.type : "unknown";
-					const current_ws = ws_ref.current;
-					const ready_state = current_ws ? current_ws.readyState : "unknown";
-					const ws_url = current_ws ? current_ws.url : "unknown";
-
-					console.error("WebSocket状態:", {
-						eventType: event_type,
-						readyState: ready_state,
-						url: ws_url,
-						connectionState: state.status,
-						retryCount: state.retryCount,
-						retryMax: MAX_RECONNECT_ATTEMPTS,
+					// 詳細なエラー情報をコンソールに表示（デバッグ用）
+					console.debug("WebSocket接続イベント:", {
+						errorEvent: event.type,
+						readyState: ws_status,
+						status: state.status,
 						timestamp: new Date().toISOString(),
 					});
 
@@ -432,13 +468,6 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 					) {
 						// 状態を更新
 						update_status(ConnectionStatus.ERROR, error_msg);
-
-						// ユーザーへのエラー通知
-						toast.error(error_msg, {
-							description:
-								"サーバーが起動しているか確認してください。再接続を試みています...",
-							duration: 5000,
-						});
 
 						// エラー発生時も再接続を試みる
 						attempt_reconnect_ref.current();
@@ -457,57 +486,59 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 						timestamp: new Date().toISOString(),
 					};
 
-					console.log("WebSocket接続が終了しました:", close_details);
-
-					// 理由に応じたメッセージを表示
-					let close_message = "WebSocket接続が終了しました";
-					if (event.code === 1000) {
-						close_message = "WebSocketが正常に切断されました";
-					} else if (event.code === 1001) {
-						close_message = "ページを離れたためWebSocketが終了しました";
-					} else if (event.code === 1006) {
-						close_message = "WebSocket接続が異常終了しました";
-					}
-
-					console.log(close_message, `(コード: ${event.code})`);
+					// デバッグ用のログ（詳細情報）
+					console.debug("WebSocket接続終了詳細:", close_details);
 
 					// 意図しない切断の場合、再接続を試みる
 					if (
 						!event.wasClean &&
 						state.status !== ConnectionStatus.DISCONNECTING
 					) {
-						const unexpected_disconnect_msg = "予期せず接続が切断されました";
+						// 状態を更新
 						update_status(
 							ConnectionStatus.DISCONNECTED,
-							unexpected_disconnect_msg,
+							"接続が切断されました",
 						);
-						console.warn(unexpected_disconnect_msg, close_details);
+
+						// 視聴者には必要最小限の情報を通知（コード1006は異常切断）
+						if (event.code === 1006) {
+							update_status(
+								ConnectionStatus.DISCONNECTED,
+								"配信サーバーとの接続が切断されました。再接続を試みています...",
+							);
+						}
 
 						// 再接続試行
 						attempt_reconnect_ref.current();
 					} else {
 						// 意図的な切断 or 再接続上限
 						update_status(ConnectionStatus.DISCONNECTED);
+
+						// 再接続上限に達した場合のみユーザーに通知
 						if (state.retryCount >= MAX_RECONNECT_ATTEMPTS) {
-							const reconnect_fail_msg = "WebSocketの再接続に失敗しました";
-							console.error(reconnect_fail_msg, {
+							update_status(
+								ConnectionStatus.DISCONNECTED,
+								"配信サーバーに接続できませんでした。ページを再読み込みするか、後ほど再度お試しください。",
+							);
+							console.warn("WebSocket再接続上限に達しました", {
 								retryCount: state.retryCount,
 								maxRetries: MAX_RECONNECT_ATTEMPTS,
 							});
-							toast.error(reconnect_fail_msg);
 						}
 					}
+
+					// 接続成功時刻をリセット
+					connected_at_ref.current = null;
+
+					// WebSocketインスタンスをクリア
 					ws_ref.current = null;
 				};
 			} catch (error) {
 				const error_msg = `WebSocket 接続の初期化に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
 				console.error(error_msg);
 				update_status(ConnectionStatus.ERROR, error_msg);
-				toast.error("WebSocket 接続開始エラー", {
-					description: error_msg,
-				});
 				// 初期化失敗時もリトライ
-				attempt_reconnect_ref.current(); // attempt_reconnect -> attempt_reconnect_ref.current
+				attempt_reconnect_ref.current();
 			}
 		},
 		[update_status, state.status, state.retryCount],
@@ -546,26 +577,28 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 	 * WebSocketサーバーにメッセージを送信する共通関数
 	 * @param {Record<string, any>} message_data - 送信するメッセージオブジェクト
 	 */
-	const send_message = useCallback((message_data: Record<string, unknown>) => {
-		if (ws_ref.current && ws_ref.current.readyState === WebSocket.OPEN) {
-			try {
-				// IDとタイムスタンプを付与
-				const message_with_meta = {
-					...message_data,
-					id: crypto.randomUUID(),
-					timestamp: Date.now(),
-				};
-				ws_ref.current.send(JSON.stringify(message_with_meta));
-				console.log("WebSocket message sent:", message_with_meta);
-			} catch (error) {
-				console.error("Failed to send WebSocket message:", error);
-				toast.error("メッセージの送信に失敗しました");
+	const send_message = useCallback(
+		(message_data: Record<string, unknown>) => {
+			if (ws_ref.current && ws_ref.current.readyState === WebSocket.OPEN) {
+				try {
+					// IDとタイムスタンプを付与
+					const message_with_meta = {
+						...message_data,
+						id: crypto.randomUUID(),
+						timestamp: Date.now(),
+					};
+					ws_ref.current.send(JSON.stringify(message_with_meta));
+					console.log("WebSocket message sent:", message_with_meta);
+				} catch (error) {
+					console.error("Failed to send WebSocket message:", error);
+					update_status(state.status, "メッセージの送信に失敗しました");
+				}
+			} else {
+				console.warn("WebSocket is not connected. Cannot send message.");
 			}
-		} else {
-			console.warn("WebSocket is not connected. Cannot send message.");
-			// toast.warning("WebSocket が接続されていません");
-		}
-	}, []);
+		},
+		[state.status, update_status],
+	);
 
 	/**
 	 * チャットメッセージを送信する関数
