@@ -2,6 +2,7 @@
 
 import { useWebSocket } from "@/components/providers/WebSocketProvider";
 import { Superchat } from "@/components/superchat/superchat";
+import { WebSocketConnectionStatus } from "@/components/superchat/ws-connection-status";
 import { HeaderWalletButton } from "@/components/wallet/header-wallet-button";
 import { ConnectionStatus } from "@/lib/types/websocket";
 import { useSearchParams } from "next/navigation";
@@ -70,6 +71,8 @@ export default function Home() {
 					© 2023 SUIperCHAT. All rights reserved.
 				</div>
 			</footer>
+
+			<WebSocketConnectionStatus />
 		</div>
 	);
 }
