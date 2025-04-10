@@ -100,6 +100,31 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 	 */
 	const connect = useCallback(
 		(url: string) => {
+			// URLの検証
+			if (!url.trim()) {
+				const error_msg = "WebSocket URLが空です";
+				console.error(error_msg);
+				update_status(ConnectionStatus.ERROR, error_msg);
+				toast.error(error_msg);
+				return;
+			}
+
+			// プロトコルチェック
+			if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
+				const error_msg = `WebSocket URLは 'ws://' または 'wss://' で始まる必要があります: ${url}`;
+				console.error(error_msg);
+				update_status(ConnectionStatus.ERROR, error_msg);
+				toast.error(error_msg);
+				return;
+			}
+
+			// WebSocketのパスが含まれているか確認
+			if (!url.includes("/ws")) {
+				console.warn(
+					`URL '${url}' に '/ws' パスが含まれていない可能性があります。`,
+				);
+			}
+
 			if (ws_ref.current && ws_ref.current.readyState < WebSocket.CLOSING) {
 				console.warn("WebSocket is already connected or connecting.");
 				return;
@@ -113,13 +138,25 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 
 			update_status(ConnectionStatus.CONNECTING);
 			set_state((prev) => ({ ...prev, url })); // URL を保存
+			console.log(`Connecting to WebSocket at URL: ${url}`);
 			toast.info(`WebSocket 接続中: ${url}`);
 
 			try {
+				// WebSocketインスタンスの作成前に詳細なログを出力
+				// biome-ignore lint/style/noUnusedTemplateLiteral: <explanation>
+				console.log(`WebSocket接続の詳細:`, {
+					url,
+					protocol: url.split("://")[0],
+					host: new URL(url).host,
+					pathname: new URL(url).pathname,
+					timestamp: new Date().toISOString(),
+				});
+
 				ws_ref.current = new WebSocket(url);
+				console.log("WebSocket instance created, setting up event handlers");
 
 				ws_ref.current.onopen = () => {
-					console.log("WebSocket connection opened");
+					console.log("WebSocket connection opened successfully");
 					update_status(ConnectionStatus.CONNECTED);
 					set_state((prev) => ({ ...prev, retryCount: 0, error: null })); // 接続成功時にリトライカウントとエラーをリセット
 					toast.success("WebSocket 接続成功");
@@ -149,6 +186,15 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 				ws_ref.current.onerror = (event) => {
 					const error_msg = "WebSocket エラーが発生しました";
 					console.error(error_msg, event);
+					console.error("WebSocket Error Event Details:", {
+						event,
+						eventType: event.type,
+						// WebSocket error eventはerrorプロパティを直接持たないためeventから取得できる情報を表示
+						url: ws_ref.current?.url,
+						readyState: ws_ref.current?.readyState,
+						bufferedAmount: ws_ref.current?.bufferedAmount,
+						protocol: ws_ref.current?.protocol,
+					});
 					update_status(ConnectionStatus.ERROR, error_msg);
 					toast.error(error_msg);
 					// エラー発生時も再接続を試みる (ネットワークエラーなど)
@@ -157,6 +203,14 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 
 				ws_ref.current.onclose = (event) => {
 					console.log("WebSocket connection closed:", event.code, event.reason);
+					console.log("WebSocket Close Event Details:", {
+						code: event.code,
+						reason: event.reason,
+						wasClean: event.wasClean,
+						type: event.type,
+						url: ws_ref.current?.url,
+					});
+
 					// 意図しない切断の場合、再接続を試みる
 					if (
 						!event.wasClean &&

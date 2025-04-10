@@ -15,6 +15,11 @@ export default function Home() {
 		const ws_url_encoded = search_params.get("wsUrl");
 		const streamer_address = search_params.get("streamerAddress");
 
+		console.log("Search params:", {
+			ws_url_encoded,
+			streamer_address,
+		});
+
 		if (
 			ws_url_encoded &&
 			streamer_address &&
@@ -24,12 +29,28 @@ export default function Home() {
 				const ws_url = decodeURIComponent(ws_url_encoded);
 				console.log(`Attempting to connect to WebSocket: ${ws_url}`);
 				console.log(`Streamer Wallet Address: ${streamer_address}`);
-				actions.connect(ws_url);
+				console.log(`Connection status: ${state.status}`);
+				console.log("Current WebSocket state:", state);
+
+				let final_url = ws_url;
+				if (!ws_url.endsWith("/ws")) {
+					final_url = ws_url.endsWith("/") ? `${ws_url}ws` : `${ws_url}/ws`;
+					console.log(`URLにパスが含まれていないため、/wsを追加: ${final_url}`);
+				}
+
+				actions.connect(final_url);
 			} catch (error) {
 				console.error("Failed to decode WebSocket URL:", error);
+				console.error("Original encoded URL:", ws_url_encoded);
 			}
+		} else {
+			console.log("Not connecting because:", {
+				hasWsUrl: Boolean(ws_url_encoded),
+				hasStreamerAddress: Boolean(streamer_address),
+				connectionStatus: state.status,
+			});
 		}
-	}, [search_params, state.status, actions]);
+	}, [search_params, state, actions]);
 
 	return (
 		<div className="grid grid-rows-[auto_1fr_auto] items-center min-h-screen p-8 gap-8 sm:p-10 font-[family-name:var(--font-geist-sans)]">

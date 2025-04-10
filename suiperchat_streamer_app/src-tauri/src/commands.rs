@@ -87,7 +87,12 @@ pub fn start_websocket_server(
             // --- ホストとポートを定義 (将来的には設定から読み込む) ---
             let host = "127.0.0.1";
             let port = 8080;
-            println!("Starting WebSocket server at ws://{}:{}", host, port);
+            let ws_path = "/ws";
+            println!(
+                "Starting WebSocket server at ws://{}:{}{}",
+                host, port, ws_path
+            );
+            println!("Note: Client connections MUST include the '/ws' path");
 
             let server_result =
                 HttpServer::new(|| App::new().service(websocket_route)).bind((host, port)); // host と port を使用
@@ -96,12 +101,13 @@ pub fn start_websocket_server(
                 Ok(server) => {
                     // サーバー起動成功時の処理
                     println!("WebSocket server bound successfully to {}:{}", host, port);
+                    println!("Full WebSocket endpoint: ws://{}:{}{}", host, port, ws_path);
 
-                    // --- サーバーを起動して、ハンドルを保存 ---
+                    // === サーバーを起動して、ハンドルを保存 ===
                     let server = server.run();
                     let server_handle = server.handle(); // このServerインスタンスからハンドルを取得
 
-                    // --- ホストとポートを保存 ---
+                    // === ホストとポートを保存 ===
                     {
                         let mut host_guard = host_arc
                             .lock()
@@ -115,9 +121,17 @@ pub fn start_websocket_server(
                             .expect("Failed to lock port mutex for storing");
                         *port_guard = Some(port);
                         println!("Port stored in AppState: {}", port);
+                        println!(
+                            "WebSocket server full address: ws://{}:{}{}",
+                            host, port, ws_path
+                        );
+                        println!(
+                            "Client connection string: ws://{}:{}{}",
+                            host, port, ws_path
+                        );
                     }
 
-                    // --- サーバーハンドルを保存 --- (一番重要)
+                    // === サーバーハンドルを保存 === (一番重要)
                     {
                         let mut handle_guard = server_handle_arc
                             .lock()
