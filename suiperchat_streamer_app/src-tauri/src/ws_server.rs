@@ -19,6 +19,12 @@ pub struct WsSession {
     hb: Instant,
 }
 
+impl Default for WsSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WsSession {
     /// ## 新しい WsSession を作成する
     ///

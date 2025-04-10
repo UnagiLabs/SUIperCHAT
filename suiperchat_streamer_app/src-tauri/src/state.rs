@@ -39,3 +39,12 @@ impl AppState {
         }
     }
 }
+
+/// ## AppStateのデフォルト実装
+///
+/// `new()`メソッドを使用して、デフォルトのAppStateインスタンスを生成します。
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
