@@ -1,7 +1,7 @@
 /// スーパーチャットの送金処理を行うモジュール
 ///
 /// このモジュールでは、スーパーチャット機能の送金処理とその手数料計算を行います。
-/// AdminCapabilityを使用して管理者権限を制御します。
+/// AdminCapabilityを使用して管理者権限を制御し、送金成功時に `SuperchatSent` イベントを発行します。
 module suiperchat::payment {
     use sui::coin::{Self, Coin};
     use sui::sui::SUI;
@@ -42,6 +42,22 @@ module suiperchat::payment {
         admin: address
     }
 
+    /// スーパーチャットが送信されたときに発行されるイベント
+    public struct SuperchatSent has copy, drop {
+        /// 送金者のアドレス
+        sender: address,
+        /// 受取人のアドレス
+        recipient: address,
+        /// 送金された総額
+        total_amount: u64,
+        /// 計算された手数料額
+        fee_amount: u64,
+        /// 受取人が実際に受け取る額
+        recipient_amount: u64,
+        /// 使用されたコンフィグのID
+        config_id: object::ID
+    }
+
     /// モジュールの初期化関数
     ///
     /// コントラクト設定オブジェクトとAdminCapabilityを作成します。
@@ -77,7 +93,7 @@ module suiperchat::payment {
         transfer::share_object(config);
     }
 
-    /// スーパーチャットの送金処理を行う関数
+    /// スーパーチャットの送金処理を行い、成功時に `SuperchatSent` イベントを発行する関数
     ///
     /// # 引数
     /// * `config` - コントラクトの設定オブジェクト
@@ -85,6 +101,9 @@ module suiperchat::payment {
     /// * `amount` - 送金する金額
     /// * `recipient` - 受取人のアドレス
     /// * `ctx` - トランザクションコンテキスト
+    ///
+    /// # イベント
+    /// * `SuperchatSent` - 送金成功時に発行される
     ///
     /// # エラー
     /// * `EINVALID_AMOUNT` - 指定された送金額が0以下、または支払いコインの残高を超えている
@@ -105,17 +124,27 @@ module suiperchat::payment {
         
         // 手数料と受取人への送金額を計算
         let fee_amount = (amount * (fee_percentage as u64)) / 100;
-        // 残りの送金額（変数宣言はするが実際には使用しないため変数名にアンダースコアをつける）
-        let _recipient_amount = amount - fee_amount;
-        
+        // 受取人への送金額を計算
+        let recipient_amount = amount - fee_amount;
+
         // 手数料を受取人に送金
         if (fee_amount > 0) {
             let fee_coin = coin::split(&mut total_payment, fee_amount, ctx);
             transfer::public_transfer(fee_coin, config.fee_recipient);
         };
-        
+
         // 残りを本来の受取人に送金
         transfer::public_transfer(total_payment, recipient);
+
+        // スーパーチャット送信イベントを発行
+        event::emit(SuperchatSent {
+            sender: tx_context::sender(ctx),
+            recipient, // 関数の引数 recipient をそのまま使用
+            total_amount: amount, // 関数の引数 amount をそのまま使用
+            fee_amount, // 計算済みの fee_amount
+            recipient_amount, // 計算済みの recipient_amount
+            config_id: object::id(config)
+        });
     }
 
     /// 手数料受取先アドレスを変更する関数
