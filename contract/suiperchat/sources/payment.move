@@ -15,7 +15,7 @@ module suiperchat::payment {
     const EINVALID_ADMIN_CAP: u64 = 4;
 
     /// 管理者権限を表すCapability
-    /// 
+    ///
     /// このオブジェクトを所有するアドレスが管理者として設定の変更などを行えます。
     public struct AdminCap has key, store {
         id: UID
@@ -29,13 +29,13 @@ module suiperchat::payment {
         /// デフォルトの手数料率 (例: 5% -> 5)
         default_fee_percentage: u8,
         /// このコンフィグに対応するAdminCapのID
-        admin_cap_id: object::ID
+        admin_cap_id: ID
     }
 
     /// 設定が更新されたときに発行されるイベント
     public struct ConfigUpdated has copy, drop {
         /// 更新されたコンフィグのID
-        config_id: object::ID,
+        config_id: ID,
         /// どのような更新が行われたか（手数料受取人または手数料率）
         update_type: vector<u8>,
         /// 更新を行った管理者のアドレス
@@ -55,7 +55,7 @@ module suiperchat::payment {
         /// 受取人が実際に受け取る額
         recipient_amount: u64,
         /// 使用されたコンフィグのID
-        config_id: object::ID
+        config_id: ID
     }
 
     /// モジュールの初期化関数
@@ -77,7 +77,7 @@ module suiperchat::payment {
             default_fee_percentage: 5, // デフォルト手数料5%
             admin_cap_id
         };
-        
+
         // 設定更新イベントを発行
         let config_id = object::id(&config);
         event::emit(ConfigUpdated {
@@ -88,7 +88,7 @@ module suiperchat::payment {
 
         // 管理者権限のCapabilityを発行者に送る
         transfer::transfer(admin_cap, sender);
-        
+
         // 設定オブジェクトを共有する
         transfer::share_object(config);
     }
@@ -121,7 +121,7 @@ module suiperchat::payment {
         // 手数料計算
         let fee_percentage = config.default_fee_percentage;
         let mut total_payment = coin::split(payment, amount, ctx);
-        
+
         // 手数料と受取人への送金額を計算
         let fee_amount = (amount * (fee_percentage as u64)) / 100;
         // 受取人への送金額を計算
@@ -165,10 +165,10 @@ module suiperchat::payment {
     ) {
         // AdminCapが有効かどうかを検証
         assert_valid_admin(admin_cap, config);
-        
+
         // 手数料受取先を更新
         config.fee_recipient = new_recipient;
-        
+
         // 設定更新イベントを発行
         event::emit(ConfigUpdated {
             config_id: object::id(config),
@@ -196,13 +196,13 @@ module suiperchat::payment {
     ) {
         // AdminCapが有効かどうかを検証
         assert_valid_admin(admin_cap, config);
-        
+
         // 手数料率の検証
         assert!(new_fee_percentage <= 100, EINVALID_FEE);
-        
+
         // 手数料率を更新
         config.default_fee_percentage = new_fee_percentage;
-        
+
         // 設定更新イベントを発行
         event::emit(ConfigUpdated {
             config_id: object::id(config),
@@ -221,5 +221,39 @@ module suiperchat::payment {
     /// * `EINVALID_ADMIN_CAP` - 提供されたAdminCapが無効な場合
     fun assert_valid_admin(admin_cap: &AdminCap, config: &PaymentConfig) {
         assert!(object::id(admin_cap) == config.admin_cap_id, EINVALID_ADMIN_CAP);
+    }
+
+    // テスト用の関数群
+    #[test_only]
+    /// テスト用に初期化を行う関数
+    public fun test_init(ctx: &mut TxContext) {
+        init(ctx)
+    }
+
+    #[test_only]
+    /// テスト用に手数料受取人を取得する関数
+    public fun test_get_fee_recipient(config: &PaymentConfig): address {
+        config.fee_recipient
+    }
+
+    #[test_only]
+    /// テスト用に手数料率を取得する関数
+    public fun test_get_fee_percentage(config: &PaymentConfig): u8 {
+        config.default_fee_percentage
+    }
+
+    #[test_only]
+    /// テスト用にAdminCapのIDを取得する関数
+    public fun test_get_admin_cap_id(config: &PaymentConfig): ID {
+        config.admin_cap_id
+    }
+
+    #[test_only]
+    /// テスト用に偽のAdminCapを作成する関数
+    public fun test_create_fake_admin_cap(recipient: address, ctx: &mut TxContext) {
+        let fake_admin_cap = AdminCap {
+            id: object::new(ctx)
+        };
+        transfer::transfer(fake_admin_cap, recipient);
     }
 }
