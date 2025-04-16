@@ -203,31 +203,4 @@ module suiperchat::payment {
             admin: tx_context::sender(ctx) // イベント発行者はトランザクションの送信者
         });
     }
-
-    #[test_only]
-    /// テスト用に初期化を行う関数
-    public fun test_init(ctx: &mut TxContext) {
-        init(ctx)
-    }
-
-    #[test_only]
-    /// テスト用に手数料受取人を取得する関数
-    public fun test_get_fee_recipient(config: &PaymentConfig): address {
-        config.fee_recipient
-    }
-
-    #[test_only]
-    /// テスト用に手数料率を取得する関数
-    public fun test_get_fee_percentage(config: &PaymentConfig): u8 {
-        config.default_fee_percentage
-    }
-
-    #[test_only]
-    /// テスト用に偽のAdminCapを作成する関数 (これは残しておいても良い)
-    public fun test_create_fake_admin_cap(recipient: address, ctx: &mut TxContext) {
-        let fake_admin_cap = AdminCap {
-            id: object::new(ctx)
-        };
-        transfer::transfer(fake_admin_cap, recipient);
-    }
 }
