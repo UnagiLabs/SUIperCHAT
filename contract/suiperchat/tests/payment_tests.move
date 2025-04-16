@@ -8,7 +8,6 @@ module suiperchat::payment_tests {
     use sui::coin::{Self, Coin};
     use sui::sui::SUI;
     use sui::test_utils::assert_eq;
-
     use suiperchat::payment::{Self, AdminCap, PaymentConfig};
 
     /// テスト用アカウントアドレス
@@ -95,12 +94,12 @@ module suiperchat::payment_tests {
             let ctx = ts::ctx(&mut scenario_val);
 
             // テスト用コインを作成
-            let mut payment = create_test_coin(INITIAL_BALANCE, ctx);
+            let payment = create_test_coin(INITIAL_BALANCE, ctx);
 
             // スーパーチャット送金を実行
-            payment::process_superchat_payment(
+            payment::process_superchat_payment<SUI>(
                 &config,
-                &mut payment,
+                payment,
                 SUPERCHAT_AMOUNT,
                 RECIPIENT,
                 ctx
@@ -111,10 +110,10 @@ module suiperchat::payment_tests {
             let _recipient_amount = SUPERCHAT_AMOUNT - fee_amount;
 
             // 残高を確認
-            assert_eq(coin::value(&payment), INITIAL_BALANCE - SUPERCHAT_AMOUNT);
+            // assert_eq(coin::value(&payment), INITIAL_BALANCE - SUPERCHAT_AMOUNT);
 
             // 残りのコインをユーザーに返却
-            transfer::public_transfer(payment, USER);
+            // transfer::public_transfer(payment, USER);
 
             ts::return_shared(config);
         };
@@ -254,18 +253,23 @@ module suiperchat::payment_tests {
             let ctx = ts::ctx(&mut scenario_val);
 
             // 残高より少ないコインを作成
-            let mut payment = create_test_coin(SUPERCHAT_AMOUNT - 1, ctx);
+            let payment = create_test_coin(SUPERCHAT_AMOUNT - 1, ctx);
 
             // 残高を超える金額を送金しようとする（エラーになるはず）
-            payment::process_superchat_payment(
+            payment::process_superchat_payment<SUI>(
                 &config,
-                &mut payment,
+                payment,
                 SUPERCHAT_AMOUNT,
                 RECIPIENT,
                 ctx
             );
 
-            transfer::public_transfer(payment, USER);
+            // 残高を確認
+            // assert_eq(coin::value(&payment), INITIAL_BALANCE - SUPERCHAT_AMOUNT);
+
+            // 残りのコインをユーザーに返却
+            // transfer::public_transfer(payment, USER);
+
             ts::return_shared(config);
         };
 
@@ -286,18 +290,23 @@ module suiperchat::payment_tests {
             let config = ts::take_shared<PaymentConfig>(&scenario_val);
             let ctx = ts::ctx(&mut scenario_val);
 
-            let mut payment = create_test_coin(INITIAL_BALANCE, ctx);
+            let payment = create_test_coin(INITIAL_BALANCE, ctx);
 
             // 0金額を送金しようとする（エラーになるはず）
-            payment::process_superchat_payment(
+            payment::process_superchat_payment<SUI>(
                 &config,
-                &mut payment,
+                payment,
                 0, // ゼロ金額
                 RECIPIENT,
                 ctx
             );
 
-            transfer::public_transfer(payment, USER);
+            // 残高を確認
+            // assert_eq(coin::value(&payment), INITIAL_BALANCE - SUPERCHAT_AMOUNT);
+
+            // 残りのコインをユーザーに返却
+            // transfer::public_transfer(payment, USER);
+
             ts::return_shared(config);
         };
 

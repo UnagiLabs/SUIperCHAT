@@ -210,4 +210,23 @@ module suiperchat::payment {
             admin: tx_context::sender(ctx) // イベント発行者はトランザクションの送信者
         });
     }
+
+    // ======== テスト用関数 ========
+    #[test_only]
+    /// テスト用の初期化関数
+    public fun test_init(ctx: &mut TxContext) {
+        init(ctx)
+    }
+
+    #[test_only]
+    /// テスト用の手数料受取人取得関数
+    public fun test_get_fee_recipient(config: &PaymentConfig): address {
+        config.fee_recipient
+    }
+
+    #[test_only]
+    /// テスト用の手数料率取得関数
+    public fun test_get_fee_percentage(config: &PaymentConfig): u8 {
+        config.default_fee_percentage
+    }
 }
