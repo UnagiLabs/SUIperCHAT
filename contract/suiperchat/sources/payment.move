@@ -4,19 +4,17 @@
 /// AdminCapabilityを使用して管理者権限を制御し、送金成功時に `SuperchatSent` イベントを発行します。
 module suiperchat::payment {
     use sui::coin::{Self, Coin};
-    use sui::sui::SUI;
     use sui::event;
 
     /// 手数料率が無効な場合のエラー
     const EINVALID_FEE: u64 = 1;
     /// 送金額が無効な場合のエラー
     const EINVALID_AMOUNT: u64 = 2;
-    /// 無効なAdminCapabilityのエラー
-    const EINVALID_ADMIN_CAP: u64 = 4;
 
     /// 管理者権限を表すCapability
     ///
     /// このオブジェクトを所有するアドレスが管理者として設定の変更などを行えます。
+    /// init関数で1つだけ生成され、デプロイヤーに送信されます。
     public struct AdminCap has key, store {
         id: UID
     }
@@ -27,9 +25,7 @@ module suiperchat::payment {
         /// 手数料を受け取るアドレス
         fee_recipient: address,
         /// デフォルトの手数料率 (例: 5% -> 5)
-        default_fee_percentage: u8,
-        /// このコンフィグに対応するAdminCapのID
-        admin_cap_id: ID
+        default_fee_percentage: u8
     }
 
     /// 設定が更新されたときに発行されるイベント
@@ -67,15 +63,13 @@ module suiperchat::payment {
         let admin_cap = AdminCap {
             id: object::new(ctx)
         };
-        let admin_cap_id = object::id(&admin_cap);
         let sender = tx_context::sender(ctx);
 
         // コントラクト設定を作成し、共有オブジェクトとして登録
         let config = PaymentConfig {
             id: object::new(ctx),
             fee_recipient: sender, // デプロイした人を初期受取人に
-            default_fee_percentage: 5, // デフォルト手数料5%
-            admin_cap_id
+            default_fee_percentage: 5 // デフォルト手数料5%
         };
 
         // 設定更新イベントを発行
@@ -95,9 +89,12 @@ module suiperchat::payment {
 
     /// スーパーチャットの送金処理を行い、成功時に `SuperchatSent` イベントを発行する関数
     ///
+    /// # 型パラメータ
+    /// * `T` - 支払いに使用するコインの型（例：SUI, USDC など）
+    ///
     /// # 引数
     /// * `config` - コントラクトの設定オブジェクト
-    /// * `payment` - 支払いに使用するSUIコイン
+    /// * `payment` - 支払いに使用するコイン
     /// * `amount` - 送金する金額
     /// * `recipient` - 受取人のアドレス
     /// * `ctx` - トランザクションコンテキスト
@@ -107,9 +104,9 @@ module suiperchat::payment {
     ///
     /// # エラー
     /// * `EINVALID_AMOUNT` - 指定された送金額が0以下、または支払いコインの残高を超えている
-    public entry fun process_superchat_payment(
+    public entry fun process_superchat_payment<T>(
         config: &PaymentConfig,
-        payment: &mut Coin<SUI>,
+        payment: &mut Coin<T>,
         amount: u64,
         recipient: address,
         ctx: &mut TxContext
@@ -150,21 +147,18 @@ module suiperchat::payment {
     /// 手数料受取先アドレスを変更する関数
     ///
     /// # 引数
-    /// * `admin_cap` - 管理者権限を証明するCapability
+    /// * `admin_cap` - 管理者権限を証明するCapability (型チェックのみで権限を検証)
     /// * `config` - コントラクトの設定オブジェクト
     /// * `new_recipient` - 新しい手数料受取先アドレス
     /// * `ctx` - トランザクションコンテキスト
-    ///
-    /// # エラー
-    /// * `EINVALID_ADMIN_CAP` - 提供されたAdminCapが無効な場合
     public entry fun update_fee_recipient(
-        admin_cap: &AdminCap,
+        _: &AdminCap, // 引数の型で権限を暗黙的に検証
         config: &mut PaymentConfig,
         new_recipient: address,
         ctx: &mut TxContext
     ) {
-        // AdminCapが有効かどうかを検証
-        assert_valid_admin(admin_cap, config);
+        // AdminCapの有効性チェック (assert_valid_admin) を削除
+        // admin_cap引数が存在すること自体が権限の証明となる
 
         // 手数料受取先を更新
         config.fee_recipient = new_recipient;
@@ -173,29 +167,28 @@ module suiperchat::payment {
         event::emit(ConfigUpdated {
             config_id: object::id(config),
             update_type: b"fee_recipient_updated",
-            admin: tx_context::sender(ctx)
+            admin: tx_context::sender(ctx) // イベント発行者はトランザクションの送信者
         });
     }
 
     /// デフォルト手数料率を変更する関数
     ///
     /// # 引数
-    /// * `admin_cap` - 管理者権限を証明するCapability
+    /// * `admin_cap` - 管理者権限を証明するCapability (型チェックのみで権限を検証)
     /// * `config` - コントラクトの設定オブジェクト
     /// * `new_fee_percentage` - 新しい手数料率(0-100)
     /// * `ctx` - トランザクションコンテキスト
     ///
     /// # エラー
     /// * `EINVALID_FEE` - 手数料率が0-100の範囲外の場合
-    /// * `EINVALID_ADMIN_CAP` - 提供されたAdminCapが無効な場合
     public entry fun update_default_fee_percentage(
-        admin_cap: &AdminCap,
+        _: &AdminCap, // 引数の型で権限を暗黙的に検証
         config: &mut PaymentConfig,
         new_fee_percentage: u8,
         ctx: &mut TxContext
     ) {
-        // AdminCapが有効かどうかを検証
-        assert_valid_admin(admin_cap, config);
+        // AdminCapの有効性チェック (assert_valid_admin) を削除
+        // admin_cap引数が存在すること自体が権限の証明となる
 
         // 手数料率の検証
         assert!(new_fee_percentage <= 100, EINVALID_FEE);
@@ -207,23 +200,10 @@ module suiperchat::payment {
         event::emit(ConfigUpdated {
             config_id: object::id(config),
             update_type: b"fee_percentage_updated",
-            admin: tx_context::sender(ctx)
+            admin: tx_context::sender(ctx) // イベント発行者はトランザクションの送信者
         });
     }
 
-    /// AdminCapabilityが有効かどうかを検証するヘルパー関数
-    ///
-    /// # 引数
-    /// * `admin_cap` - 検証するAdminCapability
-    /// * `config` - コントラクトの設定オブジェクト
-    ///
-    /// # エラー
-    /// * `EINVALID_ADMIN_CAP` - 提供されたAdminCapが無効な場合
-    fun assert_valid_admin(admin_cap: &AdminCap, config: &PaymentConfig) {
-        assert!(object::id(admin_cap) == config.admin_cap_id, EINVALID_ADMIN_CAP);
-    }
-
-    // テスト用の関数群
     #[test_only]
     /// テスト用に初期化を行う関数
     public fun test_init(ctx: &mut TxContext) {
@@ -243,13 +223,7 @@ module suiperchat::payment {
     }
 
     #[test_only]
-    /// テスト用にAdminCapのIDを取得する関数
-    public fun test_get_admin_cap_id(config: &PaymentConfig): ID {
-        config.admin_cap_id
-    }
-
-    #[test_only]
-    /// テスト用に偽のAdminCapを作成する関数
+    /// テスト用に偽のAdminCapを作成する関数 (これは残しておいても良い)
     public fun test_create_fake_admin_cap(recipient: address, ctx: &mut TxContext) {
         let fake_admin_cap = AdminCap {
             id: object::new(ctx)

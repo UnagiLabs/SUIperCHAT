@@ -73,7 +73,6 @@ module suiperchat::payment_tests {
             assert_eq(payment::test_get_fee_percentage(&config), DEFAULT_FEE_PERCENTAGE);
 
             let admin_cap = ts::take_from_address<AdminCap>(&scenario_val, ADMIN);
-            assert_eq(payment::test_get_admin_cap_id(&config), object::id(&admin_cap));
 
             ts::return_shared(config);
             ts::return_to_address(ADMIN, admin_cap);
@@ -235,44 +234,6 @@ module suiperchat::payment_tests {
 
             ts::return_shared(config);
             ts::return_to_address(ADMIN, admin_cap);
-        };
-
-        ts::end(scenario_val);
-    }
-
-    /// 無効なAdminCapabilityでのエラーテスト
-    ///
-    /// 別のユーザーがAdminCapを持っていない場合にエラーになることを検証します。
-    #[test]
-    #[expected_failure(abort_code = payment::EINVALID_ADMIN_CAP)]
-    fun test_invalid_admin_cap() {
-        let mut scenario_val = setup_test();
-
-        // テスト用の不正なAdminCapをテストモジュールから取得
-        ts::next_tx(&mut scenario_val, USER);
-        {
-            let ctx = ts::ctx(&mut scenario_val);
-            // 構造体を直接インスタンス化する代わりにテスト用のヘルパー関数を使用
-            payment::test_create_fake_admin_cap(USER, ctx);
-        };
-
-        // 不正なAdminCapを使って設定を変更しようとする
-        ts::next_tx(&mut scenario_val, USER);
-        {
-            let mut config = ts::take_shared<PaymentConfig>(&scenario_val);
-            let fake_admin_cap = ts::take_from_address<AdminCap>(&scenario_val, USER);
-            let ctx = ts::ctx(&mut scenario_val);
-
-            // エラーになるはず
-            payment::update_fee_recipient(
-                &fake_admin_cap,
-                &mut config,
-                USER,
-                ctx
-            );
-
-            ts::return_shared(config);
-            ts::return_to_address(USER, fake_admin_cap);
         };
 
         ts::end(scenario_val);
