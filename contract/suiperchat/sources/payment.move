@@ -39,7 +39,7 @@ module suiperchat::payment {
     }
 
     /// スーパーチャットが送信されたときに発行されるイベント
-    public struct SuperchatSent has copy, drop {
+    public struct SuperchatSent<phantom T> has copy, drop {
         /// 送金者のアドレス
         sender: address,
         /// 受取人のアドレス
@@ -134,12 +134,12 @@ module suiperchat::payment {
         transfer::public_transfer(total_payment, recipient);
 
         // スーパーチャット送信イベントを発行
-        event::emit(SuperchatSent {
+        event::emit(SuperchatSent<T> {
             sender: tx_context::sender(ctx),
-            recipient, // 関数の引数 recipient をそのまま使用
-            total_amount: amount, // 関数の引数 amount をそのまま使用
-            fee_amount, // 計算済みの fee_amount
-            recipient_amount, // 計算済みの recipient_amount
+            recipient,
+            total_amount: amount,
+            fee_amount,
+            recipient_amount,
             config_id: object::id(config)
         });
     }
