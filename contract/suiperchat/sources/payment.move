@@ -106,36 +106,43 @@ module suiperchat::payment {
     /// * `EINVALID_AMOUNT` - 指定された送金額が0以下、または支払いコインの残高を超えている
     public entry fun process_superchat_payment<T>(
         config: &PaymentConfig,
-        payment: &mut Coin<T>,
+        mut payment: Coin<T>,
         amount: u64,
         recipient: address,
         ctx: &mut TxContext
     ) {
         // 基本的な検証
         assert!(amount > 0, EINVALID_AMOUNT);
-        assert!(coin::value(payment) >= amount, EINVALID_AMOUNT);
+        assert!(coin::value(&payment) >= amount, EINVALID_AMOUNT);
+
+        // 送信者のアドレスを取得
+        let sender = tx_context::sender(ctx);
 
         // 手数料計算
         let fee_percentage = config.default_fee_percentage;
-        let mut total_payment = coin::split(payment, amount, ctx);
+
+        // 送金用のコインを分割
+        let mut superchat_coin = coin::split(&mut payment, amount, ctx);
 
         // 手数料と受取人への送金額を計算
         let fee_amount = (amount * (fee_percentage as u64)) / 100;
-        // 受取人への送金額を計算
         let recipient_amount = amount - fee_amount;
 
-        // 手数料を受取人に送金
+        // 手数料を分割して送金
         if (fee_amount > 0) {
-            let fee_coin = coin::split(&mut total_payment, fee_amount, ctx);
+            let fee_coin = coin::split(&mut superchat_coin, fee_amount, ctx);
             transfer::public_transfer(fee_coin, config.fee_recipient);
         };
 
-        // 残りを本来の受取人に送金
-        transfer::public_transfer(total_payment, recipient);
+        // 残りを受取人に送金
+        transfer::public_transfer(superchat_coin, recipient);
+
+        // 余りを送信者に返却
+        transfer::public_transfer(payment, sender);
 
         // スーパーチャット送信イベントを発行
         event::emit(SuperchatSent<T> {
-            sender: tx_context::sender(ctx),
+            sender,
             recipient,
             total_amount: amount,
             fee_amount,
