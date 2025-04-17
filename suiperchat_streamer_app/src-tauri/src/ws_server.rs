@@ -1,5 +1,6 @@
 #![allow(clippy::future_not_send)] // Actix actors are not necessarily Send
 
+use crate::types::{ClientMessage, MessageType, ServerResponse};
 use actix::prelude::*;
 use actix_web_actors::ws;
 use std::time::{Duration, Instant};
@@ -52,6 +53,75 @@ impl WsSession {
             println!("Sending heartbeat ping");
             ctx.ping(b"");
         });
+    }
+
+    /// ## エラーレスポンスを作成する
+    ///
+    /// クライアントに送信するエラーメッセージを作成します。
+    ///
+    /// ### Arguments
+    /// - `error_message`: エラーメッセージの内容
+    ///
+    /// ### Returns
+    /// - `String`: JSONシリアライズされたエラーメッセージ
+    fn create_error_response(&self, error_message: &str) -> String {
+        let response = ServerResponse {
+            message_type: MessageType::Error,
+            message: error_message.to_string(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        };
+
+        match serde_json::to_string(&response) {
+            Ok(json) => json,
+            Err(e) => format!(
+                "{{\"type\":\"error\",\"message\":\"Failed to serialize error: {}\"}}",
+                e
+            ),
+        }
+    }
+
+    /// ## メッセージをブロードキャストする
+    ///
+    /// 受信したメッセージを適切に処理してブロードキャストします。
+    /// 現在はエコーバック（元のクライアントにのみ送信）のみ実装しています。
+    ///
+    /// ### Arguments
+    /// - `message`: 受信したクライアントメッセージ
+    /// - `ctx`: アクターコンテキスト
+    fn broadcast_message(&self, message: ClientMessage, ctx: &mut ws::WebsocketContext<Self>) {
+        let json_result = match message {
+            ClientMessage::Chat(chat_msg) => {
+                println!(
+                    "Normal chat message from {}: {}",
+                    chat_msg.display_name, chat_msg.content
+                );
+                serde_json::to_string(&chat_msg)
+            }
+            ClientMessage::Superchat(superchat_msg) => {
+                println!(
+                    "Super chat message from {}: {}, Amount: {}, TX: {}",
+                    superchat_msg.display_name,
+                    superchat_msg.content,
+                    superchat_msg.superchat.amount,
+                    superchat_msg.superchat.tx_hash
+                );
+                // スパチャの検証ロジックを将来的に実装
+                // self.verify_transaction(&superchat_msg.superchat);
+                serde_json::to_string(&superchat_msg)
+            }
+        };
+
+        match json_result {
+            Ok(json) => {
+                // メッセージをクライアントに送信
+                ctx.text(json);
+                // 将来的に: 他の接続されたクライアントにブロードキャスト
+            }
+            Err(e) => {
+                eprintln!("メッセージのシリアライズに失敗: {}", e);
+                ctx.text(self.create_error_response(&format!("メッセージ処理エラー: {}", e)));
+            }
+        }
     }
 }
 
@@ -108,16 +178,30 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                 self.hb = Instant::now();
                 ctx.pong(&msg);
             }
-            // テキストメッセージ受信: 内容をログ出力 (将来的にJSONパースなど)
+            // テキストメッセージ受信: JSONパースしてメッセージ処理
             Ok(ws::Message::Text(text)) => {
                 println!("WS Received: {}", text);
-                // ここでメッセージ内容に応じた処理を行う (例: JSON パース)
-                // ctx.text(format!("You said: {}", text)); // エコーバックする場合
+
+                // JSONメッセージのパース処理
+                match serde_json::from_str::<ClientMessage>(&text) {
+                    Ok(client_msg) => {
+                        // メッセージを処理してブロードキャスト
+                        self.broadcast_message(client_msg, ctx);
+                    }
+                    Err(e) => {
+                        // JSONパースエラー
+                        eprintln!("メッセージのパースに失敗: {}, 受信内容: {}", e, text);
+                        ctx.text(
+                            self.create_error_response(&format!("無効なメッセージ形式: {}", e)),
+                        );
+                    }
+                }
             }
-            // バイナリメッセージ受信: (現在は未処理)
+            // バイナリメッセージ受信: 現在は未処理
             Ok(ws::Message::Binary(bin)) => {
                 println!("WS Received Binary: {} bytes", bin.len());
                 // 必要に応じてバイナリデータを処理
+                ctx.text(self.create_error_response("バイナリメッセージはサポートされていません"));
             }
             // Close メッセージ受信 or 接続エラー: アクターを停止
             Ok(ws::Message::Close(reason)) => {
@@ -128,12 +212,16 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
             Ok(ws::Message::Continuation(_)) => {
                 // 分割メッセージは現在サポートしないため停止
                 println!("Continuation messages not supported");
+                ctx.text(self.create_error_response("分割メッセージはサポートされていません"));
                 ctx.stop();
             }
             Ok(ws::Message::Nop) => (), // 何もしない
             // プロトコルエラー発生: エラーログを出力し、アクターを停止
             Err(e) => {
                 eprintln!("WebSocket Protocol Error: {:?}", e);
+                ctx.text(
+                    self.create_error_response(&format!("WebSocketプロトコルエラー: {:?}", e)),
+                );
                 ctx.stop();
             }
         }

@@ -6,6 +6,7 @@
 // --- モジュール宣言 ---
 pub mod commands; // コマンドモジュール
 pub mod state; // 状態管理モジュール
+pub mod types; // 型定義モジュール
 pub mod ws_server; // WebSocket サーバーロジック
 
 // モジュールの再エクスポート
