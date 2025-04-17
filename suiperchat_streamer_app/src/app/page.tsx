@@ -1,3 +1,4 @@
+import ConnectionManager from "@/components/features/dashboard/ConnectionManager";
 import ServerControl from "@/components/features/dashboard/ServerControl";
 import UrlDisplay from "@/components/features/dashboard/UrlDisplay";
 import WalletAddressConfig from "@/components/features/dashboard/WalletAddressConfig";
@@ -35,6 +36,9 @@ export default function RootPage(): React.ReactNode {
 
 			{/* URL表示コンポーネント */}
 			<UrlDisplay />
+
+			{/* 接続管理コンポーネント */}
+			<ConnectionManager />
 
 			{/* Toast表示用のコンポーネント (sonnerを使用) */}
 			<SonnerToaster />
