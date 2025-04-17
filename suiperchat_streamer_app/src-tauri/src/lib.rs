@@ -10,18 +10,13 @@ pub mod types; // 型定義モジュール
 pub mod ws_server; // WebSocket サーバーロジック
 
 // モジュールの再エクスポート
-pub use commands::*;
 pub use state::AppState;
 
 // Tauri コマンド関数の再エクスポート
-pub use commands::get_streamer_info;
-pub use commands::set_wallet_address;
-pub use commands::start_websocket_server;
-pub use commands::stop_websocket_server;
+pub use commands::server::{start_websocket_server, stop_websocket_server};
+pub use commands::wallet::{get_streamer_info, set_wallet_address};
 // 接続管理コマンドの再エクスポート
-pub use commands::disconnect_client;
-pub use commands::get_connections_info;
-pub use commands::set_connection_limits;
+pub use commands::connection::{disconnect_client, get_connections_info, set_connection_limits};
 
 /// ## Tauriアプリケーションのエントリーポイント
 ///
@@ -37,14 +32,16 @@ pub fn run() {
         .manage(AppState::new())
         // --- Tauri コマンドハンドラーを登録 ---
         .invoke_handler(tauri::generate_handler![
-            commands::start_websocket_server,
-            commands::stop_websocket_server,
-            commands::set_wallet_address,
-            commands::get_streamer_info,
-            // 接続管理コマンドを登録
-            commands::get_connections_info,
-            commands::disconnect_client,
-            commands::set_connection_limits
+            // サーバー関連コマンド
+            commands::server::start_websocket_server,
+            commands::server::stop_websocket_server,
+            // ウォレット関連コマンド
+            commands::wallet::set_wallet_address,
+            commands::wallet::get_streamer_info,
+            // 接続管理コマンド
+            commands::connection::get_connections_info,
+            commands::connection::disconnect_client,
+            commands::connection::set_connection_limits
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
