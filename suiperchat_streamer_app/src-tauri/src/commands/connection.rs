@@ -4,11 +4,15 @@
 
 use crate::state::AppState;
 use crate::ws_server::ConnectionsInfo;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
 use tauri::{command, State};
 
 /// ## 接続情報を取得するコマンド
 ///
 /// 現在の接続状況に関する情報を取得します。
+/// タイムアウト処理が組み込まれており、処理が3秒以上かかる場合はエラーを返します。
 ///
 /// ### Arguments
 /// - `_app_state`: Tauri の管理するアプリケーション状態 (`State<AppState>`)
@@ -19,11 +23,64 @@ use tauri::{command, State};
 pub fn get_connections_info(_app_state: State<'_, AppState>) -> Result<ConnectionsInfo, String> {
     println!("接続情報の取得要求");
 
-    // グローバル接続マネージャから接続情報を取得
-    let connections_info = crate::ws_server::get_connections_info();
-    println!("取得した接続数: {}", connections_info.active_connections);
+    // 結果を格納するための共有変数
+    let result = Arc::new(Mutex::new(None));
+    let result_clone = Arc::clone(&result);
 
-    Ok(connections_info)
+    // エラー状態を格納するための共有変数
+    let error = Arc::new(Mutex::new(None));
+    let error_clone = Arc::clone(&error);
+
+    // 別スレッドで接続情報を取得
+    let handle = thread::spawn(move || {
+        match std::panic::catch_unwind(|| {
+            // グローバル接続マネージャから接続情報を取得
+            let connections_info = crate::ws_server::get_connections_info();
+            println!("取得した接続数: {}", connections_info.active_connections);
+            *result_clone.lock().unwrap() = Some(connections_info);
+        }) {
+            Ok(_) => {}
+            Err(e) => {
+                let error_msg = if let Some(s) = e.downcast_ref::<String>() {
+                    format!("パニック発生: {}", s)
+                } else if let Some(s) = e.downcast_ref::<&str>() {
+                    format!("パニック発生: {}", s)
+                } else {
+                    "不明なパニックが発生しました".to_string()
+                };
+                println!("接続情報取得中にエラー発生: {}", error_msg);
+                *error_clone.lock().unwrap() = Some(error_msg);
+            }
+        }
+    });
+
+    // タイムアウト付きで待機（3秒）
+    let start = Instant::now();
+    let timeout = Duration::from_secs(3);
+
+    while start.elapsed() < timeout {
+        // 結果をチェック
+        if result.lock().unwrap().is_some() {
+            // 接続情報が取得できた
+            return Ok(result.lock().unwrap().take().unwrap());
+        }
+
+        // エラーをチェック
+        if let Some(err_msg) = error.lock().unwrap().take() {
+            return Err(err_msg);
+        }
+
+        // 少し待機して再チェック
+        thread::sleep(Duration::from_millis(10));
+    }
+
+    // タイムアウトしたらスレッドをデタッチ（バックグラウンドで実行を継続）
+    std::mem::forget(handle);
+
+    Err(
+        "接続情報の取得がタイムアウトしました。サーバーが応答していない可能性があります。"
+            .to_string(),
+    )
 }
 
 /// ## クライアントを切断するコマンド
