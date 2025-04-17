@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SUIperCHAT Server Status</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #2d3748;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+
+        .status-container {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .active {
+            background-color: #48bb78;
+        }
+
+        .inactive {
+            background-color: #f56565;
+        }
+
+        .info-item {
+            margin: 10px 0;
+            display: flex;
+        }
+
+        .info-label {
+            font-weight: bold;
+            width: 200px;
+        }
+
+        .links {
+            margin-top: 30px;
+        }
+
+        .links a {
+            display: inline-block;
+            background-color: #4299e1;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .links a:hover {
+            background-color: #3182ce;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>SUIperCHAT サーバーステータス</h1>
+
+    <div class="status-container">
+        <div class="info-item">
+            <span class="info-label">サーバー状態:</span>
+            <span>
+                <span class="status-indicator active"></span>
+                稼働中
+            </span>
+        </div>
+
+        <div class="info-item">
+            <span class="info-label">WebSocketエンドポイント:</span>
+            <span id="ws-endpoint">ws://localhost:8080/ws</span>
+        </div>
+
+        <div class="info-item">
+            <span class="info-label">OBSブラウザソース URL:</span>
+            <span id="obs-url">http://localhost:8080/obs/</span>
+        </div>
+
+        <div class="info-item">
+            <span class="info-label">接続クライアント数:</span>
+            <span>0</span>
+        </div>
+
+        <div class="info-item">
+            <span class="info-label">起動時間:</span>
+            <span id="uptime">0分</span>
+        </div>
+    </div>
+
+    <div class="links">
+        <a href="/obs/" target="_blank">OBS表示プレビュー</a>
+        <a href="https://github.com/your-username/suiperchat" target="_blank">ドキュメント</a>
+    </div>
+
+    <script>
+        // ページ読み込み時の処理
+        document.addEventListener('DOMContentLoaded', function () {
+            // ホスト名とポート番号を取得
+            const host = window.location.hostname;
+            const port = window.location.port;
+
+            // WebSocketエンドポイントとOBS URLを更新
+            document.getElementById('ws-endpoint').textContent = `ws://${host}:${port}/ws`;
+            document.getElementById('obs-url').textContent = `http://${host}:${port}/obs/`;
+
+            // 起動時間の更新（表示のみ、実際のサーバー起動時間は取得していない）
+            let startTime = new Date();
+            setInterval(function () {
+                let now = new Date();
+                let diff = Math.floor((now - startTime) / 1000 / 60); // 分単位
+                document.getElementById('uptime').textContent = `${diff}分`;
+            }, 60000); // 1分ごとに更新
+        });
+    </script>
+</body>
+
+</html>

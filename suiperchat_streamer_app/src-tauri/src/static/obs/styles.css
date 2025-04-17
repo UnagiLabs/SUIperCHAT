@@ -1,0 +1,113 @@
+/**
+ * SUIperCHAT OBS表示用スタイルシート
+ * 
+ * OBSブラウザソースで使用するスーパーチャット表示のスタイルを定義します。
+ * 配信画面に表示されるスーパーチャットの見た目を制御します。
+ */
+
+:root {
+    --superchat-bg-1: rgba(255, 180, 0, 0.9);  /* 1SUI */
+    --superchat-bg-3: rgba(255, 140, 0, 0.9);  /* 3SUI */
+    --superchat-bg-5: rgba(255, 100, 0, 0.9);  /* 5SUI */
+    --superchat-bg-10: rgba(255, 50, 0, 0.9);  /* 10SUI */
+    --text-color: #ffffff;
+    --border-radius: 8px;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: transparent;
+    overflow: hidden;
+}
+
+.container {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.superchat-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.superchat-message {
+    border-radius: var(--border-radius);
+    padding: 16px;
+    color: var(--text-color);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    animation: fadeIn 0.5s ease-in-out, slideIn 0.5s ease-in-out;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    max-width: 100%;
+}
+
+.superchat-message:hover {
+    transform: scale(1.02);
+}
+
+.superchat-message.amount-1 {
+    background-color: var(--superchat-bg-1);
+}
+
+.superchat-message.amount-3 {
+    background-color: var(--superchat-bg-3);
+}
+
+.superchat-message.amount-5 {
+    background-color: var(--superchat-bg-5);
+}
+
+.superchat-message.amount-10 {
+    background-color: var(--superchat-bg-10);
+}
+
+.superchat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.display-name {
+    font-weight: bold;
+    font-size: 1.2em;
+}
+
+.amount {
+    font-weight: bold;
+}
+
+.message-content {
+    font-size: 1.1em;
+    word-break: break-word;
+}
+
+/* アニメーション定義 */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideIn {
+    from { transform: translateY(20px); }
+    to { transform: translateY(0); }
+}
+
+/* スーパーチャットメッセージの削除アニメーション */
+.superchat-message.removing {
+    animation: fadeOut 1s ease-in-out forwards;
+    transform: translateX(100%);
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+} 

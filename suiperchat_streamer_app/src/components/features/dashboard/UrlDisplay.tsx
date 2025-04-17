@@ -26,8 +26,8 @@ interface StreamerInfo {
 // 環境変数から視聴者アプリのベースURLを取得、なければ本番URLをフォールバック
 const VIEWER_APP_BASE_URL =
 	process.env.NEXT_PUBLIC_VIEWER_APP_BASE_URL || "https://suiperchat.app/chat";
-// TODO: OBSオーバーレイのポートも動的に取得・設定可能にする
-const OBS_OVERLAY_BASE_URL = "http://localhost:3001/overlay";
+// OBSオーバーレイURLはwebsocketサーバーのURLから動的に生成するようになりました
+// const OBS_OVERLAY_BASE_URL = "http://localhost:3001/overlay";
 const WALLET_NOT_SET_ERROR =
 	"Wallet address is not set. Please configure it first.";
 
@@ -134,8 +134,18 @@ export default function UrlDisplay() {
 			const encodedWsUrl = encodeURIComponent(ws_url);
 			const encodedWalletAddress = encodeURIComponent(wallet_address);
 
-			// OBS URL (現状ウォレットアドレスのみ使用)
-			obs_url = `${OBS_OVERLAY_BASE_URL}?walletAddress=${encodedWalletAddress}`;
+			// OBS URL - WebSocketサーバーURLからHTTP URLを生成
+			if (ws_url) {
+				// WebSocketのURLからHTTPのURLに変換
+				// 例: ws://127.0.0.1:8080/ws → http://127.0.0.1:8080/obs/
+				const wsUrlObj = new URL(ws_url);
+				const httpProtocol = wsUrlObj.protocol === "wss:" ? "https:" : "http:";
+				const obsBaseUrl = `${httpProtocol}//${wsUrlObj.host}/obs/`;
+				obs_url = obsBaseUrl;
+			} else {
+				// フォールバック（古い方式）
+				obs_url = `http://localhost:3001/overlay?walletAddress=${encodedWalletAddress}`;
+			}
 
 			// 視聴者 URL
 			viewer_url = `${VIEWER_APP_BASE_URL}?wsUrl=${encodedWsUrl}&streamerAddress=${encodedWalletAddress}`;

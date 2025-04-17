@@ -4,8 +4,10 @@
 
 use crate::state::AppState;
 use crate::ws_server::connection_manager::global::set_app_handle;
-use actix_web::{get, App, Error, HttpRequest, HttpResponse, HttpServer};
+use actix_files as fs;
+use actix_web::{get, web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{command, Emitter, State};
 use tokio::runtime::Runtime;
@@ -31,6 +33,59 @@ async fn websocket_route(
         &req,
         stream,
     )
+}
+
+/// ## OBSステータスページハンドラー
+///
+/// OBS用のステータス情報ページを提供するハンドラー
+///
+/// ### Returns
+/// - `HttpResponse`: HTML形式のステータスページ
+#[get("/status")]
+async fn status_page() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(include_str!("../../src/static/obs/status.html"))
+}
+
+/// ## 静的ファイルパスを解決する
+///
+/// 環境に応じて適切な静的ファイルのパスを返します。
+/// 開発環境では `src-tauri/src/static` を、
+/// 本番環境では実行ファイルのディレクトリの `src/static` を使用します。
+///
+/// ### Returns
+/// - `PathBuf`: 静的ファイルのルートパス
+fn resolve_static_file_path() -> PathBuf {
+    // 開発環境かどうかのチェック
+    if cfg!(debug_assertions) {
+        // カレントディレクトリからの相対パスを試みる
+        let dev_path = PathBuf::from("./src-tauri/src/static");
+        if dev_path.exists() {
+            println!("Using development static path: {}", dev_path.display());
+            return dev_path;
+        }
+
+        // Cargo.tomlからの相対パスを試みる
+        let cargo_path = PathBuf::from("./src/static");
+        if cargo_path.exists() {
+            println!("Using Cargo relative static path: {}", cargo_path.display());
+            return cargo_path;
+        }
+    }
+
+    // 実行ファイルからの相対パスを使用（主に本番環境用）
+    let exe_path = std::env::current_exe()
+        .ok()
+        .and_then(|exe_path| exe_path.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    let static_path = exe_path.join("src/static");
+    println!(
+        "Using executable relative static path: {}",
+        static_path.display()
+    );
+    static_path
 }
 
 /// ## WebSocket サーバーを起動する Tauri コマンド
@@ -98,13 +153,59 @@ pub fn start_websocket_server(
             );
             println!("Note: Client connections MUST include the '/ws' path");
 
-            let server_result =
-                HttpServer::new(|| App::new().service(websocket_route)).bind((host, port));
+            // 静的ファイルの配信パスを解決
+            let static_path = resolve_static_file_path();
+            let obs_path = static_path.join("obs");
+
+            // OBSディレクトリの存在確認
+            if !obs_path.exists() {
+                eprintln!(
+                    "警告: OBS用静的ファイルディレクトリが見つかりません: {}",
+                    obs_path.display()
+                );
+                eprintln!("OBS表示機能は利用できない可能性があります。");
+            }
+
+            let obs_path_str = obs_path.to_string_lossy().to_string();
+            println!("Serving OBS static files from: {}", obs_path_str);
+
+            let server_result = HttpServer::new(move || {
+                App::new()
+                    // WebSocketエンドポイント
+                    .service(websocket_route)
+                    // ステータスページ
+                    .service(status_page)
+                    // OBS用静的ファイル配信
+                    .service(
+                        fs::Files::new("/obs", obs_path.clone())
+                            .index_file("index.html")
+                            .use_last_modified(true)
+                            .prefer_utf8(true)
+                            .default_handler(web::to(|req: HttpRequest| async move {
+                                let path = req.path().to_string();
+                                if path.ends_with("/") || path == "/obs" {
+                                    HttpResponse::Ok()
+                                        .content_type("text/html; charset=utf-8")
+                                        .body(include_str!("../../src/static/obs/index.html"))
+                                } else {
+                                    HttpResponse::NotFound().body("404 - File not found")
+                                }
+                            })),
+                    )
+                    // エラーハンドラー
+                    .default_service(
+                        web::route()
+                            .to(|| async { HttpResponse::NotFound().body("404 Not Found") }),
+                    )
+            })
+            .bind((host, port));
 
             match server_result {
                 Ok(server) => {
                     println!("WebSocket server bound successfully to {}:{}", host, port);
                     println!("Full WebSocket endpoint: ws://{}:{}{}", host, port, ws_path);
+                    println!("OBS Browser Source URL: http://{}:{}/obs/", host, port);
+                    println!("Server status page: http://{}:{}/status", host, port);
 
                     let server = server.run();
                     let server_handle = server.handle();
