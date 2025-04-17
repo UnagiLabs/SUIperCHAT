@@ -2,10 +2,11 @@
 //!
 //! WebSocketセッションのライフサイクル管理と、メッセージの処理を行います。
 
-use super::client_info::ClientInfo;
-use super::connection_manager::ConnectionManager;
-use super::types::{CLIENT_TIMEOUT, HEARTBEAT_INTERVAL};
-use crate::types::{ClientMessage, MessageType, ServerResponse};
+use super::{client_info::ClientInfo, connection_manager::ConnectionManager};
+use crate::types::{
+    ClientMessage, MessageType, ServerResponse, CLIENT_TIMEOUT,
+    HEARTBEAT_INTERVAL,
+};
 use actix::prelude::*;
 use actix_web::HttpRequest;
 use actix_web_actors::ws;

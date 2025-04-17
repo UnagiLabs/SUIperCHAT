@@ -3,7 +3,7 @@
 //! WebSocket接続の追加・削除・管理を行います。
 
 use super::client_info::ClientInfo;
-use super::types::{
+use crate::types::{
     decrement_connections, get_connections_count, increment_connections, ConnectionsInfo,
 };
 use lazy_static::lazy_static;
