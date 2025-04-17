@@ -63,25 +63,58 @@ export default function ConnectionManager() {
 	const [error, setError] = useState<string | null>(null);
 	// 最大接続数の入力値
 	const [maxConnectionsInput, setMaxConnectionsInput] = useState<string>("");
+	// リフレッシュボタンの無効化状態
+	const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
 	/**
 	 * 接続情報を取得する関数
+	 *
+	 * @param {boolean} showToast - エラー時にトーストを表示するかどうか
 	 */
-	const fetchConnectionsInfo = useCallback(async () => {
-		try {
-			setLoading(true);
-			const info = await invoke<ConnectionsInfo>("get_connections_info");
-			setConnectionsInfo(info);
-			setMaxConnectionsInput(info.max_connections.toString());
-			setError(null);
-		} catch (err) {
-			console.error("Failed to fetch connection info:", err);
-			setError(`Failed to fetch connection info: ${err}`);
-			toast.error("Failed to fetch connection info");
-		} finally {
-			setLoading(false);
-		}
-	}, []);
+	const fetchConnectionsInfo = useCallback(
+		async (showToast = true) => {
+			// すでに処理中の場合は何もしない
+			if (isRefreshing) return;
+
+			try {
+				setLoading(true);
+				setIsRefreshing(true);
+
+				// タイムアウト処理を追加
+				const timeoutPromise = new Promise<never>((_, reject) => {
+					setTimeout(() => reject(new Error("Request timed out")), 5000);
+				});
+
+				// Tauriコマンドと競合させる
+				const info = await Promise.race([
+					invoke<ConnectionsInfo>("get_connections_info"),
+					timeoutPromise,
+				]);
+
+				setConnectionsInfo(info);
+				setMaxConnectionsInput(info.max_connections.toString());
+				setError(null);
+			} catch (err) {
+				console.error("Failed to fetch connection info:", err);
+				const errorMessage = err instanceof Error ? err.message : String(err);
+				setError(`Failed to fetch connection info: ${errorMessage}`);
+
+				if (showToast) {
+					if (errorMessage.includes("timed out")) {
+						toast.error(
+							"Connection info request timed out. Please try again later.",
+						);
+					} else {
+						toast.error("Failed to fetch connection info");
+					}
+				}
+			} finally {
+				setLoading(false);
+				setIsRefreshing(false);
+			}
+		},
+		[isRefreshing],
+	);
 
 	/**
 	 * 最大接続数を設定する関数
@@ -106,7 +139,8 @@ export default function ConnectionManager() {
 
 	// コンポーネントマウント時に接続情報を取得
 	useEffect(() => {
-		fetchConnectionsInfo();
+		// 初回ロード時はトーストを表示しない
+		fetchConnectionsInfo(false);
 
 		// 接続情報更新イベントをリッスン
 		const unlisten = listen("connections_updated", (event) => {
@@ -119,6 +153,15 @@ export default function ConnectionManager() {
 			unlisten.then((unlistenFn) => unlistenFn());
 		};
 	}, [fetchConnectionsInfo]);
+
+	/**
+	 * リフレッシュボタンのクリックハンドラ
+	 */
+	const handleRefresh = () => {
+		if (!isRefreshing) {
+			fetchConnectionsInfo(true);
+		}
+	};
 
 	return (
 		<Card>
@@ -149,10 +192,14 @@ export default function ConnectionManager() {
 							<Button
 								size="sm"
 								variant="outline"
-								onClick={fetchConnectionsInfo}
+								onClick={handleRefresh}
+								disabled={isRefreshing}
 								className="flex items-center"
 							>
-								<ReloadIcon className="mr-2 h-4 w-4" /> Refresh
+								<ReloadIcon
+									className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+								/>
+								{isRefreshing ? "Refreshing..." : "Refresh"}
 							</Button>
 						</div>
 
