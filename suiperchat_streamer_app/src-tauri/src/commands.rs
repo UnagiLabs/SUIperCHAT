@@ -1,14 +1,16 @@
 // このモジュールは Tauri コマンドの実装を含みます
 
 use crate::state::AppState;
-use crate::ws_server;
-use actix_web::{get, Error, HttpRequest, HttpResponse};
-use actix_web::{App, HttpServer};
+use crate::ws_server::{
+    self, connection_manager::global::set_app_handle, create_ws_session, set_max_connections,
+    ConnectionsInfo,
+};
+use actix_web::{get, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 use serde::Serialize;
 use std::sync::Arc;
-use tauri::{command, Emitter, State}; // Emitter と Manager を use
-use tokio::runtime::Runtime; // <--- 追加
+use tauri::{command, Emitter, State};
+use tokio::runtime::Runtime;
 
 /// ## WebSocket ルートハンドラー
 ///
@@ -26,8 +28,8 @@ async fn websocket_route(
     stream: actix_web::web::Payload,
 ) -> Result<HttpResponse, Error> {
     println!("Received websocket upgrade request");
-    // ws_server::WsSession を参照するように修正
-    ws::start(ws_server::WsSession::new(), &req, stream)
+    // 接続管理機能を使用したWsSessionを作成し、リクエスト情報を渡す
+    ws::start(create_ws_session(req.clone()), &req, stream)
 }
 
 /// ## WebSocket サーバーを起動する Tauri コマンド
@@ -44,9 +46,12 @@ async fn websocket_route(
 #[command]
 pub fn start_websocket_server(
     app_state: State<'_, AppState>,
-    _app_handle: tauri::AppHandle,
+    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     println!("Attempting to start WebSocket server...");
+
+    // 接続マネージャーにアプリケーションハンドルを設定
+    set_app_handle(app_handle.clone());
 
     let server_handle_arc = Arc::clone(&app_state.server_handle);
     let runtime_handle_arc = Arc::clone(&app_state.runtime_handle);
@@ -172,7 +177,7 @@ pub fn start_websocket_server(
     });
 
     // サーバー起動開始イベントを発行
-    _app_handle
+    app_handle
         .emit("server_status_updated", true)
         .map_err(|e| {
             eprintln!("Failed to emit server_status_updated event: {}", e);
@@ -376,4 +381,76 @@ pub fn get_streamer_info(app_state: State<'_, AppState>) -> Result<StreamerInfo,
         ws_url,
         wallet_address,
     })
+}
+
+/// ## 接続情報を取得するコマンド
+///
+/// 現在の接続状況に関する情報を取得します。
+///
+/// ### Arguments
+/// - `_app_state`: Tauri の管理するアプリケーション状態 (`State<AppState>`)
+///
+/// ### Returns
+/// - `Result<ws_server::ConnectionsInfo, String>`: 成功した場合は接続情報、エラーの場合はエラーメッセージ
+#[command]
+pub fn get_connections_info(_app_state: State<'_, AppState>) -> Result<ConnectionsInfo, String> {
+    println!("接続情報の取得要求");
+
+    // グローバル接続マネージャから接続情報を取得
+    let connections_info = ws_server::connection_manager::global::get_connections_info();
+    println!("取得した接続数: {}", connections_info.active_connections);
+
+    Ok(connections_info)
+}
+
+/// ## クライアントを切断するコマンド
+///
+/// 指定されたIDのクライアント接続を切断します。
+///
+/// ### Arguments
+/// - `_app_state`: Tauri の管理するアプリケーション状態 (`State<AppState>`)
+/// - `client_id`: 切断するクライアントのID
+///
+/// ### Returns
+/// - `Result<bool, String>`: 成功した場合は切断結果（成功ならtrue）、エラーの場合はエラーメッセージ
+#[command]
+pub fn disconnect_client(
+    _app_state: State<'_, AppState>,
+    client_id: String,
+) -> Result<bool, String> {
+    println!("クライアント切断要求: {}", client_id);
+
+    // グローバル接続マネージャを使用してクライアントを切断
+    let result = ws_server::connection_manager::global::disconnect_client(&client_id);
+    println!("切断結果: {}", result);
+
+    Ok(result)
+}
+
+/// ## 最大接続数を設定するコマンド
+///
+/// WebSocketサーバーの最大同時接続数を設定します。
+///
+/// ### Arguments
+/// - `_app_state`: Tauri の管理するアプリケーション状態 (`State<AppState>`)
+/// - `max_connections`: 設定する最大接続数
+///
+/// ### Returns
+/// - `Result<(), String>`: 成功した場合は`Ok(())`、エラーの場合はエラーメッセージ
+#[command]
+pub fn set_connection_limits(
+    _app_state: State<'_, AppState>,
+    max_connections: usize,
+) -> Result<(), String> {
+    println!("最大接続数設定要求: {}", max_connections);
+
+    if max_connections < 1 {
+        return Err("最大接続数は1以上である必要があります".to_string());
+    }
+
+    // グローバル接続マネージャを使用して最大接続数を設定
+    set_max_connections(max_connections);
+    println!("最大接続数を{}に設定しました", max_connections);
+
+    Ok(())
 }
