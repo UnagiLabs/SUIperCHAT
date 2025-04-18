@@ -96,8 +96,12 @@ impl ConnectionManager {
         client_info: ClientInfo,
         addr: Addr<crate::ws_server::session::WsSession>,
     ) -> bool {
+        println!("Debug: add_client method started for client: {}", client_info.id); // ★追加★
+
         let max_conn = self.get_max_connections();
         let current_count = get_connections_count();
+
+        println!("Debug: Current connections: {}, Max connections: {}", current_count, max_conn); // ★追加★
 
         // 最大接続数チェック
         if current_count >= max_conn {
@@ -105,11 +109,15 @@ impl ConnectionManager {
                 "最大接続数に達しました。接続を拒否します: {}",
                 current_count
             );
+            println!("Debug: add_client method finished, returning false (max connections)."); // ★追加★
             return false;
         }
 
+        println!("Debug: Incrementing connections count."); // ★追加★
         // 接続カウンターをインクリメント
         increment_connections();
+        println!("Debug: Connections count incremented."); // ★追加★
+
 
         // セッションエントリをマップに追加
         let client_id = client_info.id.clone();
@@ -117,13 +125,23 @@ impl ConnectionManager {
             client_info: client_info.clone(),
             addr,
         };
-        let mut connections = self.connections.lock().unwrap();
-        connections.insert(client_id, entry);
+        { // ★スコープ開始★
+            println!("Debug: Attempting to lock connections map."); // ★追加★
+            let mut connections = self.connections.lock().unwrap();
+            println!("Debug: Connections map locked. Inserting client: {}", client_id); // ★追加★
+            connections.insert(client_id, entry);
+            println!("Debug: Client inserted into connections map."); // ★追加★
+        } // ★スコープ終了 - ここでロックが解放される★
 
+
+        println!("Debug: Emitting connections updated event."); // ★追加★
         // イベント発行
         self.emit_connections_updated();
+        println!("Debug: Connections updated event emitted."); // ★追加★
 
-        true
+
+        println!("Debug: add_client method finished, returning true."); // ★追加★
+        true // 追加成功
     }
 
     /// ## クライアントを削除
@@ -196,11 +214,18 @@ impl ConnectionManager {
     /// ### Returns
     /// - `Vec<ClientInfo>`: 全クライアント情報のベクター
     pub fn get_all_clients(&self) -> Vec<ClientInfo> {
+        println!("Debug: get_all_clients method started."); // ★追加★
+        println!("Debug: Attempting to lock connections map in get_all_clients."); // ★追加★
         let connections = self.connections.lock().unwrap();
-        connections
+        println!("Debug: Connections map locked in get_all_clients."); // ★追加★
+        println!("Debug: Collecting client info."); // ★追加★
+        let clients = connections
             .values()
             .map(|entry| entry.client_info.clone())
-            .collect()
+            .collect();
+        println!("Debug: Client info collected."); // ★追加★
+        println!("Debug: get_all_clients method finished."); // ★追加★
+        clients
     }
 
     /// ## 接続情報を取得
@@ -210,26 +235,54 @@ impl ConnectionManager {
     /// ### Returns
     /// - `ConnectionsInfo`: 接続情報
     pub fn get_connections_info(&self) -> ConnectionsInfo {
-        ConnectionsInfo {
-            active_connections: get_connections_count(),
-            max_connections: self.get_max_connections(),
-            clients: self.get_all_clients(),
-        }
+        println!("Debug: get_connections_info method started."); // ★追加★
+        println!("Debug: Getting connections count."); // ★追加★
+        let active_connections = get_connections_count();
+        println!("Debug: Connections count obtained: {}", active_connections); // ★追加★
+
+        println!("Debug: Getting max connections."); // ★追加★
+        let max_connections = self.get_max_connections();
+        println!("Debug: Max connections obtained: {}", max_connections); // ★追加★
+
+        println!("Debug: Getting all clients."); // ★追加★
+        let clients = self.get_all_clients();
+        println!("Debug: All clients obtained (count: {}).", clients.len()); // ★追加★
+
+        println!("Debug: Creating ConnectionsInfo struct."); // ★追加★
+        let info = ConnectionsInfo {
+            active_connections,
+            max_connections,
+            clients,
+        };
+        println!("Debug: ConnectionsInfo struct created."); // ★追加★
+        println!("Debug: get_connections_info method finished."); // ★追加★
+        info
     }
 
     /// ## 接続更新イベントを発行
     ///
     /// 接続状態が変更された際にイベントを発行します。
     fn emit_connections_updated(&self) {
+        println!("Debug: emit_connections_updated method started."); // ★追加★
         if let Some(app_handle) = &self.app_handle {
+            println!("Debug: app_handle is available."); // ★追加★
             // 接続情報を取得
+            println!("Debug: Calling get_connections_info."); // ★変更★
             let info = self.get_connections_info();
+            println!("Debug: Connections info obtained."); // ★追加★
 
             // イベント発行
+            println!("Debug: Attempting to emit connections_updated event."); // ★追加★
             if let Err(e) = app_handle.emit("connections_updated", info) {
                 eprintln!("接続更新イベントの発行に失敗: {}", e);
+                println!("Debug: Failed to emit connections_updated event: {}", e); // ★追加★
+            } else {
+                println!("Debug: connections_updated event emitted successfully."); // ★追加★
             }
+        } else {
+            println!("Debug: app_handle is NOT available."); // ★追加★
         }
+        println!("Debug: emit_connections_updated method finished."); // ★追加★
     }
 
     /// ## 全クライアントにメッセージをブロードキャスト

@@ -246,22 +246,9 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 					set_state((prev) => ({ ...prev, retryCount: 0, error: null })); // 接続成功時にリトライカウントとエラーをリセット
 
 					// 接続成功後に初期化メッセージを送信（オプション）
-					try {
-						if (
-							ws_ref.current &&
-							ws_ref.current.readyState === WebSocket.OPEN
-						) {
-							const init_message = {
-								type: "init",
-								timestamp: Date.now(),
-								id: crypto.randomUUID(),
-							};
-							ws_ref.current.send(JSON.stringify(init_message));
-							console.log("WebSocket初期化メッセージを送信:", init_message);
-						}
-					} catch (initError) {
-						console.warn("WebSocket初期化メッセージの送信に失敗:", initError);
-					}
+					// 接続成功後に初期化メッセージを送信（オプション）
+					// サーバー側で 'init' メッセージタイプが ClientMessage enum に定義されていないため、パースエラーになる問題を回避
+					console.log("Debug: Init message sending commented out."); // ★追加★
 				};
 
 				ws_ref.current.onmessage = (event) => {
@@ -645,7 +632,12 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 	 * コンポーネントのアンマウント時に接続を閉じる
 	 */
 	useEffect(() => {
-		disconnect();
+		console.log("Debug: Cleanup useEffect started."); // ★追加★
+		return () => {
+			console.log("Debug: Cleanup useEffect cleanup started."); // ★追加★
+			disconnect();
+			console.log("Debug: Cleanup useEffect cleanup finished."); // ★追加★
+		};
 	}, [disconnect]);
 
 	/**
