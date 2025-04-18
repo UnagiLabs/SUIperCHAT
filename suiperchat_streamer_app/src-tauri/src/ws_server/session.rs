@@ -4,10 +4,10 @@
 
 use super::{client_info::ClientInfo, connection_manager::ConnectionManager};
 use crate::types::{
-    ClientMessage, MessageType, ServerResponse, CLIENT_TIMEOUT,
-    HEARTBEAT_INTERVAL,
+    ClientMessage, MessageType, ServerResponse, CLIENT_TIMEOUT, HEARTBEAT_INTERVAL,
 };
 use actix::prelude::*;
+use actix::Message;
 use actix_web::HttpRequest;
 use actix_web_actors::ws;
 use std::time::Instant;
@@ -166,9 +166,10 @@ impl WsSession {
 
         match json_result {
             Ok(json) => {
-                // メッセージをクライアントに送信
-                ctx.text(json);
-                // 将来的に: 他の接続されたクライアントにブロードキャスト
+                // 全クライアントにメッセージをブロードキャスト
+                if let Some(manager) = &self.connection_manager {
+                    manager.broadcast(&json);
+                }
             }
             Err(e) => {
                 eprintln!("メッセージのシリアライズに失敗: {}", e);
@@ -195,7 +196,6 @@ impl Actor for WsSession {
 
         // リクエストからクライアント情報を取得
         if let Some(req) = &self.req {
-            // 接続元のIPアドレスを取得
             if let Some(addr) = req.peer_addr() {
                 let client_info = ClientInfo::new(addr);
                 let client_id = client_info.id.clone();
@@ -206,7 +206,8 @@ impl Actor for WsSession {
 
                 // 接続マネージャーに追加
                 if let Some(manager) = &self.connection_manager {
-                    if manager.add_client(client_info.clone()) {
+                    // セッションアドレスを渡して接続登録
+                    if manager.add_client(client_info.clone(), ctx.address()) {
                         self.client_info = Some(client_info);
                     } else {
                         // 最大接続数に達している場合、切断
@@ -342,4 +343,20 @@ pub fn create_ws_session(req: HttpRequest) -> WsSession {
     WsSession::new()
         .with_connection_manager(manager)
         .with_request(req)
+}
+
+/// ## ブロードキャスト用メッセージ
+///
+/// 他セッションにテキストを送信するためのActixメッセージ
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct Broadcast(pub String);
+
+impl Handler<Broadcast> for WsSession {
+    type Result = ();
+
+    /// ブロードキャストメッセージを受け取り、WebSocketテキストとして送信します
+    fn handle(&mut self, msg: Broadcast, ctx: &mut Self::Context) {
+        ctx.text(msg.0);
+    }
 }

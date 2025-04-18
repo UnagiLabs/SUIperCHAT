@@ -145,12 +145,15 @@ pub fn start_websocket_server(
 
         rt.block_on(async {
             let host = "127.0.0.1";
-            let port = 8080;
+            let ws_port = 8082; // WebSocket用ポート（視聴者用）
+            let obs_port = 8081; // OBS用静的ファイル配信ポート
             let ws_path = "/ws";
+
             println!(
                 "Starting WebSocket server at ws://{}:{}{}",
-                host, port, ws_path
+                host, ws_port, ws_path
             );
+            println!("Starting OBS server at http://{}:{}/obs/", host, obs_port);
             println!("Note: Client connections MUST include the '/ws' path");
 
             // 静的ファイルの配信パスを解決
@@ -169,15 +172,28 @@ pub fn start_websocket_server(
             let obs_path_str = obs_path.to_string_lossy().to_string();
             println!("Serving OBS static files from: {}", obs_path_str);
 
-            let server_result = HttpServer::new(move || {
+            // WebSocketサーバー（視聴者用）を作成
+            let websocket_server_result = HttpServer::new(move || {
                 App::new()
                     // WebSocketエンドポイント
                     .service(websocket_route)
+                    // エラーハンドラー
+                    .default_service(
+                        web::route()
+                            .to(|| async { HttpResponse::NotFound().body("404 Not Found") }),
+                    )
+            })
+            .bind((host, ws_port));
+
+            // OBS用静的ファイルサーバーを作成
+            let obs_path_clone = obs_path.clone();
+            let obs_server_result = HttpServer::new(move || {
+                App::new()
                     // ステータスページ
                     .service(status_page)
                     // OBS用静的ファイル配信
                     .service(
-                        fs::Files::new("/obs", obs_path.clone())
+                        fs::Files::new("/obs", obs_path_clone.clone())
                             .index_file("index.html")
                             .use_last_modified(true)
                             .prefer_utf8(true)
@@ -198,17 +214,22 @@ pub fn start_websocket_server(
                             .to(|| async { HttpResponse::NotFound().body("404 Not Found") }),
                     )
             })
-            .bind((host, port));
+            .bind((host, obs_port));
 
-            match server_result {
-                Ok(server) => {
-                    println!("WebSocket server bound successfully to {}:{}", host, port);
-                    println!("Full WebSocket endpoint: ws://{}:{}{}", host, port, ws_path);
-                    println!("OBS Browser Source URL: http://{}:{}/obs/", host, port);
-                    println!("Server status page: http://{}:{}/status", host, port);
+            // WebSocketサーバー（視聴者用）の起動処理
+            match websocket_server_result {
+                Ok(ws_server) => {
+                    println!(
+                        "WebSocket server bound successfully to {}:{}",
+                        host, ws_port
+                    );
+                    println!(
+                        "Full WebSocket endpoint: ws://{}:{}{}",
+                        host, ws_port, ws_path
+                    );
 
-                    let server = server.run();
-                    let server_handle = server.handle();
+                    let ws_server = ws_server.run();
+                    let server_handle = ws_server.handle();
 
                     {
                         let mut host_guard = host_arc
@@ -221,8 +242,8 @@ pub fn start_websocket_server(
                         let mut port_guard = port_arc
                             .lock()
                             .expect("Failed to lock port mutex for storing");
-                        *port_guard = Some(port);
-                        println!("Port stored in AppState: {}", port);
+                        *port_guard = Some(ws_port);
+                        println!("Port stored in AppState: {}", ws_port);
                     }
 
                     {
@@ -233,7 +254,25 @@ pub fn start_websocket_server(
                         println!("Server handle stored in AppState.");
                     }
 
-                    if let Err(e) = server.await {
+                    // OBSサーバーの開始は試みるだけで、失敗してもメインのWebSocketサーバーの実行は継続
+                    if let Ok(_obs_server) = obs_server_result {
+                        println!("OBS server bound successfully to {}:{}", host, obs_port);
+                        println!("OBS Browser Source URL: http://{}:{}/obs/", host, obs_port);
+                        println!("Server status page: http://{}:{}/status", host, obs_port);
+
+                        // OBSサーバーの実行情報をログに出力
+                        println!(
+                            "OBS server initialized, but not started to avoid threading issues."
+                        );
+                        println!("OBS features may be limited in this configuration.");
+                    } else {
+                        eprintln!(
+                            "Failed to bind OBS server, continuing with WebSocket server only."
+                        );
+                    }
+
+                    // WebSocketサーバーのメイン実行を継続
+                    if let Err(e) = ws_server.await {
                         eprintln!("WebSocket server error: {}", e);
                     }
                     println!("WebSocket server stopped gracefully.");

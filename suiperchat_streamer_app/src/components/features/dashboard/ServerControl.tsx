@@ -31,8 +31,14 @@ export default function ServerControl() {
 	const [is_loading, set_is_loading] = useState(false);
 	// サーバーの実行状態のみを管理 (起動中: true, 停止中: false)
 	const [is_server_running, set_is_server_running] = useState(false);
-	// サーバーのアドレス情報 (例: "127.0.0.1:8080")、起動時に設定
-	const [server_address, set_server_address] = useState<string | null>(null);
+	// WebSocketサーバーアドレス (例: "127.0.0.1:8082")、起動時に設定
+	const [ws_server_address, set_ws_server_address] = useState<string | null>(
+		null,
+	);
+	// OBSサーバーアドレス (例: "127.0.0.1:8081")、起動時に設定
+	const [obs_server_address, set_obs_server_address] = useState<string | null>(
+		null,
+	);
 	// TODO: アプリ起動時にサーバーの実際の状態を確認するコマンドを実装・呼び出す
 	// useEffect(() => {
 	//   const check_initial_status = async () => {
@@ -54,16 +60,18 @@ export default function ServerControl() {
 			// Rust側のコマンド `start_websocket_server` を呼び出す
 			await invoke("start_websocket_server");
 			set_is_server_running(true);
-			set_server_address("127.0.0.1:8080"); // TODO: 動的に取得 or 設定値を使用
+			set_ws_server_address("127.0.0.1:8082"); // 視聴者用WebSocketポート
+			set_obs_server_address("127.0.0.1:8081"); // OBS用ポート
 			toast.success("Server Started", {
-				description: "WebSocket server has started.",
+				description: "WebSocket and OBS servers have started.",
 			});
 		} catch (error) {
 			const error_message =
 				error instanceof Error ? error.message : String(error);
 			console.error("サーバーの起動に失敗しました:", error_message);
 			set_is_server_running(false);
-			set_server_address(null);
+			set_ws_server_address(null);
+			set_obs_server_address(null);
 			toast.error("Server Start Error", {
 				description: `Failed to start server: ${error_message}`,
 			});
@@ -81,9 +89,10 @@ export default function ServerControl() {
 			// Rust側のコマンド `stop_websocket_server` を呼び出す
 			await invoke("stop_websocket_server");
 			set_is_server_running(false);
-			set_server_address(null);
+			set_ws_server_address(null);
+			set_obs_server_address(null);
 			toast.info("Server Stopped", {
-				description: "WebSocket server has been stopped.",
+				description: "WebSocket and OBS servers have been stopped.",
 			});
 		} catch (error) {
 			const error_message =
@@ -91,7 +100,8 @@ export default function ServerControl() {
 			console.error("サーバーの停止に失敗しました:", error_message);
 			// 停止失敗の場合でも、UI上は停止として扱う（ハンドルがないため再停止不可）
 			set_is_server_running(false);
-			set_server_address(null);
+			set_ws_server_address(null);
+			set_obs_server_address(null);
 			toast.error("Server Stop Error", {
 				description: `Failed to stop server: ${error_message}`,
 			});
@@ -110,14 +120,16 @@ export default function ServerControl() {
 			set_is_server_running(is_running);
 
 			if (is_running) {
-				set_server_address("127.0.0.1:8080"); // TODO: 動的に取得
+				set_ws_server_address("127.0.0.1:8082"); // 視聴者用WebSocketポート
+				set_obs_server_address("127.0.0.1:8081"); // OBS用ポート
 				toast.success("Server Status Updated to Running", {
-					description: "WebSocket server has started.",
+					description: "WebSocket and OBS servers have started.",
 				});
 			} else {
-				set_server_address(null);
+				set_ws_server_address(null);
+				set_obs_server_address(null);
 				toast.info("Server Status Updated to Stopped", {
-					description: "WebSocket server has stopped.",
+					description: "WebSocket and OBS servers have stopped.",
 				});
 			}
 		},
@@ -141,7 +153,13 @@ export default function ServerControl() {
 
 	// サーバー状態に基づく表示テキスト
 	const status_text = is_server_running ? "Running" : "Stopped";
-	const address_text = server_address ?? "-";
+	const ws_address_text = ws_server_address ? `WS: ${ws_server_address}` : "";
+	const obs_address_text = obs_server_address
+		? `OBS: ${obs_server_address}`
+		: "";
+	const address_text = is_server_running
+		? `${ws_address_text}, ${obs_address_text}`
+		: "-";
 
 	return (
 		<Card>

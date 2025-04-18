@@ -6,10 +6,21 @@ use super::client_info::ClientInfo;
 use crate::types::{
     decrement_connections, get_connections_count, increment_connections, ConnectionsInfo,
 };
+use crate::ws_server::session::Broadcast;
+use actix::prelude::*;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tauri::Emitter;
+use tauri::Emitter; // for Addr
+
+/// ## セッションエントリ
+///
+/// ClientInfo と対応する WebSocket セッションのアドレスを保持する構造体
+#[derive(Debug)]
+pub struct SessionEntry {
+    pub client_info: ClientInfo,
+    pub addr: Addr<crate::ws_server::session::WsSession>,
+}
 
 /// ## 接続管理
 ///
@@ -17,9 +28,9 @@ use tauri::Emitter;
 /// スレッド間で安全に共有するために、`Arc<Mutex<...>>`でラップされています。
 #[derive(Debug, Clone)]
 pub struct ConnectionManager {
-    /// 接続中のクライアント情報
-    /// キーはクライアントID、値はClientInfo
-    connections: Arc<Mutex<HashMap<String, ClientInfo>>>,
+    /// 接続中のセッション情報
+    /// キーはクライアントID、値はSessionEntry
+    connections: Arc<Mutex<HashMap<String, SessionEntry>>>,
     /// 最大接続数
     max_connections: Arc<Mutex<usize>>,
     /// Tauriアプリケーションハンドル（イベント発行用）
@@ -76,10 +87,15 @@ impl ConnectionManager {
     ///
     /// ### Arguments
     /// - `client_info`: 追加するクライアント情報
+    /// - `addr`: WebSocketセッションのアドレス
     ///
     /// ### Returns
     /// - `bool`: 追加に成功した場合はtrue、最大接続数に達していて追加できなかった場合はfalse
-    pub fn add_client(&self, client_info: ClientInfo) -> bool {
+    pub fn add_client(
+        &self,
+        client_info: ClientInfo,
+        addr: Addr<crate::ws_server::session::WsSession>,
+    ) -> bool {
         let max_conn = self.get_max_connections();
         let current_count = get_connections_count();
 
@@ -95,10 +111,14 @@ impl ConnectionManager {
         // 接続カウンターをインクリメント
         increment_connections();
 
-        // クライアント情報をマップに追加
+        // セッションエントリをマップに追加
         let client_id = client_info.id.clone();
+        let entry = SessionEntry {
+            client_info: client_info.clone(),
+            addr,
+        };
         let mut connections = self.connections.lock().unwrap();
-        connections.insert(client_id, client_info);
+        connections.insert(client_id, entry);
 
         // イベント発行
         self.emit_connections_updated();
@@ -142,7 +162,9 @@ impl ConnectionManager {
     /// - `Option<ClientInfo>`: クライアント情報（見つからない場合はNone）
     pub fn get_client(&self, client_id: &str) -> Option<ClientInfo> {
         let connections = self.connections.lock().unwrap();
-        connections.get(client_id).cloned()
+        connections
+            .get(client_id)
+            .map(|entry| entry.client_info.clone())
     }
 
     /// ## クライアント情報を更新
@@ -161,8 +183,8 @@ impl ConnectionManager {
     {
         let mut connections = self.connections.lock().unwrap();
 
-        if let Some(client_info) = connections.get_mut(client_id) {
-            updater(client_info);
+        if let Some(entry) = connections.get_mut(client_id) {
+            updater(&mut entry.client_info);
             true
         } else {
             false
@@ -175,7 +197,10 @@ impl ConnectionManager {
     /// - `Vec<ClientInfo>`: 全クライアント情報のベクター
     pub fn get_all_clients(&self) -> Vec<ClientInfo> {
         let connections = self.connections.lock().unwrap();
-        connections.values().cloned().collect()
+        connections
+            .values()
+            .map(|entry| entry.client_info.clone())
+            .collect()
     }
 
     /// ## 接続情報を取得
@@ -204,6 +229,17 @@ impl ConnectionManager {
             if let Err(e) = app_handle.emit("connections_updated", info) {
                 eprintln!("接続更新イベントの発行に失敗: {}", e);
             }
+        }
+    }
+
+    /// ## 全クライアントにメッセージをブロードキャスト
+    ///
+    /// 受信したメッセージをすべての接続中セッションに送信します。
+    pub fn broadcast(&self, message: &str) {
+        let connections = self.connections.lock().unwrap();
+        for entry in connections.values() {
+            // Broadcastメッセージを送信
+            entry.addr.do_send(Broadcast(message.to_string()));
         }
     }
 }
