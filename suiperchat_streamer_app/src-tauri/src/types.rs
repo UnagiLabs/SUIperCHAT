@@ -117,14 +117,16 @@ pub struct ChatMessage {
     /// メッセージタイプ (CHAT固定)
     #[serde(rename = "type")]
     pub message_type: MessageType,
+    /// メッセージID (クライアント生成UUID)
+    pub id: String,
     /// 表示名
     pub display_name: String,
     /// メッセージ内容
     #[serde(rename = "message")]
     pub content: String,
-    /// タイムスタンプ (オプション)
+    /// タイムスタンプ (Unixミリ秒, オプション)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub timestamp: Option<String>,
+    pub timestamp: Option<i64>,
 }
 
 /// ## スーパーチャットメッセージ構造体
@@ -135,6 +137,8 @@ pub struct SuperchatMessage {
     /// メッセージタイプ (SUPERCHAT固定)
     #[serde(rename = "type")]
     pub message_type: MessageType,
+    /// メッセージID (クライアント生成UUID)
+    pub id: String,
     /// 表示名
     pub display_name: String,
     /// メッセージ内容
@@ -142,9 +146,9 @@ pub struct SuperchatMessage {
     pub content: String,
     /// スーパーチャットデータ
     pub superchat: SuperchatData,
-    /// タイムスタンプ (オプション)
+    /// タイムスタンプ (Unixミリ秒, オプション)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub timestamp: Option<String>,
+    pub timestamp: Option<i64>,
 }
 
 /// ## クライアントメッセージ列挙型
@@ -184,9 +188,10 @@ mod tests {
         // テスト用のチャットメッセージを作成
         let chat_message = ChatMessage {
             message_type: MessageType::Chat,
+            id: "test-chat-id-123".to_string(), // IDを追加
             display_name: "テストユーザー".to_string(),
             content: "こんにちは、世界！".to_string(),
-            timestamp: Some("2023-04-01T12:00:00Z".to_string()),
+            timestamp: Some(1679400000000_i64), // 数値タイムスタンプに変更
         };
 
         // メッセージをJSONにシリアライズ
@@ -200,12 +205,10 @@ mod tests {
         match parsed {
             ClientMessage::Chat(parsed_chat) => {
                 assert_eq!(parsed_chat.message_type, MessageType::Chat);
+                assert_eq!(parsed_chat.id, "test-chat-id-123"); // IDのアサーション追加
                 assert_eq!(parsed_chat.display_name, "テストユーザー");
                 assert_eq!(parsed_chat.content, "こんにちは、世界！");
-                assert_eq!(
-                    parsed_chat.timestamp,
-                    Some("2023-04-01T12:00:00Z".to_string())
-                );
+                assert_eq!(parsed_chat.timestamp, Some(1679400000000_i64)); // timestampのアサーション変更
             }
             _ => panic!("チャットメッセージが正しくパースされませんでした"),
         }
@@ -224,10 +227,11 @@ mod tests {
         // テスト用のスーパーチャットメッセージを作成
         let superchat_message = SuperchatMessage {
             message_type: MessageType::Superchat,
+            id: "test-superchat-id-456".to_string(), // IDを追加
             display_name: "スパチャユーザー".to_string(),
             content: "大応援してます！".to_string(),
             superchat: superchat_data,
-            timestamp: Some("2023-04-01T12:30:00Z".to_string()),
+            timestamp: Some(1679401800000_i64), // 数値タイムスタンプに変更
         };
 
         // メッセージをJSONにシリアライズ
@@ -241,6 +245,7 @@ mod tests {
         match parsed {
             ClientMessage::Superchat(parsed_superchat) => {
                 assert_eq!(parsed_superchat.message_type, MessageType::Superchat);
+                assert_eq!(parsed_superchat.id, "test-superchat-id-456"); // IDのアサーション追加
                 assert_eq!(parsed_superchat.display_name, "スパチャユーザー");
                 assert_eq!(parsed_superchat.content, "大応援してます！");
                 assert_eq!(parsed_superchat.superchat.amount, 10.0);
@@ -249,10 +254,7 @@ mod tests {
                     parsed_superchat.superchat.wallet_address,
                     "0xabcdef1234567890"
                 );
-                assert_eq!(
-                    parsed_superchat.timestamp,
-                    Some("2023-04-01T12:30:00Z".to_string())
-                );
+                assert_eq!(parsed_superchat.timestamp, Some(1679401800000_i64)); // timestampのアサーション変更
             }
             _ => panic!("スーパーチャットメッセージが正しくパースされませんでした"),
         }
@@ -264,19 +266,23 @@ mod tests {
         // フロントエンドから送信される可能性のあるJSON形式
         let frontend_chat_json = r#"{
             "type": "chat",
+            "id": "frontend-chat-uuid",
             "display_name": "WebユーザーA",
-            "message": "こんにちは、配信見てます！"
+            "message": "こんにちは、配信見てます！",
+            "timestamp": 1700000000000
         }"#;
 
         let frontend_superchat_json = r#"{
             "type": "superchat",
+            "id": "frontend-superchat-uuid",
             "display_name": "WebユーザーB",
             "message": "頑張ってください！",
             "superchat": {
                 "amount": 5.0,
                 "tx_hash": "0x9876543210fedcba",
                 "wallet_address": "0xfedcba9876543210"
-            }
+            },
+            "timestamp": 1700000050000
         }"#;
 
         // 通常チャットメッセージのパース
@@ -286,8 +292,10 @@ mod tests {
         match parsed_chat {
             ClientMessage::Chat(chat) => {
                 assert_eq!(chat.message_type, MessageType::Chat);
+                assert_eq!(chat.id, "frontend-chat-uuid");
                 assert_eq!(chat.display_name, "WebユーザーA");
                 assert_eq!(chat.content, "こんにちは、配信見てます！");
+                assert_eq!(chat.timestamp, Some(1700000000000));
             }
             _ => panic!("チャットメッセージが正しくパースされませんでした"),
         }
@@ -299,11 +307,13 @@ mod tests {
         match parsed_superchat {
             ClientMessage::Superchat(superchat) => {
                 assert_eq!(superchat.message_type, MessageType::Superchat);
+                assert_eq!(superchat.id, "frontend-superchat-uuid");
                 assert_eq!(superchat.display_name, "WebユーザーB");
                 assert_eq!(superchat.content, "頑張ってください！");
                 assert_eq!(superchat.superchat.amount, 5.0);
                 assert_eq!(superchat.superchat.tx_hash, "0x9876543210fedcba");
                 assert_eq!(superchat.superchat.wallet_address, "0xfedcba9876543210");
+                assert_eq!(superchat.timestamp, Some(1700000050000));
             }
             _ => panic!("スーパーチャットメッセージが正しくパースされませんでした"),
         }
