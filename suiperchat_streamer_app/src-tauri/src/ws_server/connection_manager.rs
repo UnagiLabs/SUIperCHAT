@@ -154,19 +154,22 @@ impl ConnectionManager {
     /// ### Returns
     /// - `bool`: 削除に成功した場合はtrue、指定されたIDのクライアントが見つからない場合はfalse
     pub fn remove_client(&self, client_id: &str) -> bool {
-        let mut connections = self.connections.lock().unwrap();
-
-        if connections.remove(client_id).is_some() {
-            // 接続カウンターをデクリメント
-            decrement_connections();
-
-            // イベント発行
-            self.emit_connections_updated();
-
-            true
-        } else {
-            false
-        }
+    	let removed;
+    	// --- Lock scope starts ---
+    	{
+    		let mut connections = self.connections.lock().unwrap();
+    		removed = connections.remove(client_id).is_some();
+    	} // --- Lock scope ends ---
+   
+    	if removed {
+    		// 接続カウンターをデクリメント (ロック解放後)
+    		decrement_connections();
+    		// イベント発行 (ロック解放後)
+    		self.emit_connections_updated();
+    		true
+    	} else {
+    		false
+    	}
     }
 
     /// ## クライアント情報を取得
