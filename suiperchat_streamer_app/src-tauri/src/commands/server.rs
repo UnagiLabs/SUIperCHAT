@@ -5,10 +5,11 @@
 use crate::state::AppState;
 use crate::ws_server::connection_manager::global::set_app_handle;
 use actix_files as fs;
-use actix_web::{get, web, App, Error, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{get, web, App, Error, HttpRequest, HttpResponse, HttpServer}; // ServerHandle を actix_web::dev から use
 use actix_web_actors::ws;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio; // tokioを追加
 use tauri::{command, Emitter, State};
 use tokio::runtime::Runtime;
 
@@ -216,21 +217,33 @@ pub fn start_websocket_server(
             })
             .bind((host, obs_port));
 
-            // WebSocketサーバー（視聴者用）の起動処理
-            match websocket_server_result {
-                Ok(ws_server) => {
+            // WebSocketサーバーとOBSサーバーのバインド結果を評価
+            match (websocket_server_result, obs_server_result) {
+                (Ok(ws_server), Ok(obs_server)) => {
+                    // 両方のサーバーが正常にバインドされた場合
+                    println!("Both WebSocket and OBS servers bound successfully.");
                     println!(
-                        "WebSocket server bound successfully to {}:{}",
-                        host, ws_port
-                    );
-                    println!(
-                        "Full WebSocket endpoint: ws://{}:{}{}",
+                        "WebSocket server listening on ws://{}:{}{}",
                         host, ws_port, ws_path
                     );
+                    println!(
+                        "OBS server listening on http://{}:{}/obs/",
+                        host, obs_port
+                    );
 
-                    let ws_server = ws_server.run();
-                    let server_handle = ws_server.handle();
+                    // WebSocketサーバーの実行インスタンス (Server型) を取得
+                    let ws_server_runner = ws_server.run();
+                    // ハンドルは Server インスタンスから取得
+                    let server_handle = ws_server_runner.handle(); // ここでハンドルを取得
 
+                    // AppStateにハンドルなどを保存
+                    {
+                        let mut handle_guard = server_handle_arc
+                            .lock()
+                            .expect("Failed to lock server handle mutex for storing");
+                        *handle_guard = Some(server_handle); // 取得したハンドルを保存 (clone不要のはず)
+                        println!("WebSocket server handle stored in AppState.");
+                    }
                     {
                         let mut host_guard = host_arc
                             .lock()
@@ -242,43 +255,42 @@ pub fn start_websocket_server(
                         let mut port_guard = port_arc
                             .lock()
                             .expect("Failed to lock port mutex for storing");
-                        *port_guard = Some(ws_port);
-                        println!("Port stored in AppState: {}", ws_port);
+                        *port_guard = Some(ws_port); // WebSocketのポートを保存
+                        println!("WebSocket Port stored in AppState: {}", ws_port);
                     }
 
-                    {
-                        let mut handle_guard = server_handle_arc
-                            .lock()
-                            .expect("Failed to lock server handle mutex for storing");
-                        *handle_guard = Some(server_handle);
-                        println!("Server handle stored in AppState.");
-                    }
+                    // OBSサーバーの実行インスタンスを取得
+                    let obs_server_runner = obs_server.run();
 
-                    // OBSサーバーの開始は試みるだけで、失敗してもメインのWebSocketサーバーの実行は継続
-                    if let Ok(_obs_server) = obs_server_result {
-                        println!("OBS server bound successfully to {}:{}", host, obs_port);
-                        println!("OBS Browser Source URL: http://{}:{}/obs/", host, obs_port);
-                        println!("Server status page: http://{}:{}/status", host, obs_port);
+                    // 両方のサーバーを並行して実行するためのFutureを取得
+                    let ws_server_future = ws_server_runner; // Server は Future を実装
+                    let obs_server_future = obs_server_runner; // Server は Future を実装
 
-                        // OBSサーバーの実行情報をログに出力
-                        println!(
-                            "OBS server initialized, but not started to avoid threading issues."
-                        );
-                        println!("OBS features may be limited in this configuration.");
+                    println!("Starting both servers concurrently using tokio::try_join!...");
+                    // try_join! で両方のサーバーを実行し、どちらかがエラーを返すか両方が完了するまで待機
+                    if let Err(e) = tokio::try_join!(ws_server_future, obs_server_future) {
+                        eprintln!("Server execution error in try_join!: {}", e);
                     } else {
-                        eprintln!(
-                            "Failed to bind OBS server, continuing with WebSocket server only."
-                        );
+                        println!("Both servers joined successfully and stopped gracefully.");
                     }
-
-                    // WebSocketサーバーのメイン実行を継続
-                    if let Err(e) = ws_server.await {
-                        eprintln!("WebSocket server error: {}", e);
-                    }
-                    println!("WebSocket server stopped gracefully.");
                 }
-                Err(e) => {
-                    eprintln!("Failed to bind WebSocket server: {}", e);
+                (Ok(_ws_server_ok), Err(e_obs)) => {
+                    // OBSサーバーのバインドに失敗した場合
+                    eprintln!("Failed to bind OBS server: {}", e_obs);
+                    eprintln!("WebSocket server bound successfully, but will not start because OBS server failed to bind.");
+                    // ここでWebSocketサーバーのみを起動する選択肢も検討可能ですが、今回は両方起動しない方針とします。
+                }
+                (Err(e_ws), Ok(_obs_server_ok)) => {
+                    // WebSocketサーバーのバインドに失敗した場合
+                    eprintln!("Failed to bind WebSocket server: {}", e_ws);
+                    eprintln!("OBS server bound successfully, but will not start because WebSocket server failed to bind.");
+                    // ここでOBSサーバーのみを起動する選択肢も検討可能ですが、今回は両方起動しない方針とします。
+                }
+                (Err(e_ws), Err(e_obs)) => {
+                    // 両方のサーバーのバインドに失敗した場合
+                    eprintln!("Failed to bind WebSocket server: {}", e_ws);
+                    eprintln!("Failed to bind OBS server: {}", e_obs);
+                    eprintln!("Neither server will start.");
                 }
             }
 
