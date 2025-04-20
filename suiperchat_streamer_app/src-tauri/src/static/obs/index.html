@@ -4,17 +4,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>SUIperCHAT OBS Display</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=1.0.1">
+    <style>
+        body {
+            background-color: rgba(0, 0, 0, 0.1);
+            /* 背景に薄い色をつけて表示確認 */
+            color: #333;
+            font-family: sans-serif;
+        }
+
+        .debug-info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            z-index: 1000;
+        }
+    </style>
 </head>
 
 <body>
+    <div class="debug-info">
+        <h3>SUIperCHAT OBS Display v1.0.1</h3>
+        <p>このメッセージが見えていれば、ページは正しく読み込まれています</p>
+        <p>WebSocket接続ステータス: <span id="ws-status">接続試行中...</span></p>
+        <p>最終更新: <span id="timestamp"></span></p>
+        <button onclick="location.reload(true)">強制再読み込み</button>
+    </div>
+
     <div class="container">
         <div id="superchat-container" class="superchat-container">
             <!-- スーパーチャットメッセージはここに動的に追加されます -->
         </div>
     </div>
-    <script src="script.js"></script>
+    <script>
+        // ページの読み込みステータスを表示
+        document.getElementById('timestamp').textContent = new Date().toLocaleString();
+    </script>
+    <script src="script.js?v=1.0.1"></script>
 </body>
 
 </html>

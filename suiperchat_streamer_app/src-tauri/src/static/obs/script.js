@@ -1,5 +1,5 @@
 /**
- * SUIperCHAT OBS表示用JavaScriptファイル
+ * SUIperCHAT OBS表示用JavaScriptファイル (v1.0.1)
  * 
  * WebSocketでスーパーチャットメッセージを受信し、OBS画面に表示する機能を実装します。
  * URLパラメータからWebSocketのアドレスを取得し、自動的に接続します。
@@ -11,10 +11,11 @@ let reconnectTimeout = null;
 const reconnectInterval = 5000; // 再接続間隔（ミリ秒）
 const maxMessages = 5; // 画面に表示する最大メッセージ数
 const messageDisplayTime = 30000; // メッセージ表示時間（ミリ秒）
+const WS_PORT = 8082; // WebSocketサーバーのポート番号（固定）
 
 // DOMロード時の初期化処理
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('SUIperCHAT OBS Display initialized');
+    console.log('SUIperCHAT OBS Display initialized v1.0.1');
     initializeWebSocket();
 });
 
@@ -26,14 +27,20 @@ function initializeWebSocket() {
     // (現在は未使用だが、将来的にカスタムWebSocketアドレスを指定できるようにするため保持)
     // const urlParams = new URLSearchParams(window.location.search);
     
-    // サーバーがNGINXやApacheなどのプロキシを使用している場合、
-    // ここで同一オリジンのWebSocketサーバーに接続するか、
-    // URLパラメータから取得したカスタムアドレスに接続します
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = window.location.host;
+    // 注意: OBSサーバーはポート8081で動いていますが、
+    // WebSocketサーバーは別のポート8082で動いています
+    // そのため、ハードコードされたアドレスを使用します
     
-    // バックグラウンドの場合は直接WebSocketエンドポイントを使用
-    const wsUrl = `${wsProtocol}//${wsHost}/ws`;
+    // どのポートを使用しているかを明確に表示
+    console.log(`Using WebSocket port: ${WS_PORT}`);
+    
+    // 修正前: 現在のホストのWebSocketエンドポイントを使用
+    // const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    // const wsHost = window.location.host;
+    // const wsUrl = `${wsProtocol}//${wsHost}/ws`;
+    
+    // 修正後: 正しいWebSocketサーバーのアドレスを直接指定
+    const wsUrl = `ws://127.0.0.1:${WS_PORT}/ws`;
     
     console.log(`Connecting to WebSocket server: ${wsUrl}`);
     
@@ -56,6 +63,8 @@ function setupWebSocketEventHandlers() {
     // 接続が開いたとき
     socket.addEventListener('open', () => {
         console.log('WebSocket connection established');
+        // WebSocket接続状態を更新
+        updateWsStatus('接続済み', 'green');
         // 再接続タイマーがある場合はクリア
         if (reconnectTimeout) {
             clearTimeout(reconnectTimeout);
@@ -68,6 +77,9 @@ function setupWebSocketEventHandlers() {
         console.log('WebSocket message received:', event.data);
         try {
             const data = JSON.parse(event.data);
+            
+            // WebSocket接続状態を更新
+            updateWsStatus('メッセージ受信中', 'green');
             
             // メッセージの種類に応じた処理
             if (data.message_type === 'superchat') {
@@ -85,20 +97,40 @@ function setupWebSocketEventHandlers() {
     // エラーが発生したとき
     socket.addEventListener('error', (event) => {
         console.error('WebSocket error:', event);
+        // WebSocket接続状態を更新
+        updateWsStatus('エラー発生', 'red');
     });
 
     // 接続が閉じたとき
     socket.addEventListener('close', (event) => {
         console.log(`WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}`);
+        // WebSocket接続状態を更新
+        updateWsStatus('切断', 'red');
         
         // 自動再接続
         if (!reconnectTimeout) {
             reconnectTimeout = setTimeout(() => {
                 console.log('Attempting to reconnect...');
+                // WebSocket接続状態を更新
+                updateWsStatus('再接続試行中...', 'orange');
                 initializeWebSocket();
             }, reconnectInterval);
         }
     });
+}
+
+/**
+ * WebSocket接続状態を更新する
+ * 
+ * @param {string} status - 接続状態
+ * @param {string} color - 表示色
+ */
+function updateWsStatus(status, color) {
+    const statusElement = document.getElementById('ws-status');
+    if (statusElement) {
+        statusElement.textContent = status;
+        statusElement.style.color = color;
+    }
 }
 
 /**
