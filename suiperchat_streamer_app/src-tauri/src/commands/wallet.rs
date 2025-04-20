@@ -13,6 +13,8 @@ use tauri::{command, Emitter, State};
 pub struct StreamerInfo {
     /// WebSocketサーバーの完全なURL (例: "ws://127.0.0.1:8080")
     ws_url: String,
+    /// OBSサーバーの完全なURL (例: "http://127.0.0.1:8081/obs/")
+    obs_url: String,
     /// 配信者のSUIウォレットアドレス
     wallet_address: String,
 }
@@ -77,7 +79,7 @@ pub fn set_wallet_address(
 /// ## 配信者情報を取得する Tauri コマンド
 ///
 /// 現在設定されている配信者のウォレットアドレスと、
-/// 稼働中の（またはデフォルトの）WebSocketサーバーURLを取得して返します。
+/// 稼働中の（またはデフォルトの）WebSocketサーバーURLとOBSサーバーURLを取得して返します。
 ///
 /// ### Arguments
 /// - `app_state`: Tauri の管理するアプリケーション状態 (`State<AppState>`)
@@ -115,12 +117,25 @@ pub fn get_streamer_info(app_state: State<'_, AppState>) -> Result<StreamerInfo,
         "WebSocket server port is not available (server not running?).".to_string()
     })?;
 
+    // --- OBS URLをAppStateから構築 ---
+    let obs_port_guard = app_state
+        .obs_port
+        .lock()
+        .map_err(|_| "Failed to lock obs_port mutex".to_string())?;
+    let obs_port = obs_port_guard
+        .ok_or_else(|| "OBS server port is not available (server not running?).".to_string())?;
+
     // WebSocket URL を構築
-    let ws_url = format!("ws://{}:{}", host, port);
+    let ws_url = format!("ws://{}:{}/ws", host, port);
     println!("Constructed ws_url from AppState: {}", ws_url);
+
+    // OBS URL を構築
+    let obs_url = format!("http://{}:{}/obs/", host, obs_port);
+    println!("Constructed obs_url from AppState: {}", obs_url);
 
     Ok(StreamerInfo {
         ws_url,
+        obs_url,
         wallet_address,
     })
 }

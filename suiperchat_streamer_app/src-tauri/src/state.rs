@@ -11,7 +11,10 @@ pub struct AppState {
     ///
     /// サーバーが起動している場合は `Some(handle)`、停止している場合は `None`。
     /// `Arc<Mutex<...>>` でスレッドセーフな共有と変更を可能にします。
-    pub server_handle: Arc<Mutex<Option<ServerHandle>>>,
+    /// WebSocket サーバーと OBS サーバーのハンドル (`(ws_handle, obs_handle)`)
+    ///
+    /// サーバーが起動している場合は `Some((ws, obs))`、停止している場合は `None`。
+    pub server_handle: Arc<Mutex<Option<(ServerHandle, ServerHandle)>>>,
     /// Tokio ランタイムハンドル (`tokio::runtime::Handle`)
     ///
     /// WebSocket サーバースレッドで使用される Tokio ランタイムへのハンドル。
@@ -22,6 +25,8 @@ pub struct AppState {
     pub host: Arc<Mutex<Option<String>>>,
     /// WebSocketサーバーがリッスンしているポート番号
     pub port: Arc<Mutex<Option<u16>>>,
+    /// OBSサーバーがリッスンしているポート番号
+    pub obs_port: Arc<Mutex<Option<u16>>>,
 }
 
 impl AppState {
@@ -36,6 +41,7 @@ impl AppState {
             wallet_address: Arc::new(Mutex::new(None)),
             host: Arc::new(Mutex::new(None)),
             port: Arc::new(Mutex::new(None)),
+            obs_port: Arc::new(Mutex::new(None)),
         }
     }
 }

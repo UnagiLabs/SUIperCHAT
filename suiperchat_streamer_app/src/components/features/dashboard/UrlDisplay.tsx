@@ -19,7 +19,17 @@ import { toast } from "sonner";
 // --- 型定義 ---
 interface StreamerInfo {
 	ws_url: string;
+	obs_url: string;
 	wallet_address: string;
+}
+
+/**
+ * バックエンドから送信されるServerStatusイベントのペイロード型
+ */
+interface ServerStatusPayload {
+	is_running: boolean;
+	obs_url?: string | null;
+	ws_url?: string | null;
 }
 
 // --- 定数 ---
@@ -42,6 +52,9 @@ export default function UrlDisplay() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [needsConfiguration, setNeedsConfiguration] = useState(false);
+	// OBS URLとWS URLを状態として追加
+	const [obsUrl, setObsUrl] = useState("");
+	const [wsUrl, setWsUrl] = useState("");
 
 	/**
 	 * バックエンドから配信者情報を取得する関数
@@ -100,16 +113,22 @@ export default function UrlDisplay() {
 		});
 
 		// --- サーバー状態更新イベントをリッスン --- ★★★
-		const unlisten_server = listen<boolean>(
+		const unlisten_server = listen<ServerStatusPayload>(
 			"server_status_updated",
 			(event) => {
 				console.log("Received server_status_updated event:", event);
-				const is_running = event.payload;
+				const { is_running, obs_url, ws_url } = event.payload;
 
 				if (is_running) {
 					toast.info("Server has started. Refreshing URL information.");
+					// バックエンドから直接URLを設定
+					if (obs_url) setObsUrl(obs_url);
+					if (ws_url) setWsUrl(ws_url);
 				} else {
 					toast.info("Server has stopped. Clearing URL information.");
+					// サーバー停止時はURLをクリア
+					setObsUrl("");
+					setWsUrl("");
 				}
 
 				// サーバー状態に関わらず情報を更新（起動中なら新情報取得、停止中ならクリア）
@@ -125,30 +144,43 @@ export default function UrlDisplay() {
 	}, [fetch_streamer_info]);
 
 	// --- URL生成ロジック ---
-	let obs_url = "";
+	let obs_url = obsUrl; // 状態から直接取得（server_status_updatedイベントから）
 	let viewer_url = "";
 
 	if (streamerInfo) {
-		const { ws_url, wallet_address } = streamerInfo;
+		const {
+			ws_url,
+			obs_url: streamerInfoObsUrl,
+			wallet_address,
+		} = streamerInfo;
 		try {
-			const encodedWsUrl = encodeURIComponent(ws_url);
 			const encodedWalletAddress = encodeURIComponent(wallet_address);
 
-			// OBS URL - WebSocketサーバーURLからHTTP URLを生成
-			if (ws_url) {
-				// WebSocketのURLからHTTPのURLに変換
-				// 例: ws://127.0.0.1:8080/ws → http://127.0.0.1:8080/obs/
-				const wsUrlObj = new URL(ws_url);
-				const httpProtocol = wsUrlObj.protocol === "wss:" ? "https:" : "http:";
-				const obsBaseUrl = `${httpProtocol}//${wsUrlObj.host}/obs/`;
-				obs_url = obsBaseUrl;
-			} else {
-				// フォールバック（古い方式）
-				obs_url = `http://localhost:3001/overlay?walletAddress=${encodedWalletAddress}`;
+			// OBS URL - バックエンドから受け取ったものを優先使用
+			if (!obs_url) {
+				// server_status_updatedイベントからOBS URLが設定されていない場合
+				if (streamerInfoObsUrl) {
+					// get_streamer_infoから返されたOBS URLを使用
+					obs_url = streamerInfoObsUrl;
+				} else if (ws_url) {
+					// どちらも設定されていない場合は、WebSocketのURLからOBS URLを生成（旧ロジック）
+					// この部分は、古いバージョンとの互換性のために残しています
+					const wsUrlObj = new URL(ws_url);
+					const httpProtocol =
+						wsUrlObj.protocol === "wss:" ? "https:" : "http:";
+					const host = wsUrlObj.hostname;
+					// 動的にポート番号を取得するためのロジックを実装（現在は使用されない）
+					const obsPort = "8081"; // OBSサーバーは常に8081ポートで起動する
+					obs_url = `${httpProtocol}//${host}:${obsPort}/obs/`;
+				} else {
+					// フォールバック（古い方式）
+					obs_url = `http://localhost:3001/overlay?walletAddress=${encodedWalletAddress}`;
+				}
 			}
 
-			// 視聴者 URL
-			viewer_url = `${VIEWER_APP_BASE_URL}?wsUrl=${encodedWsUrl}&streamerAddress=${encodedWalletAddress}`;
+			// 視聴者 URL - こちらもwsUrlを状態から直接取得可能
+			const wsUrlToUse = wsUrl || ws_url;
+			viewer_url = `${VIEWER_APP_BASE_URL}?wsUrl=${encodeURIComponent(wsUrlToUse)}&streamerAddress=${encodedWalletAddress}`;
 		} catch (encodeError) {
 			console.error("Failed to encode URL parameters:", encodeError);
 			setError("Failed to encode URL parameters.");

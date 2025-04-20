@@ -27,18 +27,20 @@ import { toast } from "sonner";
 /**
  * サーバー制御コンポーネント
  */
+/**
+ * バックエンドから送信されるServerStatusイベントのペイロード型
+ */
+interface ServerStatusPayload {
+	is_running: boolean;
+	obs_url?: string | null; // バックエンドではOption<String>なのでnullの可能性あり
+	ws_url?: string | null; // バックエンドではOption<String>なのでnullの可能性あり
+}
+
 export default function ServerControl() {
 	const [is_loading, set_is_loading] = useState(false);
-	// サーバーの実行状態のみを管理 (起動中: true, 停止中: false)
 	const [is_server_running, set_is_server_running] = useState(false);
-	// WebSocketサーバーアドレス (例: "127.0.0.1:8082")、起動時に設定
-	const [ws_server_address, set_ws_server_address] = useState<string | null>(
-		null,
-	);
-	// OBSサーバーアドレス (例: "127.0.0.1:8081")、起動時に設定
-	const [obs_server_address, set_obs_server_address] = useState<string | null>(
-		null,
-	);
+	const [ws_server_address, set_ws_server_address] = useState<string | null>(null);
+	const [obs_server_address, set_obs_server_address] = useState<string | null>(null);
 	// TODO: アプリ起動時にサーバーの実際の状態を確認するコマンドを実装・呼び出す
 	// useEffect(() => {
 	//   const check_initial_status = async () => {
@@ -58,22 +60,18 @@ export default function ServerControl() {
 		set_is_loading(true);
 		try {
 			// Rust側のコマンド `start_websocket_server` を呼び出す
+			// 状態更新はイベントリスナーに任せる
 			await invoke("start_websocket_server");
-			set_is_server_running(true);
-			set_ws_server_address("127.0.0.1:8082"); // 視聴者用WebSocketポート
-			set_obs_server_address("127.0.0.1:8081"); // OBS用ポート
-			toast.success("Server Started", {
-				description: "WebSocket and OBS servers have started.",
-			});
+			// ここでの状態更新は削除
+			// toast通知もイベントリスナー側で行う
 		} catch (error) {
 			const error_message =
 				error instanceof Error ? error.message : String(error);
-			console.error("サーバーの起動に失敗しました:", error_message);
-			set_is_server_running(false);
-			set_ws_server_address(null);
-			set_obs_server_address(null);
-			toast.error("Server Start Error", {
-				description: `Failed to start server: ${error_message}`,
+			console.error("サーバーの起動コマンド呼び出しに失敗しました:", error_message);
+			// 状態はイベント経由で更新されるはずだが、念のためローディング解除
+			// toast通知もイベントリスナー側（またはエラーケースのイベント）で行う
+			toast.error("Server Start Command Error", {
+				description: `Failed to invoke start command: ${error_message}`,
 			});
 		} finally {
 			set_is_loading(false);
@@ -87,23 +85,18 @@ export default function ServerControl() {
 		set_is_loading(true);
 		try {
 			// Rust側のコマンド `stop_websocket_server` を呼び出す
+			// 状態更新はイベントリスナーに任せる
 			await invoke("stop_websocket_server");
-			set_is_server_running(false);
-			set_ws_server_address(null);
-			set_obs_server_address(null);
-			toast.info("Server Stopped", {
-				description: "WebSocket and OBS servers have been stopped.",
-			});
+			// ここでの状態更新は削除
+			// toast通知もイベントリスナー側で行う
 		} catch (error) {
 			const error_message =
 				error instanceof Error ? error.message : String(error);
-			console.error("サーバーの停止に失敗しました:", error_message);
-			// 停止失敗の場合でも、UI上は停止として扱う（ハンドルがないため再停止不可）
-			set_is_server_running(false);
-			set_ws_server_address(null);
-			set_obs_server_address(null);
-			toast.error("Server Stop Error", {
-				description: `Failed to stop server: ${error_message}`,
+			console.error("サーバーの停止コマンド呼び出しに失敗しました:", error_message);
+			// 状態はイベント経由で更新されるはずだが、念のためローディング解除
+			// toast通知もイベントリスナー側で行う
+			toast.error("Server Stop Command Error", {
+				description: `Failed to invoke stop command: ${error_message}`,
 			});
 		} finally {
 			set_is_loading(false);
@@ -113,37 +106,38 @@ export default function ServerControl() {
 	/**
 	 * バックエンドからのサーバーステータス更新イベントを処理する関数
 	 */
-	const handle_server_status_event = useCallback(
-		(event: { payload: boolean }) => {
-			console.log("Received server_status_updated event:", event);
-			const is_running = event.payload;
-			set_is_server_running(is_running);
+	const handle_server_status_event = useCallback((event: {
+		payload: ServerStatusPayload;
+	}) => {
+		console.log("Received server_status_updated event:", event.payload);
+		const { is_running, obs_url, ws_url } = event.payload;
 
-			if (is_running) {
-				set_ws_server_address("127.0.0.1:8082"); // 視聴者用WebSocketポート
-				set_obs_server_address("127.0.0.1:8081"); // OBS用ポート
-				toast.success("Server Status Updated to Running", {
-					description: "WebSocket and OBS servers have started.",
-				});
-			} else {
-				set_ws_server_address(null);
-				set_obs_server_address(null);
-				toast.info("Server Status Updated to Stopped", {
-					description: "WebSocket and OBS servers have stopped.",
-				});
-			}
-		},
-		[],
-	);
+		set_is_server_running(is_running);
+		set_obs_server_address(obs_url ?? null); // nullish coalescing で null にする
+		set_ws_server_address(ws_url ?? null); // nullish coalescing で null にする
+
+		if (is_running) {
+			toast.success("Server Status: Running", {
+				description: `OBS: ${obs_url || "N/A"}, WS: ${ws_url || "N/A"}`,
+			});
+		} else {
+			toast.info("Server Status: Stopped", {
+				description: "WebSocket and OBS servers have stopped.",
+			});
+		}
+	}, []);
 
 	/**
 	 * コンポーネントマウント時にイベントリスナーを登録
 	 */
 	useEffect(() => {
-		// サーバーステータス更新イベントをリッスン
-		const unlisten = listen<boolean>("server_status_updated", (event) => {
-			handle_server_status_event(event);
-		});
+		// サーバーステータス更新イベントをリッスン (型パラメータを修正)
+		const unlisten = listen<ServerStatusPayload>(
+			"server_status_updated",
+			(event) => {
+				handle_server_status_event(event);
+			},
+		);
 
 		// アンマウント時にリスナーをクリーンアップ
 		return () => {
@@ -151,14 +145,12 @@ export default function ServerControl() {
 		};
 	}, [handle_server_status_event]);
 
-	// サーバー状態に基づく表示テキスト
+	// サーバー状態に基づく表示テキスト (動的URLを表示)
 	const status_text = is_server_running ? "Running" : "Stopped";
-	const ws_address_text = ws_server_address ? `WS: ${ws_server_address}` : "";
-	const obs_address_text = obs_server_address
-		? `OBS: ${obs_server_address}`
-		: "";
+	const ws_display_text = ws_server_address || "N/A";
+	const obs_display_text = obs_server_address || "N/A";
 	const address_text = is_server_running
-		? `${ws_address_text}, ${obs_address_text}`
+		? `WS: ${ws_display_text}, OBS: ${obs_display_text}`
 		: "-";
 
 	return (
