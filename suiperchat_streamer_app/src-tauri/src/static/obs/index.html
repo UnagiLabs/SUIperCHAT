@@ -8,48 +8,97 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>SUIperCHAT OBS Display</title>
-    <link rel="stylesheet" href="styles.css?v=1.0.1">
+    <link rel="stylesheet" href="styles.css?v=1.0.4">
     <style>
         body {
-            background-color: rgba(0, 0, 0, 0.1);
-            /* 背景に薄い色をつけて表示確認 */
-            color: #333;
+            background-color: transparent;
+            color: #ffffff;
             font-family: sans-serif;
+            overflow: hidden;
         }
 
-        .debug-info {
+        /* インジケータのスタイル */
+        .connection-indicator {
             position: fixed;
-            top: 10px;
-            left: 10px;
-            background: rgba(255, 255, 255, 0.8);
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-            font-size: 14px;
+            right: 10px;
+            bottom: 10px;
+            font-size: 12px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
             z-index: 1000;
+            opacity: 0.7;
+            transition: opacity 0.3s;
+        }
+
+        .connection-indicator:hover {
+            opacity: 1;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+            background-color: gray;
+            transition: transform 0.2s ease, opacity 0.2s ease;
+        }
+
+        .status-dot.connected {
+            background-color: #4CAF50;
+            /* より鮮やかな緑 */
+        }
+
+        .status-dot.connecting {
+            background-color: orange;
+            animation: blink 1s infinite;
+        }
+
+        .status-dot.error {
+            background-color: #F44336;
+            /* より鮮やかな赤 */
+        }
+
+        @keyframes blink {
+            0% {
+                opacity: 0.3;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.3;
+            }
+        }
+
+        /* コンテナスタイル調整 */
+        .container {
+            width: 100%;
+            height: 100vh;
+            overflow-y: auto;
+            padding: 10px;
         }
     </style>
 </head>
 
 <body>
-    <div class="debug-info">
-        <h3>SUIperCHAT OBS Display v1.0.1</h3>
-        <p>このメッセージが見えていれば、ページは正しく読み込まれています</p>
-        <p>WebSocket接続ステータス: <span id="ws-status">接続試行中...</span></p>
-        <p>最終更新: <span id="timestamp"></span></p>
-        <button onclick="location.reload(true)">強制再読み込み</button>
+    <!-- 小さなインジケータ -->
+    <div class="connection-indicator">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="connection-status">接続中...</span>
     </div>
 
     <div class="container">
         <div id="superchat-container" class="superchat-container">
-            <!-- スーパーチャットメッセージはここに動的に追加されます -->
+            <!-- チャットメッセージとスーパーチャットメッセージはここに動的に追加されます -->
         </div>
     </div>
-    <script>
-        // ページの読み込みステータスを表示
-        document.getElementById('timestamp').textContent = new Date().toLocaleString();
-    </script>
-    <script src="script.js?v=1.0.1"></script>
+    <script src="script.js?v=1.0.4"></script>
 </body>
 
 </html>

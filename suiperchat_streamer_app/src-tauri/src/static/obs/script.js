@@ -1,5 +1,5 @@
 /**
- * SUIperCHAT OBS表示用JavaScriptファイル (v1.0.1)
+ * SUIperCHAT OBS表示用JavaScriptファイル (v1.0.3)
  * 
  * WebSocketでスーパーチャットメッセージを受信し、OBS画面に表示する機能を実装します。
  * URLパラメータからWebSocketのアドレスを取得し、自動的に接続します。
@@ -9,13 +9,12 @@
 let socket = null;
 let reconnectTimeout = null;
 const reconnectInterval = 5000; // 再接続間隔（ミリ秒）
-const maxMessages = 5; // 画面に表示する最大メッセージ数
-const messageDisplayTime = 30000; // メッセージ表示時間（ミリ秒）
+const maxMessages = 100; // 画面に表示する最大メッセージ数（増やしました）
 const WS_PORT = 8082; // WebSocketサーバーのポート番号（固定）
 
 // DOMロード時の初期化処理
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('SUIperCHAT OBS Display initialized v1.0.1');
+    console.log('SUIperCHAT OBS Display initialized v1.0.3');
     initializeWebSocket();
 });
 
@@ -44,6 +43,9 @@ function initializeWebSocket() {
     
     console.log(`Connecting to WebSocket server: ${wsUrl}`);
     
+    // 接続ステータスを更新
+    updateConnectionStatus('接続中...', 'connecting');
+    
     // 既存のWebSocket接続をクリーンアップ
     if (socket) {
         socket.close();
@@ -64,7 +66,7 @@ function setupWebSocketEventHandlers() {
     socket.addEventListener('open', () => {
         console.log('WebSocket connection established');
         // WebSocket接続状態を更新
-        updateWsStatus('接続済み', 'green');
+        updateConnectionStatus('接続済み', 'connected');
         // 再接続タイマーがある場合はクリア
         if (reconnectTimeout) {
             clearTimeout(reconnectTimeout);
@@ -78,16 +80,19 @@ function setupWebSocketEventHandlers() {
         try {
             const data = JSON.parse(event.data);
             
-            // WebSocket接続状態を更新
-            updateWsStatus('メッセージ受信中', 'green');
+            // メッセージ受信時には状態を変更せず、受信を視覚的に示す
+            blinkConnectionIndicator();
             
             // メッセージの種類に応じた処理
             if (data.message_type === 'superchat') {
                 // スーパーチャットメッセージを表示
                 displaySuperchatMessage(data);
-            } else if (data.message_type === 'chat') {
-                // 通常チャットメッセージの場合は何もしない（OBSには表示しない）
-                console.log('Regular chat message received (not displayed)');
+            } else if (data.type === 'chat') {
+                // 通常チャットメッセージを表示
+                displayChatMessage(data);
+            } else {
+                // その他のメッセージタイプの場合
+                console.log('Unknown message type received:', data);
             }
         } catch (error) {
             console.error('Error parsing WebSocket message:', error);
@@ -98,21 +103,21 @@ function setupWebSocketEventHandlers() {
     socket.addEventListener('error', (event) => {
         console.error('WebSocket error:', event);
         // WebSocket接続状態を更新
-        updateWsStatus('エラー発生', 'red');
+        updateConnectionStatus('エラー', 'error');
     });
 
     // 接続が閉じたとき
     socket.addEventListener('close', (event) => {
         console.log(`WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}`);
         // WebSocket接続状態を更新
-        updateWsStatus('切断', 'red');
+        updateConnectionStatus('切断', 'error');
         
         // 自動再接続
         if (!reconnectTimeout) {
             reconnectTimeout = setTimeout(() => {
                 console.log('Attempting to reconnect...');
                 // WebSocket接続状態を更新
-                updateWsStatus('再接続試行中...', 'orange');
+                updateConnectionStatus('再接続試行中...', 'connecting');
                 initializeWebSocket();
             }, reconnectInterval);
         }
@@ -120,17 +125,56 @@ function setupWebSocketEventHandlers() {
 }
 
 /**
- * WebSocket接続状態を更新する
+ * 接続状態を更新する
  * 
- * @param {string} status - 接続状態
- * @param {string} color - 表示色
+ * @param {string} status - 接続状態のテキスト
+ * @param {string} statusClass - 接続状態のクラス名（connected, connecting, error）
  */
-function updateWsStatus(status, color) {
-    const statusElement = document.getElementById('ws-status');
+function updateConnectionStatus(status, statusClass) {
+    const statusElement = document.getElementById('connection-status');
+    const dotElement = document.getElementById('status-dot');
+    
     if (statusElement) {
         statusElement.textContent = status;
-        statusElement.style.color = color;
     }
+    
+    if (dotElement) {
+        // すべてのクラスをリセット
+        dotElement.classList.remove('connected', 'connecting', 'error');
+        // 新しいクラスを追加
+        dotElement.classList.add(statusClass);
+    }
+}
+
+/**
+ * 通常チャットメッセージを表示する
+ * 
+ * @param {Object} data - チャットデータ
+ */
+function displayChatMessage(data) {
+    const container = document.getElementById('superchat-container');
+    
+    // 新しいチャットメッセージ要素を作成
+    const chatElement = document.createElement('div');
+    chatElement.className = 'chat-message';
+    
+    // チャットメッセージの内容を設定
+    chatElement.innerHTML = `
+        <div class="chat-header">
+            <span class="display-name">${escapeHtml(data.display_name)}</span>
+            <span class="timestamp">${formatTimestamp(data.timestamp)}</span>
+        </div>
+        <div class="message-content">${escapeHtml(data.message)}</div>
+    `;
+    
+    // 要素を追加
+    container.appendChild(chatElement);
+    
+    // 最大表示数を超えた場合、古いメッセージを削除
+    cleanupOldMessages();
+    
+    // メッセージ要素を表示領域内に自動スクロール
+    chatElement.scrollIntoView({ behavior: 'smooth', block: 'end' });
 }
 
 /**
@@ -144,8 +188,6 @@ function displaySuperchatMessage(data) {
     // 新しいスーパーチャット要素を作成
     const superchatElement = document.createElement('div');
     superchatElement.className = `superchat-message amount-${getAmountClass(data.superchat.amount)}`;
-    
-    // 金額に基づいたクラスを追加
     
     // スーパーチャットの内容を設定
     superchatElement.innerHTML = `
@@ -162,20 +204,8 @@ function displaySuperchatMessage(data) {
     // 最大表示数を超えた場合、古いメッセージを削除
     cleanupOldMessages();
     
-    // 一定時間後にメッセージを削除
-    setTimeout(() => {
-        if (superchatElement.parentNode) {
-            // フェードアウトアニメーションを追加
-            superchatElement.classList.add('removing');
-            
-            // アニメーション完了後に要素を削除
-            setTimeout(() => {
-                if (superchatElement.parentNode) {
-                    superchatElement.parentNode.removeChild(superchatElement);
-                }
-            }, 1000); // フェードアウトアニメーションの時間
-        }
-    }, messageDisplayTime);
+    // メッセージ要素を表示領域内に自動スクロール
+    superchatElement.scrollIntoView({ behavior: 'smooth', block: 'end' });
 }
 
 /**
@@ -196,12 +226,25 @@ function getAmountClass(amount) {
  */
 function cleanupOldMessages() {
     const container = document.getElementById('superchat-container');
-    const messages = container.getElementsByClassName('superchat-message');
+    const messages = container.querySelectorAll('.chat-message, .superchat-message');
     
     // 表示数が最大値を超えた場合、古いメッセージを削除
     while (messages.length > maxMessages) {
         container.removeChild(messages[0]);
     }
+}
+
+/**
+ * タイムスタンプをフォーマットする
+ * 
+ * @param {number} timestamp - UNIXタイムスタンプ（ミリ秒）
+ * @returns {string} - フォーマットされた時刻文字列
+ */
+function formatTimestamp(timestamp) {
+    if (!timestamp) return '';
+    
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 /**
@@ -217,4 +260,23 @@ function escapeHtml(unsafe) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+}
+
+/**
+ * 接続インジケータを一時的に点滅させる
+ * メッセージ受信時の視覚的フィードバック
+ */
+function blinkConnectionIndicator() {
+    const dotElement = document.getElementById('status-dot');
+    if (!dotElement) return;
+    
+    // 一時的に明るくする
+    dotElement.style.opacity = '1';
+    dotElement.style.transform = 'scale(1.2)';
+    
+    // 少し経ったら元に戻す
+    setTimeout(() => {
+        dotElement.style.opacity = '';
+        dotElement.style.transform = '';
+    }, 300);
 } 

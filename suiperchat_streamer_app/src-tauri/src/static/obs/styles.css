@@ -1,8 +1,8 @@
 /**
- * SUIperCHAT OBS表示用スタイルシート
+ * SUIperCHAT OBS表示用スタイルシート v1.0.3
  * 
  * OBSブラウザソースで使用するスーパーチャット表示のスタイルを定義します。
- * 配信画面に表示されるスーパーチャットの見た目を制御します。
+ * 配信画面に表示されるスーパーチャットやチャットメッセージの見た目を制御します。
  */
 
 :root {
@@ -10,6 +10,7 @@
     --superchat-bg-3: rgba(255, 140, 0, 0.9);  /* 3SUI */
     --superchat-bg-5: rgba(255, 100, 0, 0.9);  /* 5SUI */
     --superchat-bg-10: rgba(255, 50, 0, 0.9);  /* 10SUI */
+    --chat-bg: rgba(44, 44, 44, 0.8);          /* 通常チャット */
     --text-color: #ffffff;
     --border-radius: 8px;
 }
@@ -29,14 +30,33 @@ body {
 .container {
     width: 100%;
     max-width: 800px;
+    height: 100vh;
     margin: 0 auto;
     padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column-reverse; /* 新しいメッセージを下に表示 */
+    scrollbar-width: thin;          /* Firefox */
+}
+
+/* Chrome/Edge/Safari用スクロールバースタイル */
+.container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.container::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
 }
 
 .superchat-container {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 10px;
 }
 
 .superchat-message {
@@ -44,13 +64,14 @@ body {
     padding: 16px;
     color: var(--text-color);
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    animation: fadeIn 0.5s ease-in-out, slideIn 0.5s ease-in-out;
-    transition: transform 0.3s ease, opacity 0.3s ease;
+    animation: fadeIn 0.5s ease-in-out;
     max-width: 100%;
+    margin-bottom: 10px;
 }
 
 .superchat-message:hover {
     transform: scale(1.02);
+    transition: transform 0.2s ease;
 }
 
 .superchat-message.amount-1 {
@@ -96,18 +117,42 @@ body {
     to { opacity: 1; }
 }
 
-@keyframes slideIn {
-    from { transform: translateY(20px); }
-    to { transform: translateY(0); }
+/* 通常チャットメッセージのスタイル */
+.chat-message {
+    border-radius: var(--border-radius);
+    padding: 12px;
+    color: var(--text-color);
+    background-color: var(--chat-bg);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    animation: fadeIn 0.5s ease-in-out;
+    max-width: 100%;
+    margin-bottom: 10px;
 }
 
-/* スーパーチャットメッセージの削除アニメーション */
-.superchat-message.removing {
-    animation: fadeOut 1s ease-in-out forwards;
-    transform: translateX(100%);
+.chat-message:hover {
+    transform: scale(1.01);
+    transition: transform 0.2s ease;
 }
 
-@keyframes fadeOut {
-    from { opacity: 1; }
-    to { opacity: 0; }
+.chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.chat-message .display-name {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: #ffcc00;
+}
+
+.chat-message .timestamp {
+    font-size: 0.8em;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.chat-message .message-content {
+    font-size: 1em;
+    word-break: break-word;
 } 
