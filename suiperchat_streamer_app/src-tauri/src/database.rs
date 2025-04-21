@@ -137,6 +137,67 @@ pub async fn save_message_db(pool: &SqlitePool, message: &Message) -> Result<(),
     Ok(())
 }
 
+/// メッセージの履歴をデータベースから取得する
+///
+/// 指定された制限とオフセットに基づいてメッセージを取得します。
+/// 結果は通常、タイムスタンプの降順（新しい順）で返されます。
+///
+/// # 引数
+/// * `pool` - SQLiteデータベース接続プール
+/// * `limit` - 取得するメッセージの最大数
+/// * `offset` - 結果セットのオフセット（ページネーション用）
+///
+/// # 戻り値
+/// * `Result<Vec<Message>, SqlxError>` - 成功時はメッセージのベクター、エラー時は `SqlxError`
+///
+/// # エラー
+/// - データベース接続エラー
+/// - SQLクエリ実行エラー
+pub async fn fetch_messages(
+    pool: &SqlitePool,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<Message>, SqlxError> {
+    println!(
+        "データベースからメッセージを取得: limit={}, offset={}",
+        limit, offset
+    );
+
+    // limitが負の値や不正な値の場合、デフォルト値を設定
+    let safe_limit = if limit <= 0 || limit > 1000 {
+        100
+    } else {
+        limit
+    };
+    // offsetが負の値の場合、0に設定
+    let safe_offset = if offset < 0 { 0 } else { offset };
+
+    let messages = sqlx::query_as::<_, Message>(
+        r#"
+        SELECT 
+            id, 
+            timestamp, 
+            display_name, 
+            message, 
+            amount, 
+            tx_hash, 
+            wallet_address, 
+            session_id
+        FROM messages
+        ORDER BY timestamp DESC
+        LIMIT ? OFFSET ?
+        "#,
+    )
+    .bind(safe_limit)
+    .bind(safe_offset)
+    .fetch_all(pool)
+    .await?;
+
+    println!("メッセージ取得完了: {}件", messages.len());
+
+    Ok(messages)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::db_models::{Message, Session};
@@ -151,7 +212,9 @@ mod tests {
             CREATE TABLE IF NOT EXISTS sessions ( -- テーブル名を sessions に変更
                 id TEXT PRIMARY KEY NOT NULL, -- 型もスキーマに合わせる
                 started_at TEXT NOT NULL,     -- 型もスキーマに合わせる
-                ended_at TEXT                 -- 型もスキーマに合わせる
+                ended_at TEXT,                -- 型もスキーマに合わせる
+                created_at TEXT NOT NULL,     -- Prismaスキーマに合わせて追加
+                updated_at TEXT NOT NULL      -- Prismaスキーマに合わせて追加
             )
             "#,
         )
@@ -276,6 +339,90 @@ mod tests {
         assert_eq!(saved_message.wallet_address, message.wallet_address);
         assert_eq!(saved_message.session_id, message.session_id);
 
+        Ok(())
+    }
+
+    /// `fetch_messages`関数のテスト
+    #[sqlx::test]
+    async fn test_fetch_messages(pool: SqlitePool) -> Result<(), SqlxError> {
+        // テスト用DBのセットアップ
+        setup_test_db(&pool).await?;
+        setup_message_table(&pool).await?;
+
+        // テスト用のセッションIDを生成
+        let session_id = Uuid::new_v4().to_string();
+
+        // セッション作成
+        create_session(&pool, &session_id).await?;
+
+        // テスト用のメッセージを5件作成して保存
+        let mut test_messages = Vec::new();
+        for i in 1..=5 {
+            let message = Message {
+                id: Uuid::new_v4().to_string(),
+                timestamp: Utc::now(),
+                display_name: format!("テストユーザー{}", i),
+                content: format!("テストメッセージ本文{}", i),
+                amount: if i % 2 == 0 {
+                    Some(i as f64 * 10.0)
+                } else {
+                    None
+                },
+                tx_hash: if i % 2 == 0 {
+                    Some(format!("tx_hash_{}", i))
+                } else {
+                    None
+                },
+                wallet_address: if i % 2 == 0 {
+                    Some(format!("wallet_{}", i))
+                } else {
+                    None
+                },
+                session_id: Some(session_id.clone()),
+            };
+            test_messages.push(message.clone());
+            save_message_db(&pool, &message).await?;
+        }
+
+        // メッセージを取得し、結果を検証
+
+        // 全件取得 (limit=10, offset=0)
+        let all_messages = fetch_messages(&pool, 10, 0).await?;
+        assert_eq!(
+            all_messages.len(),
+            5,
+            "全件取得で5件のメッセージが取得されるべき"
+        );
+
+        // 制限付き取得 (limit=3, offset=0)
+        let limited_messages = fetch_messages(&pool, 3, 0).await?;
+        assert_eq!(
+            limited_messages.len(),
+            3,
+            "制限付き取得で3件のメッセージが取得されるべき"
+        );
+
+        // オフセット付き取得 (limit=10, offset=2)
+        let offset_messages = fetch_messages(&pool, 10, 2).await?;
+        assert_eq!(
+            offset_messages.len(),
+            3,
+            "オフセット付き取得で3件のメッセージが取得されるべき"
+        );
+
+        // 範囲外のオフセット (limit=10, offset=10)
+        let out_of_range = fetch_messages(&pool, 10, 10).await?;
+        assert_eq!(
+            out_of_range.len(),
+            0,
+            "範囲外のオフセットで0件が取得されるべき"
+        );
+
+        // 負のlimitとoffsetの処理を確認 (安全な値に変換されるはず)
+        let with_negative = fetch_messages(&pool, -1, -5).await?;
+        assert!(!with_negative.is_empty(), "負の値が安全に処理されるべき");
+
+        println!("fetch_messagesのテスト完了");
         Ok(())
     }
 }
