@@ -14,144 +14,169 @@
 - **非同期ランタイム:** Tokio (既存環境との整合性)
 - **マイグレーション:** Prisma Migrate (`prisma migrate dev`) を継続利用
 
-## 3. 実装ステップ
+## 3. 実装ステップ (詳細版)
 
-### 3.1. 依存関係の追加 (`cargo add`)
+以下のステップに分割して実装を進め、各ステップ完了後にコミットします。
 
-`suiperchat_streamer_app/src-tauri/` ディレクトリで以下の `cargo add` コマンドを実行して、必要な依存関係を追加します。これにより、互換性のある最新バージョンが `Cargo.toml` に自動的に追加されます。
+### ステップ 1: セットアップ - 依存関係の追加と基本ファイル作成
 
-```bash
-cargo add sqlx --features runtime-tokio-native-tls,sqlite,chrono
-cargo add chrono --features serde # 既に存在する場合は不要か確認
-cargo add uuid --features v4,serde # セッションID生成用
-# tokio, futures, serde, serde_json は既存のはずだが確認
-```
+-   **タスク:**
+    -   `suiperchat_streamer_app/src-tauri/` ディレクトリで `cargo add sqlx --features runtime-tokio-native-tls,sqlite,chrono` を実行。
+    -   `suiperchat_streamer_app/src-tauri/` ディレクトリで `cargo add uuid --features v4,serde` を実行。
+    -   (必要であれば `cargo add chrono --features serde` も実行)
+    -   `cargo build` を実行して依存関係が解決されるか確認。
+    -   空の `src-tauri/src/database.rs` ファイルを作成。
+    -   空の `src-tauri/src/db_models.rs` ファイルを作成。
+    -   空の `src-tauri/src/commands/history.rs` ファイルを作成。
+    -   `src-tauri/src/commands/mod.rs` に `pub mod history;` を追加。
+-   **コミットタイトル案:** `[feat] SQLite連携の基本ファイルと依存関係をセットアップ`
 
-コマンド実行後、`Cargo.toml` に意図通りに追加されたことを確認し、`cargo build` でビルド可能か確認します。
+### ステップ 2: データモデルの定義
 
-### 3.2. データベース接続管理
+-   **タスク:**
+    -   `src-tauri/src/db_models.rs` に `Message` 構造体と `Session` 構造体を定義（既存計画参照）。
+        ```rust
+        // src/db_models.rs
+        use chrono::{DateTime, Utc};
+        use sqlx::FromRow;
 
-1.  **`AppState` の更新 (`src/state.rs`)**:
-    - `AppState` 構造体に以下を追加します。
-        - `db_pool: Arc<Mutex<Option<sqlx::SqlitePool>>>`
-        - `current_session_id: Arc<Mutex<Option<String>>>`
-    - `AppState::new()` で上記フィールドを `Arc::new(Mutex::new(None))` で初期化します。
+        #[derive(FromRow, Debug, Clone, serde::Serialize, serde::Deserialize)]
+        pub struct Message {
+            pub id: String,
+            pub timestamp: DateTime<Utc>,
+            pub display_name: String,
+            #[sqlx(rename = "message")]
+            pub content: String,
+            // Prisma Float は f64 にマッピング
+            pub amount: Option<f64>, // スパチャでない場合は NULL
+            pub tx_hash: Option<String>,
+            pub wallet_address: Option<String>,
+            pub session_id: Option<String>, // どの配信セッションのメッセージかを示すID
+        }
 
-2.  **接続プール初期化とセッション開始 (`src/main.rs` または `server_manager.rs`)**:
-    - **DB接続プール初期化:** Tauri の `setup` フック内で非同期処理を実行します。
-        - **DBパスの決定:**
-            ```rust
+        #[derive(FromRow, Debug, Clone, serde::Serialize, serde::Deserialize)]
+        pub struct Session {
+            pub id: String,         // UUID
+            pub started_at: DateTime<Utc>,
+            pub ended_at: Option<DateTime<Utc>>,
+        }
+        ```
+    -   `sqlx::FromRow`, `serde::Serialize`, `serde::Deserialize` などを derive する。
+    -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **コミット目安:** このステップが完了したらコミット。
+-   **コミットタイトル案:** `[feat] SQLite用MessageおよびSessionデータモデルを定義`
+
+### ステップ 3: データベース接続管理 (`AppState`)
+
+-   **タスク:**
+    -   `src-tauri/src/state.rs` の `AppState` に `db_pool: Arc<Mutex<Option<SqlitePool>>>` と `current_session_id: Arc<Mutex<Option<String>>>` を追加。
+    -   `AppState::new()` で上記フィールドを `Arc::new(Mutex::new(None))` で初期化。
+    -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **コミット目安:** このステップが完了したらコミット。
+-   **コミットタイトル案:** `[feat] AppStateにdb_poolとcurrent_session_idを追加`
+
+### ステップ 4: データベース接続管理 (初期化とパス解決)
+
+-   **タスク:**
+    -   `src-tauri/src/main.rs` の `setup` フック内で非同期処理を実行。
+    -   開発/リリースビルドに応じたDBパス解決ロジックを実装。
+        ```rust
+        // setup フック内 (app_handle が利用可能)
+        let app_handle = app.handle().clone(); // app_handle を取得
+        tauri::async_runtime::spawn(async move { // 非同期処理をspawn
             let db_path = if cfg!(debug_assertions) {
-                // 開発ビルド時: プロジェクト内の相対パス
-                std::path::PathBuf::from("../prisma/dev.db")
+                // 開発ビルド時
+                std::path::PathBuf::from("../prisma/dev.db") // src ディレクトリからの相対パス
             } else {
-                // リリースビルド時: アプリケーションデータディレクトリ
+                // リリースビルド時
                 let app_data_dir = tauri::api::path::app_data_dir(&app_handle.config())
-                    .ok_or_else(|| "Failed to get app data directory".to_string())?;
-                let db_dir = app_data_dir.join("data"); // dataサブディレクトリを作成
+                    .expect("Failed to get app data directory"); // エラー処理改善推奨
+                let db_dir = app_data_dir.join("data");
                 std::fs::create_dir_all(&db_dir)
-                    .map_err(|e| format!("Failed to create data directory: {}", e))?;
-                db_dir.join("suiperchat_data.db") // DBファイル名
+                    .expect("Failed to create data directory"); // エラー処理改善推奨
+                db_dir.join("suiperchat_data.db")
             };
             let db_url = format!("sqlite:{}", db_path.to_string_lossy());
             println!("Using database URL: {}", db_url);
-            ```
-            *注意:* 上記は `setup` フック内で `app_handle` が利用可能である想定です。非同期処理内で `app_handle` を渡す必要があります。
-        - `sqlx::sqlite::SqlitePoolOptions::new().max_connections(5).connect(&db_url).await` で接続プールを作成します。
-        - 作成したプールを `app_handle.state::<AppState>()` を使って `AppState` の `db_pool` に設定します。
-        - 接続失敗時のエラーハンドリングを追加します。
-    - **サーバー起動成功時 (セッション開始):** (`server_manager::run_servers` 内など)
-        - `uuid::Uuid::new_v4().to_string()` で新しいセッションID (UUID) を生成します。
-        - `database.rs` に `create_session(pool: &SqlitePool, session_id: &str) -> Result<(), sqlx::Error>` 関数を追加し、`Session` テーブルに `id = ?, started_at = now()` でレコードをINSERTします。
-        - 生成したセッションIDを `AppState` の `current_session_id` に設定します。
 
-3.  **セッション終了 (`server_manager.rs`)**:
-    - **サーバー停止時:** (`stop_server` 内)
-        - `AppState` から `current_session_id` を取得します (`lock().unwrap().take()` など)。
-        - `database.rs` に `end_session(pool: &SqlitePool, session_id: &str) -> Result<(), sqlx::Error>` 関数を追加し、対応する `Session` レコードの `ended_at` を `now()` でUPDATEします。
-        - `AppState` の `current_session_id` が `None` であることを確認します（`take()` でクリアされていればOK）。
+            match sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(5)
+                .connect(&db_url)
+                .await
+            {
+                Ok(pool) => {
+                    let app_state = app_handle.state::<AppState>();
+                    let mut pool_guard = app_state.db_pool.lock().unwrap(); // Mutexロック
+                    *pool_guard = Some(pool);
+                     println!("Database pool initialized successfully.");
+                }
+                Err(e) => {
+                    eprintln!("Failed to initialize database pool: {}", e);
+                    // ここで適切なエラー処理を行う (例: アプリケーション終了、エラー表示)
+                }
+            }
+        });
+        ```
+    -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **コミット目安:** このステップが完了したらコミット。
+-   **コミットタイトル案:** `[feat] DB接続プールの初期化とパス解決を実装`
 
-### 3.3. データモデル定義 (`src/db_models.rs` - 新規作成)
+### ステップ 5: セッション管理 (DB操作とAppState更新)
 
-- `prisma/schema.prisma` の `Message` および `Session` モデルに対応する Rust 構造体を定義します。
-- `sqlx::FromRow` を derive し、フィールド名を Prisma スキーマに合わせます (`#[sqlx(rename = ...)]` など)。
-- `chrono::DateTime<Utc>` を日時型に使用します。
-- Prisma の `Float` 型は `f64` にマッピングします (`amount` フィールド)。
+-   **タスク:**
+    -   `src-tauri/src/database.rs` に `async fn create_session(pool: &SqlitePool, session_id: &str) -> Result<(), sqlx::Error>` を実装 (`INSERT INTO Session`)。
+    -   `src-tauri/src/database.rs` に `async fn end_session(pool: &SqlitePool, session_id: &str) -> Result<(), sqlx::Error>` を実装 (`UPDATE Session SET ended_at`)。
+    -   `src-tauri/src/ws_server/server_manager.rs` の `run_servers` 内、サーバー起動成功時に `uuid::Uuid::new_v4().to_string()` でID生成、`database::create_session` を呼び出し、`AppState` の `current_session_id` を設定。
+    -   `src-tauri/src/ws_server/server_manager.rs` の `stop_server` 内で `AppState` から `current_session_id` を取得、`database::end_session` を呼び出し、`AppState` の `current_session_id` をクリア。
+    -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **コミット目安:** このステップが完了したらコミット。
+-   **コミットタイトル案:** `[feat] DBセッションの作成・終了ロジックを実装`
 
-```rust
-// src/db_models.rs
-use chrono::{DateTime, Utc};
-use sqlx::FromRow;
+### ステップ 6: メッセージ保存 (DB操作)
 
-#[derive(FromRow, Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Message {
-    pub id: String,
-    pub timestamp: DateTime<Utc>,
-    pub display_name: String,
-    #[sqlx(rename = "message")]
-    pub content: String,
-    // Prisma Float は f64 にマッピング
-    pub amount: Option<f64>, // スパチャでない場合は NULL
-    pub tx_hash: Option<String>,
-    pub wallet_address: Option<String>,
-    pub session_id: Option<String>, // どの配信セッションのメッセージかを示すID
-    // created_at: DateTime<Utc>, // @default(now()) は timestamp で代替可能
-    // updated_at: DateTime<Utc>, // @updatedAt
-}
+-   **タスク:**
+    -   `src-tauri/src/database.rs` に `async fn save_message_db(pool: &SqlitePool, message: &db_models::Message) -> Result<(), sqlx::Error>` を実装 (`INSERT INTO Message`)。
+    -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **コミット目安:** このステップが完了したらコミット。
+-   **コミットタイトル案:** `[feat] メッセージをDBに保存する関数を実装`
 
-#[derive(FromRow, Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Session {
-    pub id: String,         // UUID
-    pub started_at: DateTime<Utc>,
-    pub ended_at: Option<DateTime<Utc>>,
-    // 必要なら他の情報 (例: 配信タイトル) を追加
-}
+### ステップ 7: メッセージ保存 (WebSocketセッション連携)
 
-```
+-   **タスク:**
+    -   `src-tauri/src/ws_server/session.rs` の `WsSession` に `db_pool: Arc<Mutex<Option<SqlitePool>>>` と `current_session_id: Option<String>` フィールドを追加。
+    -   `WsSession::new` または `with_connection_manager` などで `AppState` から `db_pool` への参照を取得するように修正 (例: `create_ws_session` で `AppState` を取得して渡す)。
+    -   `WsSession::started` で `AppState` から `current_session_id` を取得して `self.current_session_id` に設定。
+    -   `StreamHandler::handle` で受信メッセージから `db_models::Message` オブジェクトを作成 (`self.current_session_id` を設定)。
+    -   `tokio::spawn` を使用して `database::save_message_db` を非同期に呼び出す (取得した `db_pool` の参照と `Message` を渡す)。
+    -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **コミット目安:** このステップが完了したらコミット。
+-   **コミットタイトル案:** `[feat] WebSocketセッションにメッセージ保存処理を統合`
 
-### 3.4. メッセージ保存ロジック (`src/database.rs` - 新規作成 & `src/ws_server/session.rs` 修正)
+### ステップ 8: 履歴取得 (DB操作)
 
-1.  **`database.rs` の作成**:
-    - `save_message_db(pool: &SqlitePool, message: &Message) -> Result<(), sqlx::Error>` 関数を実装します。
-    - `sqlx::query!` マクロを使用して `INSERT INTO Message (...) VALUES (...)` 文を実行します（`session_id` カラムも含む）。
-    - セッション作成/終了用の関数 `create_session` と `end_session` もこのファイルに実装します。
+-   **タスク:**
+    -   `src-tauri/src/database.rs` に `async fn fetch_messages(pool: &SqlitePool, limit: i64, offset: i64 /*, filters... */) -> Result<Vec<db_models::Message>, sqlx::Error>` を実装 (`SELECT FROM Message`、ページネーション含む)。
+    -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **コミット目安:** このステップが完了したらコミット。
+-   **コミットタイトル案:** `[feat] DBからメッセージ履歴を取得する関数を実装`
 
-2.  **`ws_server/session.rs` の修正**:
-    - `WsSession` アクターの `started` メソッドで `AppState` から `current_session_id` を取得し、アクターの状態として保持します。
-        - 取得できなかった場合（サーバー起動直後などタイミングの問題がありうる）のエラーハンドリング、またはリトライ処理を検討します。
-    - `StreamHandler::handle` でテキストメッセージを受信・パースした後、`Message` 構造体を作成します。
-        - `id` は `cuid::cuid()` か `uuid` で生成します。
-        - `timestamp` は `chrono::Utc::now()` で設定します。
-        - スーパーチャット/通常チャットに応じて `amount` 等を設定します。
-        - **アクターが保持している `session_id` を設定します。**
-    - 作成した `Message` オブジェクトを `database::save_message_db` に渡して非同期に保存処理を呼び出します (`tokio::spawn` を使用してアクターをブロックしないようにします)。
-    - DB保存エラー時のログ出力等を追加します。
+### ステップ 9: 履歴取得 (Tauriコマンド)
 
-### 3.5. 履歴取得・検索コマンド (`src/commands/history.rs` - 新規作成 & `src/database.rs` 追記)
+-   **タスク:**
+    -   `src-tauri/src/commands/history.rs` に `async fn get_message_history(limit: i64, offset: i64, /* filters... */ app_state: State<'_, AppState>) -> Result<Vec<db_models::Message>, String>` Tauri コマンドを実装。
+    -   `commands/mod.rs` の `use` 文を更新 (`pub use history::get_message_history;`)。
+    -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **コミット目安:** このステップが完了したらコミット。
+-   **コミットタイトル案:** `[feat] メッセージ履歴取得用のTauriコマンドを追加`
 
-1.  **`database.rs` に追記**:
-    - `fetch_messages(pool: &SqlitePool, limit: i64, offset: i64, ...) -> Result<Vec<Message>, sqlx::Error>` のような非同期関数を実装します。
-    - `sqlx::query_as!` マクロを使用して `SELECT` 文を実行します。
-    - `ORDER BY timestamp DESC`, `LIMIT ?`, `OFFSET ?` を含めます。
-    - 将来のフィルタリング (`WHERE` 句) を考慮した設計にします。
+### ステップ 10: エラーハンドリングとリファクタリング
 
-2.  **`commands/history.rs` の作成**:
-    - Tauri コマンド `get_message_history(limit: i64, offset: i64, ..., app_state: State<'_, AppState>) -> Result<Vec<Message>, String>` を定義します。
-    - `AppState` から `db_pool` を取得します。
-    - `database::fetch_messages` を呼び出し、結果をフロントエンドに返します。
-    - エラーハンドリングを実装します。
-    - `src/commands/mod.rs` に `pub mod history;` と `pub use history::get_message_history;` を追加します。
-
-### 3.6. エラーハンドリング
-
-- 各ステップで発生しうるエラー（DB接続、クエリ実行、Mutexロック、非同期処理など）を考慮し、`Result` 型と `?` 演算子、`map_err` を活用してエラーを伝播させます。
-- Tauriコマンドの戻り値は `Result<T, String>` とし、フロントエンドでエラーメッセージを表示できるようにします。
-- 詳細なエラー情報はログに出力します (`log` クレートや `tracing` クレートの利用を検討)。
-
-### 3.7. Prisma マイグレーション
-
-- スキーマに変更が必要な場合は `prisma/schema.prisma` を編集し、`npx prisma migrate dev --name <migration_name>` を実行してマイグレーションファイルを生成・適用します。
-- Rust の `db_models.rs` もスキーマ変更に合わせて更新します。
+-   **タスク:**
+    -   全体を通してエラーハンドリングを見直し、改善 (`Result` の伝播、ログ出力、ユーザーへのエラー通知など)。
+    -   コードのリファクタリング、ドキュメントコメントの追加。
+    -   `unwrap()` や `expect()` を可能な限り減らし、より安全なエラー処理を目指す。
+-   **コミット目安:** 適切な区切りでコミット。
+-   **コミットタイトル案:** `[refactor] DB連携のエラー処理改善とコード整理` または `[docs] DB関連コードにドキュメントコメントを追加`
 
 ## 4. ファイル構成案
 
