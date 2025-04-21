@@ -23,6 +23,8 @@ pub use commands::server::{start_websocket_server, stop_websocket_server};
 pub use commands::wallet::{get_streamer_info, set_wallet_address};
 // 接続管理コマンドの再エクスポート
 pub use commands::connection::{disconnect_client, get_connections_info, set_connection_limits};
+// 履歴関連コマンドの再エクスポート
+pub use commands::history::get_message_history;
 
 /// ## Tauriアプリケーションのエントリーポイント
 ///
@@ -124,7 +126,9 @@ pub fn run() {
             // 接続管理コマンド
             commands::connection::get_connections_info,
             commands::connection::disconnect_client,
-            commands::connection::set_connection_limits
+            commands::connection::set_connection_limits,
+            // 履歴関連コマンド
+            commands::history::get_message_history
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
