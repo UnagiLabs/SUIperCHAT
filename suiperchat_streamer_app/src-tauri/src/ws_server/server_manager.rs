@@ -2,6 +2,7 @@
 //!
 //! WebSocketサーバーの起動・停止・監視を行うモジュールです。
 
+use crate::database;
 use crate::state::AppState;
 use crate::types::ServerStatus;
 use crate::ws_server::connection_manager::global::set_app_handle;
@@ -11,8 +12,9 @@ use actix_files as fs;
 use actix_web::{dev::ServerHandle, web, App, HttpRequest, HttpResponse, HttpServer};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tokio::runtime::{Handle as TokioHandle, Runtime};
+use uuid::Uuid;
 
 /// ## WebSocketサーバーを起動する
 ///
@@ -97,12 +99,68 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
         runtime_handle_option = rt_handle_guard.take();
     }
 
+    // 現在のセッションIDを取得
+    let session_id_option = {
+        let session_id_guard = app_state
+            .current_session_id
+            .lock()
+            .map_err(|_| "Failed to lock current_session_id mutex".to_string())?;
+        session_id_guard.clone()
+    };
+
+    // データベースプールを取得
+    let db_pool_option = {
+        let db_pool_guard = app_state
+            .db_pool
+            .lock()
+            .map_err(|_| "Failed to lock db_pool mutex".to_string())?;
+        db_pool_guard.clone()
+    };
+
+    // セッションIDをクリア
+    {
+        let mut session_id_guard = app_state
+            .current_session_id
+            .lock()
+            .map_err(|_| "Failed to lock current_session_id mutex for clearing".to_string())?;
+        if session_id_guard.is_some() {
+            println!("Clearing session ID: {:?}", *session_id_guard);
+            *session_id_guard = None;
+        }
+    }
+
     if let Some((ws_server_handle, obs_server_handle)) = server_handles_option {
         if let Some(runtime_handle) = runtime_handle_option {
             println!("Stopping WebSocket and OBS servers using obtained handles...");
 
             // ホストとポートをクリア
             clear_server_info(app_state);
+
+            // セッションIDとDBプールの有無を事前チェック
+            if session_id_option.is_none() {
+                eprintln!("セッションIDが設定されていないため、セッション終了処理をスキップします");
+            }
+            if db_pool_option.is_none() {
+                eprintln!(
+                    "データベース接続が初期化されていないため、セッション終了処理をスキップします"
+                );
+            }
+
+            // DBにセッション終了を記録
+            if let (Some(session_id), Some(db_pool)) = (session_id_option, db_pool_option) {
+                let session_id_clone = session_id.clone();
+                let db_pool_clone = db_pool.clone();
+
+                println!("Ending session in database: {}", session_id);
+
+                // 非同期でセッション終了処理
+                runtime_handle.spawn(async move {
+                    match database::end_session(&db_pool_clone, &session_id_clone).await {
+                        Ok(_) => println!("セッションが正常に終了しました: {}", session_id_clone),
+                        Err(e) => eprintln!("セッション終了処理中にエラーが発生しました: {}", e),
+                    }
+                });
+            }
 
             // 両方のサーバーを停止するタスクをspawn
             let app_handle_clone = app_handle.clone();
@@ -397,6 +455,49 @@ async fn run_servers(
                     .expect("Failed to lock obs_port mutex for storing");
                 *obs_port_guard = Some(obs_port);
                 println!("OBS Port '{}' stored in AppState.", obs_port);
+            }
+
+            // 新しいセッションIDを生成してAppStateとDBに保存
+            let session_id = Uuid::new_v4().to_string();
+            println!("Generated new session ID: {}", session_id);
+
+            // AppStateからDBプールを取得
+            let app_state = app_handle.state::<AppState>();
+            let db_pool_option = app_state
+                .db_pool
+                .lock()
+                .expect("Failed to lock db_pool mutex")
+                .clone();
+
+            // セッションIDをAppStateに保存
+            {
+                let mut session_id_guard = app_state
+                    .current_session_id
+                    .lock()
+                    .expect("Failed to lock current_session_id mutex");
+                *session_id_guard = Some(session_id.clone());
+                println!("Session ID '{}' stored in AppState.", session_id);
+            }
+
+            // DBにセッションを作成（非同期処理）
+            if let Some(db_pool) = db_pool_option {
+                let session_id_clone = session_id.clone();
+                tokio::spawn(async move {
+                    match database::create_session(&db_pool, &session_id_clone).await {
+                        Ok(_) => println!(
+                            "セッションがデータベースに正常に保存されました: {}",
+                            session_id_clone
+                        ),
+                        Err(e) => eprintln!(
+                            "セッションのデータベース保存中にエラーが発生しました: {}",
+                            e
+                        ),
+                    }
+                });
+            } else {
+                eprintln!(
+                    "データベース接続プールが初期化されていないため、セッションを保存できません"
+                );
             }
 
             // サーバー起動成功イベントを発行
