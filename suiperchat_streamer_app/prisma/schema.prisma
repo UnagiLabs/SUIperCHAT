@@ -51,8 +51,8 @@ model Session {
     id         String    @id @default(uuid())
     /// @property started_at {DateTime} - セッション開始日時
     started_at DateTime  @default(now()) // フィールド名を started_at に変更
-    /// @property end_time {DateTime?} - セッション終了日時 (NULLの場合は配信中)
-    end_time   DateTime?
+    /// @property ended_at {DateTime?} - セッション終了日時 (NULLの場合は配信中)
+    ended_at   DateTime? // フィールド名を ended_at に変更
     /// @property created_at {DateTime} - レコード作成日時
     created_at DateTime  @default(now())
     /// @property updated_at {DateTime} - レコード更新日時
