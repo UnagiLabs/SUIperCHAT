@@ -7,7 +7,8 @@
 pub mod commands; // コマンドモジュール
 pub mod state; // 状態管理モジュール
 pub mod types; // 型定義モジュール
-pub mod ws_server; // WebSocket サーバーロジック
+pub mod ws_server;
+pub mod db_models; // WebSocket サーバーロジック
 
 // モジュールの再エクスポート
 pub use state::AppState;
