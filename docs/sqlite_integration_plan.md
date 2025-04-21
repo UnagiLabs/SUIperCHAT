@@ -29,6 +29,10 @@
     -   空の `src-tauri/src/db_models.rs` ファイルを作成。
     -   空の `src-tauri/src/commands/history.rs` ファイルを作成。
     -   `src-tauri/src/commands/mod.rs` に `pub mod history;` を追加。
+-   **確認手段:**
+    -   `cargo check` または `cargo build` がエラーなく成功すること。
+    -   `Cargo.lock` ファイルに追加したクレート (`sqlx`, `uuid`, `chrono`) と指定したフィーチャーが含まれていることを目視確認する。
+    -   `list_files` コマンド等で、`database.rs`, `db_models.rs`, `commands/history.rs` が作成されていることを確認する (任意)。
 -   **コミットタイトル案:** `[feat] SQLite連携の基本ファイルと依存関係をセットアップ`
 
 ### ステップ 2: データモデルの定義
@@ -63,6 +67,9 @@
         ```
     -   `sqlx::FromRow`, `serde::Serialize`, `serde::Deserialize` などを derive する。
     -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **確認手段:**
+    -   `cargo check` または `cargo build` がエラーなく成功すること。
+    -   (任意) `serde_test` クレートなどを利用し、`Message` と `Session` 構造体のシリアライズ/デシリアライズが正しく動作するか簡単な単体テストを作成し、パスすること。
 -   **コミット目安:** このステップが完了したらコミット。
 -   **コミットタイトル案:** `[feat] SQLite用MessageおよびSessionデータモデルを定義`
 
@@ -72,6 +79,8 @@
     -   `src-tauri/src/state.rs` の `AppState` に `db_pool: Arc<Mutex<Option<SqlitePool>>>` と `current_session_id: Arc<Mutex<Option<String>>>` を追加。
     -   `AppState::new()` で上記フィールドを `Arc::new(Mutex::new(None))` で初期化。
     -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **確認手段:**
+    -   `cargo check` または `cargo build` がエラーなく成功すること。
 -   **コミット目安:** このステップが完了したらコミット。
 -   **コミットタイトル案:** `[feat] AppStateにdb_poolとcurrent_session_idを追加`
 
@@ -118,6 +127,10 @@
         });
         ```
     -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **確認手段:**
+    -   `cargo check` または `cargo build` がエラーなく成功すること。
+    -   (任意) DBパス解決ロジックについて、開発ビルド時 (`cfg!(debug_assertions)`) とリリースビルド時で期待されるパス文字列を返すか、単体テストを作成し、パスすること (Tauri API のモック化が必要になる場合がある)。
+    -   開発ビルド (`cargo tauri dev`) とリリースビルド (`cargo tauri build && ./target/release/suiperchat_streamer_app`) でアプリケーションを起動し、コンソールログに `Using database URL: ...` と `Database pool initialized successfully.` が表示され、エラーが発生しないことを確認する。
 -   **コミット目安:** このステップが完了したらコミット。
 -   **コミットタイトル案:** `[feat] DB接続プールの初期化とパス解決を実装`
 
@@ -129,6 +142,10 @@
     -   `src-tauri/src/ws_server/server_manager.rs` の `run_servers` 内、サーバー起動成功時に `uuid::Uuid::new_v4().to_string()` でID生成、`database::create_session` を呼び出し、`AppState` の `current_session_id` を設定。
     -   `src-tauri/src/ws_server/server_manager.rs` の `stop_server` 内で `AppState` から `current_session_id` を取得、`database::end_session` を呼び出し、`AppState` の `current_session_id` をクリア。
     -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **確認手段:**
+    -   `cargo check` または `cargo build` がエラーなく成功すること。
+    -   `database.rs` に `create_session` と `end_session` 関数の単体テスト (`#[sqlx::test]`) を作成する。テスト内でテスト用DBに接続し、実際に Session レコードが INSERT/UPDATE されること、`ended_at` が適切に更新されることを確認し、テストがパスすること。 (テスト用DBのセットアップが必要)
+    -   アプリケーションを起動し、WebSocket サーバーを開始・停止する。その後、SQLite クライアントツール (例: `sqlite3 prisma/dev.db`) や Prisma Studio (`npx prisma studio`) などで `Session` テーブルを確認し、対応するセッションレコードが作成され、`ended_at` が適切に設定されていることを確認する。デバッグログで `AppState` の `current_session_id` の変化を確認する。
 -   **コミット目安:** このステップが完了したらコミット。
 -   **コミットタイトル案:** `[feat] DBセッションの作成・終了ロジックを実装`
 
@@ -137,6 +154,9 @@
 -   **タスク:**
     -   `src-tauri/src/database.rs` に `async fn save_message_db(pool: &SqlitePool, message: &db_models::Message) -> Result<(), sqlx::Error>` を実装 (`INSERT INTO Message`)。
     -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **確認手段:**
+    -   `cargo check` または `cargo build` がエラーなく成功すること。
+    -   `database.rs` に `save_message_db` 関数の単体テスト (`#[sqlx::test]`) を作成する。テスト内でテスト用DBに接続し、テスト用の `db_models::Message` データを作成して関数を呼び出し、実際に `Message` レコードが INSERT されることを確認し、テストがパスすること。
 -   **コミット目安:** このステップが完了したらコミット。
 -   **コミットタイトル案:** `[feat] メッセージをDBに保存する関数を実装`
 
@@ -149,6 +169,12 @@
     -   `StreamHandler::handle` で受信メッセージから `db_models::Message` オブジェクトを作成 (`self.current_session_id` を設定)。
     -   `tokio::spawn` を使用して `database::save_message_db` を非同期に呼び出す (取得した `db_pool` の参照と `Message` を渡す)。
     -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **確認手段:**
+    -   `cargo check` または `cargo build` がエラーなく成功すること。
+    -   アプリケーションを起動し、WebSocket サーバーを開始する。
+    -   WebSocket クライアント (例: `websocat`, Postman, またはテスト用Webページ) からサーバーに接続し、テストメッセージを送信する。
+    -   コンソールログでエラーが発生しないことを確認する。
+    -   SQLite クライアントツールや Prisma Studio で `Message` テーブルを確認し、送信したメッセージに対応するレコードが、適切な `session_id` と共に保存されていることを確認する。
 -   **コミット目安:** このステップが完了したらコミット。
 -   **コミットタイトル案:** `[feat] WebSocketセッションにメッセージ保存処理を統合`
 
@@ -157,6 +183,9 @@
 -   **タスク:**
     -   `src-tauri/src/database.rs` に `async fn fetch_messages(pool: &SqlitePool, limit: i64, offset: i64 /*, filters... */) -> Result<Vec<db_models::Message>, sqlx::Error>` を実装 (`SELECT FROM Message`、ページネーション含む)。
     -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **確認手段:**
+    -   `cargo check` または `cargo build` がエラーなく成功すること。
+    -   `database.rs` に `fetch_messages` 関数の単体テスト (`#[sqlx::test]`) を作成する。テスト内でテスト用DBに接続し、複数のテスト用 `Message` レコードを INSERT する。その後、`fetch_messages` を異なる `limit`, `offset` パラメータで呼び出し、期待される件数、内容、順序のメッセージが返却されることを確認し、テストがパスすること。
 -   **コミット目安:** このステップが完了したらコミット。
 -   **コミットタイトル案:** `[feat] DBからメッセージ履歴を取得する関数を実装`
 
@@ -166,6 +195,10 @@
     -   `src-tauri/src/commands/history.rs` に `async fn get_message_history(limit: i64, offset: i64, /* filters... */ app_state: State<'_, AppState>) -> Result<Vec<db_models::Message>, String>` Tauri コマンドを実装。
     -   `commands/mod.rs` の `use` 文を更新 (`pub use history::get_message_history;`)。
     -   `cargo build` を実行してコンパイルエラーがないか確認。
+-   **確認手段:**
+    -   `cargo check` または `cargo build` がエラーなく成功すること。
+    -   アプリケーションを起動し、フロントエンドの UI (または Tauri DevTools のコンソール、テスト用スクリプト等) から `get_message_history` コマンドを異なる `limit`, `offset` で呼び出す。
+    -   期待されるメッセージ履歴 (JSON形式) がフロントエンドに返却され、エラーが発生しないことを確認する。可能であれば、事前にDBに投入したデータと返却内容を比較検証する。
 -   **コミット目安:** このステップが完了したらコミット。
 -   **コミットタイトル案:** `[feat] メッセージ履歴取得用のTauriコマンドを追加`
 
@@ -175,6 +208,11 @@
     -   全体を通してエラーハンドリングを見直し、改善 (`Result` の伝播、ログ出力、ユーザーへのエラー通知など)。
     -   コードのリファクタリング、ドキュメントコメントの追加。
     -   `unwrap()` や `expect()` を可能な限り減らし、より安全なエラー処理を目指す。
+-   **確認手段:**
+    -   ここまでのステップで作成した全ての単体テスト (`cargo test`) および統合テスト (手動または自動) が引き続きパスすること。
+    -   意図的にエラー状況 (例: DBファイルへのアクセス権限がない、DBスキーマの不整合、不正な入力データ) を作り出し、アプリケーションがクラッシュせず、適切なエラーログが出力されるか、あるいはユーザーにエラーが通知されるかを確認する。
+    -   `cargo clippy -- -D warnings` を実行し、エラーや主要な警告が出ないことを確認する。
+    -   コードレビューを実施し、`unwrap()` や `expect()` の使用箇所が適切か、エラーハンドリングが十分かなどを議論する。
 -   **コミット目安:** 適切な区切りでコミット。
 -   **コミットタイトル案:** `[refactor] DB連携のエラー処理改善とコード整理` または `[docs] DB関連コードにドキュメントコメントを追加`
 
