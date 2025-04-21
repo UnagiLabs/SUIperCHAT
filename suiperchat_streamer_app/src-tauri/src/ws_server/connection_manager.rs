@@ -8,7 +8,6 @@ use crate::types::{
 };
 use crate::ws_server::session::Broadcast;
 use actix::prelude::*;
-use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::Emitter; // for Addr
@@ -96,12 +95,18 @@ impl ConnectionManager {
         client_info: ClientInfo,
         addr: Addr<crate::ws_server::session::WsSession>,
     ) -> bool {
-        println!("Debug: add_client method started for client: {}", client_info.id); // ★追加★
+        println!(
+            "Debug: add_client method started for client: {}",
+            client_info.id
+        ); // ★追加★
 
         let max_conn = self.get_max_connections();
         let current_count = get_connections_count();
 
-        println!("Debug: Current connections: {}, Max connections: {}", current_count, max_conn); // ★追加★
+        println!(
+            "Debug: Current connections: {}, Max connections: {}",
+            current_count, max_conn
+        ); // ★追加★
 
         // 最大接続数チェック
         if current_count >= max_conn {
@@ -114,10 +119,9 @@ impl ConnectionManager {
         }
 
         println!("Debug: Incrementing connections count."); // ★追加★
-        // 接続カウンターをインクリメント
+                                                            // 接続カウンターをインクリメント
         increment_connections();
         println!("Debug: Connections count incremented."); // ★追加★
-
 
         // セッションエントリをマップに追加
         let client_id = client_info.id.clone();
@@ -125,20 +129,22 @@ impl ConnectionManager {
             client_info: client_info.clone(),
             addr,
         };
-        { // ★スコープ開始★
+        {
+            // ★スコープ開始★
             println!("Debug: Attempting to lock connections map."); // ★追加★
             let mut connections = self.connections.lock().unwrap();
-            println!("Debug: Connections map locked. Inserting client: {}", client_id); // ★追加★
+            println!(
+                "Debug: Connections map locked. Inserting client: {}",
+                client_id
+            ); // ★追加★
             connections.insert(client_id, entry);
             println!("Debug: Client inserted into connections map."); // ★追加★
         } // ★スコープ終了 - ここでロックが解放される★
 
-
         println!("Debug: Emitting connections updated event."); // ★追加★
-        // イベント発行
+                                                                // イベント発行
         self.emit_connections_updated();
         println!("Debug: Connections updated event emitted."); // ★追加★
-
 
         println!("Debug: add_client method finished, returning true."); // ★追加★
         true // 追加成功
@@ -154,22 +160,22 @@ impl ConnectionManager {
     /// ### Returns
     /// - `bool`: 削除に成功した場合はtrue、指定されたIDのクライアントが見つからない場合はfalse
     pub fn remove_client(&self, client_id: &str) -> bool {
-    	let removed;
-    	// --- Lock scope starts ---
-    	{
-    		let mut connections = self.connections.lock().unwrap();
-    		removed = connections.remove(client_id).is_some();
-    	} // --- Lock scope ends ---
-   
-    	if removed {
-    		// 接続カウンターをデクリメント (ロック解放後)
-    		decrement_connections();
-    		// イベント発行 (ロック解放後)
-    		self.emit_connections_updated();
-    		true
-    	} else {
-    		false
-    	}
+        let removed;
+        // --- Lock scope starts ---
+        {
+            let mut connections = self.connections.lock().unwrap();
+            removed = connections.remove(client_id).is_some();
+        } // --- Lock scope ends ---
+
+        if removed {
+            // 接続カウンターをデクリメント (ロック解放後)
+            decrement_connections();
+            // イベント発行 (ロック解放後)
+            self.emit_connections_updated();
+            true
+        } else {
+            false
+        }
     }
 
     /// ## クライアント情報を取得
@@ -269,7 +275,7 @@ impl ConnectionManager {
         println!("Debug: emit_connections_updated method started."); // ★追加★
         if let Some(app_handle) = &self.app_handle {
             println!("Debug: app_handle is available."); // ★追加★
-            // 接続情報を取得
+                                                         // 接続情報を取得
             println!("Debug: Calling get_connections_info."); // ★変更★
             let info = self.get_connections_info();
             println!("Debug: Connections info obtained."); // ★追加★
@@ -278,9 +284,11 @@ impl ConnectionManager {
             println!("Debug: Attempting to emit connections_updated event."); // ★追加★
             if let Err(e) = app_handle.emit("connections_updated", info) {
                 eprintln!("接続更新イベントの発行に失敗: {}", e);
-                println!("Debug: Failed to emit connections_updated event: {}", e); // ★追加★
+                println!("Debug: Failed to emit connections_updated event: {}", e);
+            // ★追加★
             } else {
-                println!("Debug: connections_updated event emitted successfully."); // ★追加★
+                println!("Debug: connections_updated event emitted successfully.");
+                // ★追加★
             }
         } else {
             println!("Debug: app_handle is NOT available."); // ★追加★
@@ -300,37 +308,54 @@ impl ConnectionManager {
     }
 }
 
-/// ## グローバル接続マネージャのSingletonインスタンス
+/// ## グローバルモジュール
 ///
-/// アプリケーション全体で共有される接続マネージャのインスタンスを提供します。
-/// 初回アクセス時に作成され、以降はそのインスタンスが返されます。
-/// スレッドセーフな実装のため、`lazy_static`とArithmeticを使用しています。
+/// グローバルに共有されるコネクションマネージャーへのアクセスを提供する
 pub mod global {
     use super::*;
+    use once_cell::sync::OnceCell;
 
     // デフォルトの最大接続数
     const DEFAULT_MAX_CONNECTIONS: usize = 100;
 
-    lazy_static! {
-        static ref GLOBAL_CONNECTION_MANAGER: Arc<Mutex<ConnectionManager>> =
-            Arc::new(Mutex::new(ConnectionManager::new(DEFAULT_MAX_CONNECTIONS)));
-    }
+    /// グローバル接続マネージャーのインスタンス
+    static MANAGER: OnceCell<ConnectionManager> = OnceCell::new();
 
-    /// ## グローバル接続マネージャを取得
+    /// グローバルなTauriアプリケーションハンドル
+    static APP_HANDLE: OnceCell<tauri::AppHandle> = OnceCell::new();
+
+    /// ## 接続マネージャーのインスタンスを取得する
+    ///
+    /// まだ初期化されていない場合は新しいインスタンスを作成します。
     ///
     /// ### Returns
-    /// - `ConnectionManager`: 接続マネージャのクローン
+    /// - `ConnectionManager`: グローバル接続マネージャー
     pub fn get_manager() -> ConnectionManager {
-        GLOBAL_CONNECTION_MANAGER.lock().unwrap().clone()
+        MANAGER
+            .get_or_init(|| ConnectionManager::new(DEFAULT_MAX_CONNECTIONS))
+            .clone()
     }
 
-    /// ## Tauriアプリケーションハンドルを設定
+    /// ## Tauriアプリケーションハンドルを設定する
+    ///
+    /// グローバルなアプリケーションハンドルを設定します。
     ///
     /// ### Arguments
-    /// - `app_handle`: Tauriアプリケーションハンドル
-    pub fn set_app_handle(app_handle: tauri::AppHandle) {
-        let mut manager = GLOBAL_CONNECTION_MANAGER.lock().unwrap();
-        manager.set_app_handle(app_handle.clone());
+    /// - `handle`: 設定するアプリケーションハンドル
+    pub fn set_app_handle(handle: tauri::AppHandle) {
+        let _ = APP_HANDLE.set(handle.clone());
+
+        // 接続マネージャーにアプリケーションハンドルも設定
+        let mut manager = get_manager();
+        manager.set_app_handle(handle);
+    }
+
+    /// ## Tauriアプリケーションハンドルを取得する
+    ///
+    /// ### Returns
+    /// - `Option<tauri::AppHandle>`: 設定されたアプリケーションハンドル（設定されていない場合はNone）
+    pub fn get_app_handle() -> Option<tauri::AppHandle> {
+        APP_HANDLE.get().cloned()
     }
 
     /// ## 最大接続数を設定
@@ -338,7 +363,7 @@ pub mod global {
     /// ### Arguments
     /// - `max`: 新しい最大接続数
     pub fn set_max_connections(max: usize) {
-        let manager = GLOBAL_CONNECTION_MANAGER.lock().unwrap();
+        let manager = get_manager();
         manager.set_max_connections(max);
     }
 
@@ -347,7 +372,7 @@ pub mod global {
     /// ### Returns
     /// - `ConnectionsInfo`: 現在の接続情報
     pub fn get_connections_info() -> ConnectionsInfo {
-        let manager = GLOBAL_CONNECTION_MANAGER.lock().unwrap();
+        let manager = get_manager();
         manager.get_connections_info()
     }
 
@@ -359,7 +384,7 @@ pub mod global {
     /// ### Returns
     /// - `bool`: 切断に成功した場合はtrue、クライアントが見つからない場合はfalse
     pub fn disconnect_client(client_id: &str) -> bool {
-        let manager = GLOBAL_CONNECTION_MANAGER.lock().unwrap();
+        let manager = get_manager();
         manager.remove_client(client_id)
     }
 }

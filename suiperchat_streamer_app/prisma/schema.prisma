@@ -15,10 +15,10 @@ datasource db {
 /// @model Message
 /// スーパーチャットメッセージや通常メッセージの情報を格納します。
 model Message {
-    /// @property id {Int} - メッセージの一意な識別子 (主キー)
-    id             Int      @id @default(autoincrement())
-    /// @property session_id {Int} - 関連する配信セッションのID (外部キー)
-    session_id     Int
+    /// @property id {String} - メッセージの一意な識別子 (主キー, UUID)
+    id             String   @id @default(uuid())
+    /// @property session_id {String} - 関連する配信セッションのID (外部キー, UUID)
+    session_id     String
     /// @property wallet_address {String?} - 送信者のSUIウォレットアドレス (スパチャの場合必須、通常メッセージはNULL)
     wallet_address String?
     /// @property display_name {String} - 視聴者が入力した表示名
@@ -47,10 +47,10 @@ model Message {
 /// @model Session
 /// 配信セッションの情報を格納します。
 model Session {
-    /// @property id {Int} - セッションの一意な識別子 (主キー)
-    id         Int       @id @default(autoincrement())
-    /// @property start_time {DateTime} - セッション開始日時
-    start_time DateTime  @default(now())
+    /// @property id {String} - セッションの一意な識別子 (主キー, UUID)
+    id         String    @id @default(uuid())
+    /// @property started_at {DateTime} - セッション開始日時
+    started_at DateTime  @default(now()) // フィールド名を started_at に変更
     /// @property end_time {DateTime?} - セッション終了日時 (NULLの場合は配信中)
     end_time   DateTime?
     /// @property created_at {DateTime} - レコード作成日時

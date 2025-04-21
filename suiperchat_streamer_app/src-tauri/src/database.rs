@@ -30,12 +30,14 @@ pub async fn create_session(pool: &SqlitePool, session_id: &str) -> Result<(), S
 
     sqlx::query(
         r#"
-        INSERT INTO Session (id, started_at)
-        VALUES (?, ?)
+        INSERT INTO sessions (id, started_at, created_at, updated_at) -- created_at, updated_at を追加
+        VALUES (?, ?, ?, ?)
         "#,
     )
     .bind(session_id)
-    .bind(now)
+    .bind(now.to_rfc3339()) // started_at
+    .bind(now.to_rfc3339()) // created_at
+    .bind(now.to_rfc3339()) // updated_at
     .execute(pool)
     .await?;
 
@@ -69,12 +71,12 @@ pub async fn end_session(pool: &SqlitePool, session_id: &str) -> Result<(), Sqlx
 
     let result = sqlx::query(
         r#"
-        UPDATE Session
+        UPDATE sessions -- テーブル名を sessions に変更
         SET ended_at = ?
         WHERE id = ?
         "#,
     )
-    .bind(now)
+    .bind(now.to_rfc3339()) // DateTime<Utc>をRFC3339形式の文字列に変換
     .bind(session_id)
     .execute(pool)
     .await?;
@@ -115,7 +117,7 @@ pub async fn save_message_db(pool: &SqlitePool, message: &Message) -> Result<(),
 
     sqlx::query(
         r#"
-        INSERT INTO Message (id, timestamp, display_name, message, amount, tx_hash, wallet_address, session_id)
+        INSERT INTO messages (id, timestamp, display_name, message, amount, tx_hash, wallet_address, session_id) -- テーブル名を messages に変更
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         "#,
     )
@@ -146,10 +148,10 @@ mod tests {
     async fn setup_test_db(pool: &SqlitePool) -> Result<(), SqlxError> {
         sqlx::query(
             r#"
-            CREATE TABLE IF NOT EXISTS Session (
-                id TEXT PRIMARY KEY,
-                started_at TIMESTAMP NOT NULL,
-                ended_at TIMESTAMP
+            CREATE TABLE IF NOT EXISTS sessions ( -- テーブル名を sessions に変更
+                id TEXT PRIMARY KEY NOT NULL, -- 型もスキーマに合わせる
+                started_at TEXT NOT NULL,     -- 型もスキーマに合わせる
+                ended_at TEXT                 -- 型もスキーマに合わせる
             )
             "#,
         )
@@ -163,16 +165,16 @@ mod tests {
     async fn setup_message_table(pool: &SqlitePool) -> Result<(), SqlxError> {
         sqlx::query(
             r#"
-            CREATE TABLE IF NOT EXISTS Message (
-                id TEXT PRIMARY KEY,
-                timestamp TIMESTAMP NOT NULL,
+            CREATE TABLE IF NOT EXISTS messages ( -- テーブル名を messages に変更
+                id TEXT PRIMARY KEY NOT NULL,     -- 型もスキーマに合わせる
+                timestamp TEXT NOT NULL,          -- 型もスキーマに合わせる
                 display_name TEXT NOT NULL,
                 message TEXT NOT NULL,
-                amount REAL,
+                amount REAL DEFAULT 0,         -- スキーマに合わせて DEFAULT 追加
                 tx_hash TEXT,
                 wallet_address TEXT,
-                session_id TEXT,
-                FOREIGN KEY (session_id) REFERENCES Session(id)
+                session_id TEXT NOT NULL,         -- NOT NULL 制約を追加 (スキーマ依存)
+                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE -- 参照先テーブル名と ON DELETE を変更
             )
             "#,
         )
@@ -195,7 +197,7 @@ mod tests {
         create_session(&pool, &session_id).await?;
 
         // セッションがDBに正しく保存されたか確認
-        let session: Session = sqlx::query_as::<_, Session>("SELECT * FROM Session WHERE id = ?")
+        let session: Session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?") // テーブル名を sessions に変更
             .bind(&session_id)
             .fetch_one(&pool)
             .await?;
@@ -222,7 +224,7 @@ mod tests {
         end_session(&pool, &session_id).await?;
 
         // セッションが正しく更新されたか確認
-        let session: Session = sqlx::query_as::<_, Session>("SELECT * FROM Session WHERE id = ?")
+        let session: Session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?") // テーブル名を sessions に変更
             .bind(&session_id)
             .fetch_one(&pool)
             .await?;
@@ -261,7 +263,7 @@ mod tests {
 
         // メッセージがDBに正しく保存されたか確認
         let saved_message: Message =
-            sqlx::query_as::<_, Message>("SELECT * FROM Message WHERE id = ?")
+            sqlx::query_as::<_, Message>("SELECT * FROM messages WHERE id = ?") // テーブル名を messages に変更
                 .bind(&message.id)
                 .fetch_one(&pool)
                 .await?;

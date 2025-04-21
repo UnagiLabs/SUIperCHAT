@@ -370,6 +370,7 @@ dependencies = [
  "futures-util",
  "lazy_static",
  "log",
+ "once_cell",
  "serde",
  "serde_json",
  "sqlx",

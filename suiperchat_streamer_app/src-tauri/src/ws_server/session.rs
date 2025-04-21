@@ -3,6 +3,9 @@
 //! WebSocketセッションのライフサイクル管理と、メッセージの処理を行います。
 
 use super::{client_info::ClientInfo, connection_manager::ConnectionManager};
+use crate::database;
+use crate::db_models::Message as DbMessage;
+use crate::state::AppState;
 use crate::types::{
     ClientMessage, MessageType, ServerResponse, CLIENT_TIMEOUT, HEARTBEAT_INTERVAL,
 };
@@ -10,6 +13,10 @@ use actix::prelude::*;
 use actix::Message;
 use actix_web::HttpRequest;
 use actix_web_actors::ws;
+use chrono::Utc;
+use sqlx::sqlite::SqlitePool;
+use tauri::Manager;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 /// ## WsSession アクター
@@ -27,6 +34,10 @@ pub struct WsSession {
     connection_manager: Option<ConnectionManager>,
     /// リクエスト情報（クライアントのIPアドレス等）
     req: Option<HttpRequest>,
+    /// データベース接続プール
+    db_pool: Arc<Mutex<Option<SqlitePool>>>,
+    /// 現在のセッションID
+    current_session_id: Option<String>,
 }
 
 impl Default for WsSession {
@@ -46,6 +57,8 @@ impl WsSession {
             client_info: None,
             connection_manager: None,
             req: None,
+            db_pool: Arc::new(Mutex::new(None)),
+            current_session_id: None,
         }
     }
 
@@ -68,6 +81,17 @@ impl WsSession {
     /// - `request`: HTTPリクエスト
     pub fn with_request(mut self, request: HttpRequest) -> Self {
         self.req = Some(request);
+        self
+    }
+
+    /// ## データベース接続プールを設定する
+    ///
+    /// データベース操作のための接続プールを設定します。
+    ///
+    /// ### Arguments
+    /// - `db_pool`: データベース接続プール
+    pub fn with_db_pool(mut self, db_pool: Arc<Mutex<Option<SqlitePool>>>) -> Self {
+        self.db_pool = db_pool;
         self
     }
 
@@ -177,6 +201,88 @@ impl WsSession {
             }
         }
     }
+
+    /// ## メッセージをデータベースに保存する
+    ///
+    /// 受信したメッセージをデータベースに非同期で保存します。
+    ///
+    /// ### Arguments
+    /// - `client_msg`: クライアントから受信したメッセージ
+    fn save_message_to_db(&self, client_msg: &ClientMessage) {
+        // DB接続プールが設定されているか確認
+        let db_pool_option = {
+            if let Ok(pool_guard) = self.db_pool.lock() {
+                pool_guard.clone()
+            } else {
+                eprintln!("データベース接続プールのロックに失敗");
+                return;
+            }
+        };
+
+        // 接続プールがNoneの場合は処理をスキップ
+        let db_pool = match db_pool_option {
+            Some(pool) => pool,
+            None => {
+                println!(
+                    "データベース接続プールが初期化されていないため、メッセージを保存できません"
+                );
+                return;
+            }
+        };
+
+        // セッションIDがNoneの場合も処理をスキップ
+        let session_id = self.current_session_id.clone();
+        if session_id.is_none() {
+            println!("アクティブなセッションIDがないため、メッセージを保存できません");
+        }
+
+        // DBに保存するMessageオブジェクトを作成
+        let db_message = match client_msg {
+            ClientMessage::Chat(chat_msg) => DbMessage {
+                id: chat_msg.id.clone(),
+                timestamp: Utc::now(),
+                display_name: chat_msg.display_name.clone(),
+                content: chat_msg.content.clone(),
+                amount: Some(0.0), // チャットの場合はデフォルト値 0.0 を設定
+                tx_hash: None,
+                wallet_address: None,
+                session_id,
+            },
+            ClientMessage::Superchat(superchat_msg) => DbMessage {
+                id: superchat_msg.id.clone(),
+                timestamp: Utc::now(),
+                display_name: superchat_msg.display_name.clone(),
+                content: superchat_msg.content.clone(),
+                amount: Some(superchat_msg.superchat.amount),
+                tx_hash: Some(superchat_msg.superchat.tx_hash.clone()),
+                wallet_address: Some(superchat_msg.superchat.wallet_address.clone()),
+                session_id,
+            },
+        };
+
+        // 非同期でDBにメッセージを保存
+        let db_pool_clone = db_pool.clone();
+        let db_message_clone = db_message.clone();
+
+        println!(
+            "メッセージをデータベースに保存します: ID={}, セッションID={}",
+            db_message.id,
+            db_message.session_id.as_deref().unwrap_or("不明")
+        );
+
+        tokio::spawn(async move {
+            match database::save_message_db(&db_pool_clone, &db_message_clone).await {
+                Ok(_) => println!(
+                    "メッセージが正常に保存されました: ID={}",
+                    db_message_clone.id
+                ),
+                Err(e) => eprintln!(
+                    "メッセージの保存中にエラーが発生しました: {}, ID={}",
+                    e, db_message_clone.id
+                ),
+            }
+        });
+    }
 }
 
 /// ## Actor トレイトの実装
@@ -193,6 +299,27 @@ impl Actor for WsSession {
     /// - `ctx`: アクターコンテキスト (`ws::WebsocketContext<Self>`)
     fn started(&mut self, ctx: &mut Self::Context) {
         println!("WebSocket Session Started");
+
+        // AppStateからセッションIDを取得
+        if let Some(app_handle) = super::connection_manager::global::get_app_handle() {
+            if let Some(app_state) = app_handle.try_state::<AppState>() {
+                // セッションIDを取得
+                if let Ok(session_id_guard) = app_state.current_session_id.lock() {
+                    self.current_session_id = session_id_guard.clone();
+                    if let Some(ref session_id) = self.current_session_id {
+                        println!("WebSocket Session: Using session ID: {}", session_id);
+                    } else {
+                        println!("WebSocket Session: No active session ID found");
+                    }
+                } else {
+                    println!("WebSocket Session: Failed to lock current_session_id mutex");
+                }
+            } else {
+                println!("WebSocket Session: AppState not available");
+            }
+        } else {
+            println!("WebSocket Session: app_handle not available");
+        }
 
         // リクエストからクライアント情報を取得
         if let Some(req) = &self.req {
@@ -300,6 +427,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                 // JSONメッセージのパース処理
                 match serde_json::from_str::<ClientMessage>(&text) {
                     Ok(client_msg) => {
+                        // DBへのメッセージ保存処理
+                        self.save_message_to_db(&client_msg);
+
                         // メッセージを処理してブロードキャスト
                         self.broadcast_message(client_msg, ctx);
                     }
@@ -354,9 +484,20 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
 /// - `WsSession`: 接続マネージャと連携したWsSessionインスタンス
 pub fn create_ws_session(req: HttpRequest) -> WsSession {
     let manager = super::connection_manager::global::get_manager();
-    WsSession::new()
+    let app_handle = super::connection_manager::global::get_app_handle();
+
+    let mut session = WsSession::new()
         .with_connection_manager(manager)
-        .with_request(req)
+        .with_request(req);
+
+    // AppStateからDB接続プールを取得
+    if let Some(app_handle) = app_handle {
+        if let Some(app_state) = app_handle.try_state::<AppState>() {
+            session = session.with_db_pool(Arc::clone(&app_state.db_pool));
+        }
+    }
+
+    session
 }
 
 /// ## ブロードキャスト用メッセージ

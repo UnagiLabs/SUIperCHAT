@@ -479,25 +479,29 @@ async fn run_servers(
                 println!("Session ID '{}' stored in AppState.", session_id);
             }
 
-            // DBにセッションを作成（非同期処理）
+            // DBにセッションを作成（同期的に完了を待つ）
             if let Some(db_pool) = db_pool_option {
-                let session_id_clone = session_id.clone();
-                tokio::spawn(async move {
-                    match database::create_session(&db_pool, &session_id_clone).await {
-                        Ok(_) => println!(
-                            "セッションがデータベースに正常に保存されました: {}",
-                            session_id_clone
-                        ),
-                        Err(e) => eprintln!(
+                match database::create_session(&db_pool, &session_id).await { // tokio::spawn を削除し、直接 await
+                    Ok(_) => println!(
+                        "セッションがデータベースに正常に保存されました: {}",
+                        session_id
+                    ),
+                    Err(e) => {
+                        // セッション作成失敗時はエラーログを出力し、サーバー起動を中止することも検討
+                        eprintln!(
                             "セッションのデータベース保存中にエラーが発生しました: {}",
                             e
-                        ),
+                        );
+                        // セッション作成に失敗したら、後続の処理に進まない
+                        return; // ★★★★★ 早期リターンを追加 ★★★★★
                     }
-                });
+                }
             } else {
                 eprintln!(
                     "データベース接続プールが初期化されていないため、セッションを保存できません"
                 );
+                // DBプールがない場合も、後続の処理に進まない
+                return; // ★★★★★ 早期リターンを追加 ★★★★★
             }
 
             // サーバー起動成功イベントを発行
