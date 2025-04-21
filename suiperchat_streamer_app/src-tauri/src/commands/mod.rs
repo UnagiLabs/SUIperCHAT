@@ -3,6 +3,7 @@
 //! フロントエンドから呼び出されるTauriコマンドの定義を提供します。
 
 pub mod connection;
+pub mod history;
 pub mod server;
 pub mod wallet;
 
