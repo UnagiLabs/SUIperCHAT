@@ -96,18 +96,12 @@ impl ConnectionManager {
         client_info: ClientInfo,
         addr: Addr<crate::ws_server::session::WsSession>,
     ) -> bool {
-        println!(
-            "Debug: add_client method started for client: {}",
-            client_info.id
-        ); // ★追加★
+        println!("Debug: add_client method started for client: {}", client_info.id); // ★追加★
 
         let max_conn = self.get_max_connections();
         let current_count = get_connections_count();
 
-        println!(
-            "Debug: Current connections: {}, Max connections: {}",
-            current_count, max_conn
-        ); // ★追加★
+        println!("Debug: Current connections: {}, Max connections: {}", current_count, max_conn); // ★追加★
 
         // 最大接続数チェック
         if current_count >= max_conn {
@@ -120,9 +114,10 @@ impl ConnectionManager {
         }
 
         println!("Debug: Incrementing connections count."); // ★追加★
-                                                            // 接続カウンターをインクリメント
+        // 接続カウンターをインクリメント
         increment_connections();
         println!("Debug: Connections count incremented."); // ★追加★
+
 
         // セッションエントリをマップに追加
         let client_id = client_info.id.clone();
@@ -130,22 +125,20 @@ impl ConnectionManager {
             client_info: client_info.clone(),
             addr,
         };
-        {
-            // ★スコープ開始★
+        { // ★スコープ開始★
             println!("Debug: Attempting to lock connections map."); // ★追加★
             let mut connections = self.connections.lock().unwrap();
-            println!(
-                "Debug: Connections map locked. Inserting client: {}",
-                client_id
-            ); // ★追加★
+            println!("Debug: Connections map locked. Inserting client: {}", client_id); // ★追加★
             connections.insert(client_id, entry);
             println!("Debug: Client inserted into connections map."); // ★追加★
         } // ★スコープ終了 - ここでロックが解放される★
 
+
         println!("Debug: Emitting connections updated event."); // ★追加★
-                                                                // イベント発行
+        // イベント発行
         self.emit_connections_updated();
         println!("Debug: Connections updated event emitted."); // ★追加★
+
 
         println!("Debug: add_client method finished, returning true."); // ★追加★
         true // 追加成功
@@ -161,22 +154,22 @@ impl ConnectionManager {
     /// ### Returns
     /// - `bool`: 削除に成功した場合はtrue、指定されたIDのクライアントが見つからない場合はfalse
     pub fn remove_client(&self, client_id: &str) -> bool {
-        let removed;
-        // --- Lock scope starts ---
-        {
-            let mut connections = self.connections.lock().unwrap();
-            removed = connections.remove(client_id).is_some();
-        } // --- Lock scope ends ---
-
-        if removed {
-            // 接続カウンターをデクリメント (ロック解放後)
-            decrement_connections();
-            // イベント発行 (ロック解放後)
-            self.emit_connections_updated();
-            true
-        } else {
-            false
-        }
+    	let removed;
+    	// --- Lock scope starts ---
+    	{
+    		let mut connections = self.connections.lock().unwrap();
+    		removed = connections.remove(client_id).is_some();
+    	} // --- Lock scope ends ---
+   
+    	if removed {
+    		// 接続カウンターをデクリメント (ロック解放後)
+    		decrement_connections();
+    		// イベント発行 (ロック解放後)
+    		self.emit_connections_updated();
+    		true
+    	} else {
+    		false
+    	}
     }
 
     /// ## クライアント情報を取得
@@ -276,7 +269,7 @@ impl ConnectionManager {
         println!("Debug: emit_connections_updated method started."); // ★追加★
         if let Some(app_handle) = &self.app_handle {
             println!("Debug: app_handle is available."); // ★追加★
-                                                         // 接続情報を取得
+            // 接続情報を取得
             println!("Debug: Calling get_connections_info."); // ★変更★
             let info = self.get_connections_info();
             println!("Debug: Connections info obtained."); // ★追加★
@@ -285,11 +278,9 @@ impl ConnectionManager {
             println!("Debug: Attempting to emit connections_updated event."); // ★追加★
             if let Err(e) = app_handle.emit("connections_updated", info) {
                 eprintln!("接続更新イベントの発行に失敗: {}", e);
-                println!("Debug: Failed to emit connections_updated event: {}", e);
-            // ★追加★
+                println!("Debug: Failed to emit connections_updated event: {}", e); // ★追加★
             } else {
-                println!("Debug: connections_updated event emitted successfully.");
-                // ★追加★
+                println!("Debug: connections_updated event emitted successfully."); // ★追加★
             }
         } else {
             println!("Debug: app_handle is NOT available."); // ★追加★
@@ -331,19 +322,6 @@ pub mod global {
     /// - `ConnectionManager`: 接続マネージャのクローン
     pub fn get_manager() -> ConnectionManager {
         GLOBAL_CONNECTION_MANAGER.lock().unwrap().clone()
-    }
-
-    /// ## Tauriアプリケーションハンドルを取得
-    ///
-    /// ### Returns
-    /// - `tauri::AppHandle`: アプリケーションハンドルのクローン、設定されていない場合はパニック
-    pub fn get_app_handle() -> tauri::AppHandle {
-        let manager = GLOBAL_CONNECTION_MANAGER.lock().unwrap();
-        if let Some(app_handle) = &manager.app_handle {
-            app_handle.clone()
-        } else {
-            panic!("アプリケーションハンドルが設定されていません。サーバー起動前にこの関数を呼び出さないでください。");
-        }
     }
 
     /// ## Tauriアプリケーションハンドルを設定
