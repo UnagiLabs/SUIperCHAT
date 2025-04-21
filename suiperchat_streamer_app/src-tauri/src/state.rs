@@ -1,4 +1,5 @@
 use actix_web::dev::ServerHandle;
+use sqlx::sqlite::SqlitePool;
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Handle as TokioHandle;
 
@@ -27,6 +28,14 @@ pub struct AppState {
     pub port: Arc<Mutex<Option<u16>>>,
     /// OBSサーバーがリッスンしているポート番号
     pub obs_port: Arc<Mutex<Option<u16>>>,
+    /// SQLiteデータベース接続プール
+    ///
+    /// データベースに接続済みの場合は `Some(pool)`、未接続の場合は `None`。
+    pub db_pool: Arc<Mutex<Option<SqlitePool>>>,
+    /// 現在アクティブな配信セッションのID
+    ///
+    /// 配信中（WebSocketサーバー起動中）は `Some(session_id)`、未配信時は `None`。
+    pub current_session_id: Arc<Mutex<Option<String>>>,
 }
 
 impl AppState {
@@ -42,6 +51,8 @@ impl AppState {
             host: Arc::new(Mutex::new(None)),
             port: Arc::new(Mutex::new(None)),
             obs_port: Arc::new(Mutex::new(None)),
+            db_pool: Arc::new(Mutex::new(None)),
+            current_session_id: Arc::new(Mutex::new(None)),
         }
     }
 }
