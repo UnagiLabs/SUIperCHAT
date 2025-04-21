@@ -2,16 +2,19 @@
 //!
 //! WebSocketサーバーの起動・停止・監視を行うモジュールです。
 
+use crate::database;
 use crate::state::AppState;
 use crate::types::ServerStatus;
 use crate::ws_server::connection_manager::global::set_app_handle;
 use crate::ws_server::routes::{status_page, websocket_route};
 use crate::ws_server::server_utils::{format_socket_addr, resolve_static_file_path};
 use actix_files as fs;
-use actix_web::{dev::ServerHandle, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{dev::ServerHandle, web, App, HttpResponse, HttpServer};
+use log::{error, info};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
+use tauri::Manager;
 use tokio::runtime::{Handle as TokioHandle, Runtime};
 
 /// ## WebSocketサーバーを起動する
@@ -80,7 +83,9 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
 
     let server_handles_option: Option<(ServerHandle, ServerHandle)>;
     let runtime_handle_option: Option<TokioHandle>;
+    let session_id_option: Option<i32>;
 
+    // サーバーハンドルを取得・クリア
     {
         let mut handle_guard = app_state
             .server_handle
@@ -89,12 +94,22 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
         server_handles_option = handle_guard.take();
     }
 
+    // ランタイムハンドルを取得（クリアせず）
     {
-        let mut rt_handle_guard = app_state
+        let rt_handle_guard = app_state
             .runtime_handle
             .lock()
             .map_err(|_| "Failed to lock runtime handle mutex".to_string())?;
-        runtime_handle_option = rt_handle_guard.take();
+        runtime_handle_option = rt_handle_guard.clone();
+    }
+
+    // セッションIDを取得・クリア
+    {
+        let mut session_id_guard = app_state
+            .current_session_id
+            .lock()
+            .map_err(|_| "Failed to lock session ID mutex".to_string())?;
+        session_id_option = session_id_guard.take();
     }
 
     if let Some((ws_server_handle, obs_server_handle)) = server_handles_option {
@@ -104,8 +119,19 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
             // ホストとポートをクリア
             clear_server_info(app_state);
 
-            // 両方のサーバーを停止するタスクをspawn
-            let app_handle_clone = app_handle.clone();
+            // アクティブなセッションを終了
+            if let Some(session_id) = session_id_option {
+                let app_handle_clone2 = app_handle.clone();
+                runtime_handle.spawn(async move {
+                    if let Err(e) = end_database_session(&app_handle_clone2, session_id).await {
+                        println!("Failed to end database session: {}", e);
+                    }
+                });
+            }
+
+            // サーバーのグレースフルシャットダウン
+            let ws_server_handle = ws_server_handle;
+            let obs_server_handle = obs_server_handle;
             runtime_handle.spawn(async move {
                 println!("Sending stop signal to WS and OBS servers via Tokio runtime handle...");
                 // 両方の stop を並行して実行
@@ -115,7 +141,7 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
                 println!("Both server stop signals sent and awaited.");
 
                 // サーバー停止成功イベントを発行
-                emit_server_status(&app_handle_clone, false, None, None);
+                emit_server_status(&app_handle, false, None, None);
             });
             println!("Server stop initiated.");
 
@@ -129,6 +155,14 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
                     .lock()
                     .expect("Failed to re-lock server handle mutex");
                 *handle_guard = Some((ws_server_handle, obs_server_handle));
+            }
+            // セッションIDも戻す
+            if let Some(session_id) = session_id_option {
+                let mut session_id_guard = app_state
+                    .current_session_id
+                    .lock()
+                    .expect("Failed to re-lock session ID mutex");
+                *session_id_guard = Some(session_id);
             }
             Err("Internal error: Runtime handle missing, cannot stop servers.".to_string())
         }
@@ -200,7 +234,11 @@ fn send_current_server_status(
 /// Tokioランタイムを作成し、WebSocketサーバーとOBSサーバーを起動します。
 ///
 /// ### Arguments
-/// - 各種状態保持用のArc<Mutex>
+/// - `server_handle_arc`: サーバーハンドルを保持するArc<Mutex>
+/// - `runtime_handle_arc`: ランタイムハンドルを保持するArc<Mutex>
+/// - `host_arc`: ホスト名を保持するArc<Mutex>
+/// - `port_arc`: ポート番号を保持するArc<Mutex>
+/// - `obs_port_arc`: OBSポート番号を保持するArc<Mutex>
 /// - `app_handle`: Tauriアプリケーションハンドル
 fn launch_server_runtime(
     server_handle_arc: Arc<Mutex<Option<(ServerHandle, ServerHandle)>>>,
@@ -210,50 +248,64 @@ fn launch_server_runtime(
     obs_port_arc: Arc<Mutex<Option<u16>>>,
     app_handle: tauri::AppHandle,
 ) {
-    // Tokioランタイムの作成
-    let rt = match Runtime::new() {
-        Ok(rt) => rt,
+    // 新しいTokioランタイムを作成
+    match Runtime::new() {
+        Ok(rt) => {
+            // ランタイムハンドルを取得・保存
+            let handle = rt.handle().clone();
+            {
+                let mut rt_handle_guard = runtime_handle_arc
+                    .lock()
+                    .expect("Failed to lock runtime handle mutex");
+                *rt_handle_guard = Some(handle.clone());
+            }
+
+            // ランタイムをブロックさせて非同期処理を実行
+            rt.block_on(async {
+                if let Err(e) = run_servers(
+                    server_handle_arc.clone(),
+                    host_arc.clone(),
+                    port_arc.clone(),
+                    obs_port_arc.clone(),
+                    runtime_handle_arc.clone(),
+                    app_handle.clone(),
+                )
+                .await
+                {
+                    eprintln!("Server runtime error: {}", e);
+                    cleanup_server_resources(
+                        server_handle_arc,
+                        runtime_handle_arc,
+                        host_arc,
+                        port_arc,
+                        obs_port_arc,
+                    );
+                    // サーバー起動失敗イベントを発行
+                    emit_server_status(&app_handle, false, None, None);
+                }
+            });
+        }
         Err(e) => {
             eprintln!("Failed to create Tokio runtime: {}", e);
-            // 起動失敗イベントを発行
             emit_server_status(&app_handle, false, None, None);
-            return;
         }
-    };
-
-    // ランタイムハンドルの保存
-    let tokio_handle = rt.handle().clone();
-    {
-        let mut rt_handle_guard = runtime_handle_arc
-            .lock()
-            .expect("Failed to lock runtime handle mutex for storing");
-        *rt_handle_guard = Some(tokio_handle);
-        println!("Tokio runtime handle stored.");
     }
-
-    // ランタイム内でサーバーを起動
-    rt.block_on(async {
-        run_servers(
-            server_handle_arc,
-            host_arc,
-            port_arc,
-            obs_port_arc,
-            runtime_handle_arc,
-            app_handle,
-        )
-        .await;
-    });
-
-    println!("Server thread finished.");
 }
 
-/// ## サーバーを実行する
+/// ## WebSocketサーバーとOBSサーバーを実行する
 ///
-/// WebSocketサーバーとOBSサーバーを並列に実行します。
+/// 指定されたホストとポートでWebSocketサーバーとOBSサーバーを起動します。
 ///
 /// ### Arguments
-/// - 各種状態保持用のArc<Mutex>
+/// - `server_handle_arc`: サーバーハンドルを保持するArc<Mutex>
+/// - `host_arc`: ホスト名を保持するArc<Mutex>
+/// - `port_arc`: ポート番号を保持するArc<Mutex>
+/// - `obs_port_arc`: OBSポート番号を保持するArc<Mutex>
+/// - `runtime_handle_arc`: ランタイムハンドルを保持するArc<Mutex>
 /// - `app_handle`: Tauriアプリケーションハンドル
+///
+/// ### Returns
+/// - `Result<(), String>`: 成功時はOk、失敗時はエラーメッセージ
 async fn run_servers(
     server_handle_arc: Arc<Mutex<Option<(ServerHandle, ServerHandle)>>>,
     host_arc: Arc<Mutex<Option<String>>>,
@@ -261,177 +313,93 @@ async fn run_servers(
     obs_port_arc: Arc<Mutex<Option<u16>>>,
     runtime_handle_arc: Arc<Mutex<Option<TokioHandle>>>,
     app_handle: tauri::AppHandle,
-) {
+) -> Result<(), String> {
+    // ホストとポートを設定
     let host = "127.0.0.1";
-    let ws_port = 8082; // WebSocket用ポート（視聴者用）
-    let obs_port = 8081; // OBS用静的ファイル配信ポート
-    let ws_path = "/ws";
+    let port: u16 = 8080;
+    let obs_port: u16 = 8081;
 
-    println!(
-        "Starting WebSocket server at ws://{}:{}{}",
-        host, ws_port, ws_path
-    );
-    println!("Starting OBS server at http://{}:{}/obs/", host, obs_port);
-    println!("Note: Client connections MUST include the '/ws' path");
+    let host_string = host.to_string();
+    *host_arc.lock().unwrap() = Some(host_string.clone());
+    *port_arc.lock().unwrap() = Some(port);
+    *obs_port_arc.lock().unwrap() = Some(obs_port);
 
-    // 静的ファイルの配信パスを解決
-    let static_path = resolve_static_file_path();
-    let obs_path = static_path.join("obs");
+    // データベースセッションを作成
+    let app_state = app_handle.state::<AppState>();
+    let session_id = create_database_session(&app_state).await?;
 
-    // OBSディレクトリの存在確認
-    if !obs_path.exists() {
-        eprintln!(
-            "警告: OBS用静的ファイルディレクトリが見つかりません: {}",
-            obs_path.display()
-        );
-        eprintln!("OBS表示機能は利用できない可能性があります。");
+    // AppStateにセッションIDを保存
+    if let Ok(mut session_id_guard) = app_state.current_session_id.lock() {
+        *session_id_guard = Some(session_id);
+        info!("セッションIDをAppStateに設定しました: {}", session_id);
+    } else {
+        error!("セッションID保存のためのAppStateロック取得に失敗しました");
+        return Err("セッションID保存のためのAppStateロック取得に失敗しました".to_string());
     }
 
-    let obs_path_str = obs_path.to_string_lossy().to_string();
-    println!("Serving OBS static files from: {}", obs_path_str);
+    // ポートがすでに使用されていないか確認
+    // WebSocketサーバーをバインド
+    let app_handle_ws = app_handle.clone(); // WebSocketサーバー用
+    let app_handle_obs = app_handle.clone(); // OBSサーバー用
 
-    // WebSocketサーバー（視聴者用）を作成
-    let websocket_server_result = HttpServer::new(move || {
+    let ws_server = HttpServer::new(move || {
         App::new()
-            // WebSocketエンドポイント
+            .app_data(web::Data::new(app_handle_ws.clone()))
             .service(websocket_route)
-            // エラーハンドラー
-            .default_service(
-                web::route().to(|| async { HttpResponse::NotFound().body("404 Not Found") }),
-            )
-    })
-    .bind((host, ws_port));
-
-    // OBS用静的ファイルサーバーを作成
-    let obs_path_clone = obs_path.clone();
-    let obs_server_result = HttpServer::new(move || {
-        App::new()
-            // ステータスページ
             .service(status_page)
-            // OBS用静的ファイル配信
-            .service(
-                fs::Files::new("/obs", obs_path_clone.clone())
-                    .index_file("index.html")
-                    .use_last_modified(true)
-                    .prefer_utf8(true)
-                    .default_handler(web::to(|req: HttpRequest| async move {
-                        let path = req.path().to_string();
-                        if path.ends_with("/") || path == "/obs" {
-                            HttpResponse::Ok()
-                                .content_type("text/html; charset=utf-8")
-                                .body(include_str!("../../src/static/obs/index.html"))
-                        } else {
-                            HttpResponse::NotFound().body("404 - File not found")
-                        }
-                    })),
-            )
-            // エラーハンドラー
+            .service(fs::Files::new("/static", resolve_static_file_path()).show_files_listing())
             .default_service(
-                web::route().to(|| async { HttpResponse::NotFound().body("404 Not Found") }),
+                web::route().to(|| async { HttpResponse::NotFound().body("Not Found") }),
             )
     })
-    .bind((host, obs_port));
+    .workers(2)
+    .bind(format!("{}:{}", host, port))
+    .map_err(|e| format!("Failed to bind WebSocket server: {}", e))?;
 
-    // WebSocketサーバーとOBSサーバーのバインド結果を評価
-    match (websocket_server_result, obs_server_result) {
-        (Ok(ws_server), Ok(obs_server)) => {
-            // 両方のサーバーが正常にバインドされた場合
-            println!("Both WebSocket and OBS servers bound successfully.");
+    let obs_server = HttpServer::new(move || {
+        App::new()
+            .app_data(web::Data::new(app_handle_obs.clone()))
+            .service(status_page)
+            .service(fs::Files::new("/static", resolve_static_file_path()).show_files_listing())
+            .default_service(
+                web::route().to(|| async { HttpResponse::NotFound().body("Not Found") }),
+            )
+    })
+    .workers(2)
+    .bind(format!("{}:{}", host, obs_port))
+    .map_err(|e| format!("Failed to bind OBS server: {}", e))?;
 
-            // バインドされたアドレスを取得
-            let ws_addrs = ws_server.addrs();
-            let obs_addrs = obs_server.addrs();
+    // サーバーハンドルを取得
+    let ws_server_handle = ws_server.run();
+    let obs_server_handle = obs_server.run();
 
-            println!("WS Addrs: {:?}", ws_addrs);
-            println!("OBS Addrs: {:?}", obs_addrs);
+    // サーバーURLを生成
+    let ws_socket_addr = SocketAddr::new(host.parse().unwrap(), port);
+    let obs_socket_addr = SocketAddr::new(host.parse().unwrap(), obs_port);
+    let ws_url = format_socket_addr(&ws_socket_addr, "ws", "/ws");
+    let obs_url = format_socket_addr(&obs_socket_addr, "http", "/obs/");
 
-            let ws_addr_str = ws_addrs
-                .first()
-                .map(|addr| format_socket_addr(addr, "ws", "/ws"))
-                .unwrap_or_else(|| format!("ws://{}:{}{}", host, ws_port, ws_path));
+    println!("WebSocket server started at: {}", ws_url);
+    println!("OBS server started at: {}", obs_url);
 
-            let obs_addr_str = obs_addrs
-                .first()
-                .map(|addr| format_socket_addr(addr, "http", "/obs/"))
-                .unwrap_or_else(|| format!("http://{}:{}/obs/", host, obs_port));
-
-            println!("Generated WebSocket URL: {}", ws_addr_str);
-            println!("Generated OBS URL: {}", obs_addr_str);
-
-            // WebSocketサーバーの実行インスタンス (Server型) を取得
-            let ws_server_runner = ws_server.run();
-            let server_handle = ws_server_runner.handle(); // ハンドル取得
-
-            // OBSサーバーの実行インスタンスを取得
-            let obs_server_runner = obs_server.run();
-            let obs_server_handle = obs_server_runner.handle(); // OBSサーバーのハンドルも取得
-
-            // AppStateにハンドルなどを保存
-            {
-                let mut handle_guard = server_handle_arc
-                    .lock()
-                    .expect("Failed to lock server handle mutex for storing");
-                // WebSocketサーバーとOBSサーバーのハンドルをタプルで保存
-                *handle_guard = Some((server_handle, obs_server_handle));
-                println!("WebSocket and OBS server handles stored in AppState.");
-            }
-
-            // hostとportをAppStateに保存
-            {
-                let mut host_guard = host_arc
-                    .lock()
-                    .expect("Failed to lock host mutex for storing");
-                *host_guard = Some(host.to_string());
-                println!("Host '{}' stored in AppState.", host);
-            }
-            {
-                let mut port_guard = port_arc
-                    .lock()
-                    .expect("Failed to lock port mutex for storing");
-                *port_guard = Some(ws_port);
-                println!("Port '{}' stored in AppState.", ws_port);
-            }
-            {
-                let mut obs_port_guard = obs_port_arc
-                    .lock()
-                    .expect("Failed to lock obs_port mutex for storing");
-                *obs_port_guard = Some(obs_port);
-                println!("OBS Port '{}' stored in AppState.", obs_port);
-            }
-
-            // サーバー起動成功イベントを発行
-            emit_server_status(&app_handle, true, Some(ws_addr_str), Some(obs_addr_str));
-
-            // 両方のサーバーを並行して実行
-            println!("Starting both servers concurrently using tokio::try_join!...");
-            if let Err(e) = tokio::try_join!(ws_server_runner, obs_server_runner) {
-                eprintln!("Server execution error in try_join!: {}", e);
-                // エラーが発生した場合も停止イベントを発行
-                emit_server_status(&app_handle, false, None, None);
-            } else {
-                println!("Both servers joined successfully and stopped gracefully.");
-                // 正常終了時にも停止イベントを発行
-                emit_server_status(&app_handle, false, None, None);
-            }
-        }
-        (ws_result, obs_result) => {
-            // どちらかまたは両方のバインドに失敗した場合
-            let mut error_msg = String::new();
-            if let Err(e) = ws_result {
-                error_msg.push_str(&format!("Failed to bind WebSocket server: {}. ", e));
-            }
-            if let Err(e) = obs_result {
-                error_msg.push_str(&format!("Failed to bind OBS server: {}. ", e));
-            }
-            eprintln!("{}", error_msg.trim());
-            eprintln!("Neither server will start.");
-
-            // サーバー起動失敗イベントを発行
-            emit_server_status(&app_handle, false, None, None);
-        }
+    // サーバーハンドルを保存
+    let ws_handle = ws_server_handle.handle();
+    let obs_handle = obs_server_handle.handle();
+    {
+        let mut handle_guard = server_handle_arc
+            .lock()
+            .map_err(|_| "Failed to lock server handle mutex".to_string())?;
+        *handle_guard = Some((ws_handle, obs_handle));
     }
 
-    // クリーンアップ処理
+    // サーバー起動成功イベントを発行
+    emit_server_status(&app_handle, true, Some(ws_url), Some(obs_url));
+
+    // サーバーを実行し続ける
+    let (_, _) = tokio::join!(ws_server_handle, obs_server_handle);
+
+    // サーバーが完全に終了した時の処理
+    println!("WebSocket and OBS servers have gracefully stopped.");
     cleanup_server_resources(
         server_handle_arc,
         runtime_handle_arc,
@@ -439,6 +407,8 @@ async fn run_servers(
         port_arc,
         obs_port_arc,
     );
+
+    Ok(())
 }
 
 /// ## サーバーステータスイベントを発行する
@@ -557,4 +527,85 @@ fn cleanup_server_resources(
         println!("OBS Port cleared from AppState.");
     }
     println!("Cleanup finished.");
+}
+
+/// ## データベースセッションを作成する
+///
+/// サーバー起動時にデータベースにセッションを作成します。
+///
+/// ### Arguments
+/// - `app_state`: アプリケーション状態
+///
+/// ### Returns
+/// - `Result<i32, String>`: 成功時はセッションID、失敗時はエラーメッセージ
+async fn create_database_session(app_state: &AppState) -> Result<i32, String> {
+    info!("新しいデータベースセッションを作成します");
+
+    let db_pool = {
+        let db_pool_guard = app_state
+            .db_pool
+            .lock()
+            .map_err(|_| "データベースプールのロック取得に失敗しました".to_string())?;
+
+        match &*db_pool_guard {
+            Some(pool) => pool.clone(),
+            None => return Err("データベース接続がありません".to_string()),
+        }
+    };
+
+    // セッション作成
+    match database::create_session(&db_pool).await {
+        Ok(session_id) => {
+            info!("新しいセッションを作成しました: ID {}", session_id);
+            Ok(session_id)
+        }
+        Err(e) => {
+            let error_msg = format!("セッション作成エラー: {}", e);
+            error!("{}", error_msg);
+            Err(error_msg)
+        }
+    }
+}
+
+/// ## データベースセッションを終了する
+///
+/// サーバー停止時にデータベースセッションを終了状態に更新します。
+///
+/// ### Arguments
+/// - `app_handle`: Tauriアプリケーションハンドル
+/// - `session_id`: 終了するセッションID
+///
+/// ### Returns
+/// - `Result<(), String>`: 成功時は空のタプル、失敗時はエラーメッセージ
+async fn end_database_session(
+    app_handle: &tauri::AppHandle,
+    session_id: i32,
+) -> Result<(), String> {
+    info!("セッション{}を終了します", session_id);
+
+    let app_state = app_handle.state::<AppState>();
+    let db_pool = {
+        let db_pool_guard = app_state
+            .db_pool
+            .lock()
+            .map_err(|_| "データベースプールのロック取得に失敗しました".to_string())?;
+
+        match &*db_pool_guard {
+            Some(pool) => pool.clone(),
+            None => return Err("データベース接続がありません".to_string()),
+        }
+    };
+
+    // セッション終了
+    match database::end_session(&db_pool, session_id).await {
+        Ok(()) => {
+            info!("セッション{}を終了しました", session_id);
+            Ok(())
+        }
+        Err(e) => {
+            let error_msg = format!("セッション終了エラー: {}", e);
+            error!("{}", error_msg);
+            Err(error_msg)
+        }
+    }
 }

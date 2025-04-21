@@ -3,6 +3,9 @@
 //! WebSocketセッションのライフサイクル管理と、メッセージの処理を行います。
 
 use super::{client_info::ClientInfo, connection_manager::ConnectionManager};
+use crate::database;
+use crate::db_models;
+use crate::state::AppState;
 use crate::types::{
     ClientMessage, MessageType, ServerResponse, CLIENT_TIMEOUT, HEARTBEAT_INTERVAL,
 };
@@ -10,7 +13,10 @@ use actix::prelude::*;
 use actix::Message;
 use actix_web::HttpRequest;
 use actix_web_actors::ws;
+use chrono::Utc;
+use log::{error, info};
 use std::time::Instant;
+use tauri::Manager;
 
 /// ## WsSession アクター
 ///
@@ -27,6 +33,10 @@ pub struct WsSession {
     connection_manager: Option<ConnectionManager>,
     /// リクエスト情報（クライアントのIPアドレス等）
     req: Option<HttpRequest>,
+    /// Tauriアプリケーションハンドル
+    app_handle: Option<tauri::AppHandle>,
+    /// 現在のセッションID
+    session_id: Option<i32>,
 }
 
 impl Default for WsSession {
@@ -46,6 +56,8 @@ impl WsSession {
             client_info: None,
             connection_manager: None,
             req: None,
+            app_handle: None,
+            session_id: None,
         }
     }
 
@@ -68,6 +80,17 @@ impl WsSession {
     /// - `request`: HTTPリクエスト
     pub fn with_request(mut self, request: HttpRequest) -> Self {
         self.req = Some(request);
+        self
+    }
+
+    /// ## アプリケーションハンドルを設定する
+    ///
+    /// Tauriアプリケーションハンドルを設定します。
+    ///
+    /// ### Arguments
+    /// - `app_handle`: Tauriアプリケーションハンドル
+    pub fn with_app_handle(mut self, app_handle: tauri::AppHandle) -> Self {
+        self.app_handle = Some(app_handle);
         self
     }
 
@@ -125,6 +148,90 @@ impl WsSession {
         }
     }
 
+    /// ## データベースにメッセージを保存する
+    ///
+    /// 受信したメッセージをデータベースに保存します。
+    /// 非同期処理として実行され、アクターをブロックしません。
+    ///
+    /// ### Arguments
+    /// - `message`: 保存するメッセージ
+    fn save_message_to_db(&self, message: &ClientMessage) {
+        // アプリハンドルとセッションIDが設定されていることを確認
+        if let (Some(app_handle), Some(session_id)) = (&self.app_handle, &self.session_id) {
+            info!("メッセージをデータベースに保存します");
+            let app_handle_clone = app_handle.clone();
+            let message_clone = message.clone();
+            let session_id_clone = *session_id;
+
+            // メッセージをバックグラウンドで保存
+            tokio::spawn(async move {
+                // AppStateからデータベースプールを取得
+                let db_pool = {
+                    let app_state = app_handle_clone.state::<AppState>();
+                    let db_pool_guard = match app_state.db_pool.lock() {
+                        Ok(guard) => guard,
+                        Err(e) => {
+                            error!("データベースプールのロック取得に失敗: {}", e);
+                            return;
+                        }
+                    };
+
+                    match &*db_pool_guard {
+                        Some(pool) => pool.clone(),
+                        None => {
+                            error!("データベース接続がありません");
+                            return;
+                        }
+                    }
+                };
+
+                // メッセージ型に応じてデータベースモデルを作成
+                let db_message = match message_clone {
+                    ClientMessage::Chat(chat_msg) => db_models::Message {
+                        id: 0, // AUTO INCREMENTのため0を指定
+                        session_id: session_id_clone,
+                        wallet_address: None,
+                        display_name: chat_msg.display_name,
+                        message: chat_msg.content,
+                        amount: 0.0, // 通常チャットは0
+                        tx_hash: None,
+                        timestamp: Utc::now(),
+                    },
+                    ClientMessage::Superchat(superchat_msg) => db_models::Message {
+                        id: 0, // AUTO INCREMENTのため0を指定
+                        session_id: session_id_clone,
+                        wallet_address: Some(superchat_msg.superchat.wallet_address),
+                        display_name: superchat_msg.display_name,
+                        message: superchat_msg.content,
+                        amount: superchat_msg.superchat.amount,
+                        tx_hash: Some(superchat_msg.superchat.tx_hash),
+                        timestamp: Utc::now(),
+                    },
+                };
+
+                // データベースに保存
+                match database::save_message(&db_pool, &db_message).await {
+                    Ok(id) => {
+                        info!("メッセージをデータベースに保存しました (ID: {})", id);
+                    }
+                    Err(e) => {
+                        error!("メッセージの保存に失敗: {}", e);
+                    }
+                }
+            });
+        } else {
+            // アプリハンドルかセッションIDが設定されていない場合
+            if self.app_handle.is_none() {
+                error!(
+                    "アプリケーションハンドルが設定されていないため、メッセージを保存できません"
+                );
+            }
+            if self.session_id.is_none() {
+                error!("セッションIDが設定されていないため、メッセージを保存できません");
+            }
+        }
+    }
+
     /// ## メッセージをブロードキャストする
     ///
     /// 受信したメッセージを適切に処理してブロードキャストします。
@@ -142,7 +249,10 @@ impl WsSession {
             });
         }
 
-        let json_result = match message {
+        // メッセージをデータベースに保存
+        self.save_message_to_db(&message);
+
+        let json_result = match &message {
             ClientMessage::Chat(chat_msg) => {
                 println!(
                     "Normal chat message from {}: {}",
@@ -236,6 +346,20 @@ impl Actor for WsSession {
             }
         } else {
             println!("Debug: req not available.");
+        }
+
+        // アプリケーションハンドルがあれば、現在のセッションIDを取得
+        if let Some(app_handle) = &self.app_handle {
+            if let Ok(session_id_guard) = app_handle.state::<AppState>().current_session_id.lock() {
+                if let Some(session_id) = *session_id_guard {
+                    self.session_id = Some(session_id);
+                    info!("現在のセッションID: {}", session_id);
+                } else {
+                    info!("セッションIDが設定されていません");
+                }
+            } else {
+                error!("セッションIDのロックを取得できませんでした");
+            }
         }
 
         println!("Debug: Starting heartbeat.");
@@ -354,9 +478,12 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
 /// - `WsSession`: 接続マネージャと連携したWsSessionインスタンス
 pub fn create_ws_session(req: HttpRequest) -> WsSession {
     let manager = super::connection_manager::global::get_manager();
+    let app_handle = super::connection_manager::global::get_app_handle();
+
     WsSession::new()
         .with_connection_manager(manager)
         .with_request(req)
+        .with_app_handle(app_handle)
 }
 
 /// ## ブロードキャスト用メッセージ
