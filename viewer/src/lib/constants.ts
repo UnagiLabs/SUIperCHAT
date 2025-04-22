@@ -27,9 +27,9 @@ export const SUI_TYPE_ARG = "0x2::sui::SUI";
 /**
  * SUIからMISTへの変換係数 (1 SUI = 10^9 MIST)
  */
-export const SUI_TO_MIST = 1_000_000_000n;
+export const SUI_TO_MIST = BigInt(1_000_000_000);
 
 /**
  * デフォルトのガス予算 (0.02 SUI = 20,000,000 MIST)
  */
-export const DEFAULT_GAS_BUDGET = 20_000_000n;
+export const DEFAULT_GAS_BUDGET = BigInt(20_000_000);
