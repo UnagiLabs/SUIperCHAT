@@ -35,8 +35,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY NOT NULL,
     started_at TEXT NOT NULL,
     ended_at TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL, -- DEFAULT削除 (Rust側で設定するため)
+    updated_at TEXT NOT NULL  -- DEFAULT削除 (Rust側で設定するため)
 );
 "#;
 
