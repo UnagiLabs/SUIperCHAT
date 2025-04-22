@@ -45,7 +45,16 @@ import { toast } from "sonner";
 import {
 	useCurrentAccount,
 	useSignAndExecuteTransaction,
+	useSuiClient, // useSuiClient をインポート
 } from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions"; // Transaction をインポート
+import {
+	DEFAULT_GAS_BUDGET,
+	PACKAGE_ID,
+	PAYMENT_CONFIG_ID,
+	SUI_TYPE_ARG,
+} from "@/lib/constants"; // 定数をインポート
+import { suiToMist } from "@/lib/utils"; // ユーティリティをインポート
 
 // フォームのバリデーションスキーマ
 const superchat_form_schema = z.object({
@@ -131,8 +140,10 @@ export function SuperchatForm({
 	const { actions } = useWebSocket();
 
 	// Suiクライアントとウォレット接続ステータスを取得
+	const suiClient = useSuiClient(); // suiClient を取得
 	const currentAccount = useCurrentAccount();
-	const { isPending } = useSignAndExecuteTransaction();
+	const { isPending } = // mutate も取得
+		useSignAndExecuteTransaction();
 
 	// フォーム作成
 	const form = useForm<SuperchatFormValues>({
@@ -170,55 +181,129 @@ export function SuperchatForm({
 			return;
 		}
 
-		// 実際の送信処理
-		console.log("送信データ:", values);
+		// === ステップ3: PTB構築 ===
+		try {
+			// 1. 金額をMISTに変換
+			const suiAmountMist = suiToMist(values.amount);
 
-		// WebSocketを通じてメッセージを送信
-		if (values.amount > 0) {
-			// スーパーチャットメッセージを送信
-			// 注: 実際のSUI送金機能は別途実装が必要
-			// この例ではダミーのスーパーチャットデータを使用
-			const superchat_data = {
-				amount: values.amount,
-				tx_hash: "dummy-transaction-hash",
-				wallet_address: "dummy-wallet-address",
-			};
+			// 2. 支払い可能なSUIコインを取得
+			const coins = await suiClient.getCoins({
+				owner: currentAccount.address, // ! を削除 (nullチェック済みのため)
+				coinType: SUI_TYPE_ARG,
+			});
 
-			actions.sendSuperchatMessage(
-				values.display_name,
-				values.message || "",
-				superchat_data,
+			// 十分な残高を持つコインを1つ見つける (ページングは考慮しない簡易版)
+			// TODO: #Issue番号 - 複数Coinのmergeやページング対応
+			const paymentCoinObject = coins.data.find(
+				(coin) => BigInt(coin.balance) >= suiAmountMist,
 			);
 
-			toast.success("Super Chat sent successfully!", {
-				description: `${values.amount} SUI has been sent`,
-			});
-		} else {
-			// 通常のチャットメッセージを送信
-			actions.sendChatMessage(values.display_name, values.message || "");
+			if (!paymentCoinObject) {
+				toast.error("Insufficient SUI balance", {
+					description: `Cannot find a SUI coin with at least ${values.amount} SUI.`,
+				});
+				set_confirm_mode(false);
+				return;
+			}
 
-			toast.success("Message sent successfully!", {
-				description: "Your message has been sent without SUI",
-			});
-		}
+			// 3. トランザクションブロック作成
+			const tx = new Transaction();
 
-		// 送信成功時のコールバックがあれば呼び出す
-		// 実際の実装では、トランザクションIDも渡す
-		if (on_send_success) {
-			on_send_success(
-				values.amount,
-				values.display_name,
-				values.message || "",
-				undefined,
+			// 4. 支払い用コインを分割
+			const [paymentCoin] = tx.splitCoins(tx.object(paymentCoinObject.coinObjectId), [
+				tx.pure.u64(suiAmountMist), // BigIntをtx.pure.u64でラップ
+			]);
+
+			// 5. Moveコントラクト呼び出し
+			tx.moveCall({
+				target: `${PACKAGE_ID}::payment::process_superchat_payment`,
+				arguments: [
+					tx.object(PAYMENT_CONFIG_ID),
+					paymentCoin,
+					tx.pure.u64(suiAmountMist), // BigIntをtx.pure.u64でラップ
+					tx.pure.address(values.recipient_address),
+				],
+				typeArguments: [SUI_TYPE_ARG],
+			});
+
+			// 6. ガス予算設定
+			tx.setGasBudget(DEFAULT_GAS_BUDGET);
+
+			// === ステップ4: トランザクション実行 ===
+			signAndExecuteTransaction(
+				{
+					transaction: tx,
+				},
+				{
+					onSuccess: (result) => {
+						console.log("Transaction successful:", result);
+						const digest = result.digest;
+
+						toast.success("Super Chat sent successfully!", {
+							description: `${values.amount} SUI sent. Digest: ${digest.substring(0, 8)}...`,
+							// Explorerリンクは不要なため削除
+						});
+
+						// WebSocketでスーパーチャット情報を送信
+						const superchat_data = {
+							amount: values.amount,
+							tx_hash: digest,
+							wallet_address: currentAccount.address,
+						};
+						actions.sendSuperchatMessage(
+							values.display_name,
+							values.message || "",
+							superchat_data,
+						);
+
+						if (on_send_success) {
+							on_send_success(
+								values.amount,
+								values.display_name,
+								values.message || "",
+								digest,
+							);
+						}
+
+						form.reset({
+							...default_values,
+							recipient_address: initial_recipient_address,
+						});
+						set_confirm_mode(false);
+					},
+					onError: (error) => {
+						console.error("Transaction failed:", error);
+						// エラーコードや型に基づいて詳細なメッセージを表示
+						// (dApp Kitのエラー型を確認して実装するのが望ましい)
+						let description = "An unknown error occurred.";
+						// @ts-expect-error code プロパティが存在する場合がある
+						if (error?.code === -32000 || error.message.includes("Rejected")) { // ウォレットでの拒否 (コードは一例)
+							description = "Transaction rejected in wallet.";
+						// @ts-expect-error name プロパティが存在する場合がある
+						} else if (error?.name === "WalletNotConnectedError") {
+							description = "Wallet not connected. Please reconnect.";
+						} else if (error.message.includes("InsufficientGas")) { // ガス不足 (エラーメッセージはRPCにより異なる可能性)
+							description = "Insufficient gas budget or SUI balance for gas.";
+						} else if (error.message.includes("Failure")) { // Move実行エラーなど
+							description = "Transaction failed on the network.";
+							// TODO: エラーの詳細をパースして表示 (result.effects?.status?.error)
+						} else {
+							description = error.message || "Transaction failed.";
+						}
+
+						toast.error("Failed to send Super Chat", { description });
+						set_confirm_mode(false); // エラー時も確認モード解除
+					},
+				},
 			);
-		}
 
-		// フォームリセットと確認モード解除
-		form.reset({
-			...default_values,
-			recipient_address: initial_recipient_address,
-		});
-		set_confirm_mode(false);
+		} catch (error) {
+			console.error("Error during PTB construction or coin fetching:", error);
+			toast.error("Failed to prepare transaction", {
+				description: error instanceof Error ? error.message : String(error),
+			});
+			set_confirm_mode(false);
+		}
 	}
 
 	/**
