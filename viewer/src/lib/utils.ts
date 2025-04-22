@@ -6,6 +6,8 @@
  * @module utils
  */
 
+import { SUI_TO_MIST } from "./constants";
+
 type ClassValue =
 	| string
 	| Record<string, boolean>
@@ -91,4 +93,24 @@ export function get_device_type() {
  */
 export function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * SUI通貨をMIST単位に変換する関数
+ *
+ * @param {number} sui - SUI単位の金額
+ * @returns {bigint} - MIST単位に変換された金額
+ */
+export function sui_to_mist(sui: number): bigint {
+	return BigInt(Math.floor(sui * Number(SUI_TO_MIST)));
+}
+
+/**
+ * MIST単位をSUI通貨に変換する関数
+ *
+ * @param {bigint} mist - MIST単位の金額
+ * @returns {number} - SUI単位に変換された金額
+ */
+export function mist_to_sui(mist: bigint): number {
+	return Number(mist) / Number(SUI_TO_MIST);
 }
