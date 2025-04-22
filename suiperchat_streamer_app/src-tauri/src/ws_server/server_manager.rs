@@ -100,32 +100,54 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
     }
 
     // 現在のセッションIDを取得
-    let session_id_option = {
-        let session_id_guard = app_state
-            .current_session_id
-            .lock()
-            .map_err(|_| "Failed to lock current_session_id mutex".to_string())?;
-        session_id_guard.clone()
+    let session_id_option = match app_state.current_session_id.lock() {
+        Ok(session_id_guard) => {
+            // セッションIDが存在する場合はログ出力
+            if let Some(ref session_id) = *session_id_guard {
+                println!("現在のセッションID: {} - 終了処理を準備します", session_id);
+            } else {
+                println!("セッションIDが設定されていません - 終了処理はスキップされます");
+            }
+            session_id_guard.clone()
+        }
+        Err(e) => {
+            // ロックエラーの場合はエラーログを出力し、None を返す
+            eprintln!(
+                "セッションID取得のためのロックに失敗しました: {} - セッション終了処理をスキップします",
+                e
+            );
+            None
+        }
     };
 
     // データベースプールを取得
-    let db_pool_option = {
-        let db_pool_guard = app_state
-            .db_pool
-            .lock()
-            .map_err(|_| "Failed to lock db_pool mutex".to_string())?;
-        db_pool_guard.clone()
+    let db_pool_option = match app_state.db_pool.lock() {
+        Ok(db_pool_guard) => {
+            if db_pool_guard.is_none() {
+                println!("データベース接続が初期化されていません - セッション終了処理をスキップします");
+            }
+            db_pool_guard.clone()
+        }
+        Err(e) => {
+            eprintln!(
+                "データベースプール取得のためのロックに失敗しました: {} - セッション終了処理をスキップします",
+                e
+            );
+            None
+        }
     };
 
     // セッションIDをクリア
-    {
-        let mut session_id_guard = app_state
-            .current_session_id
-            .lock()
-            .map_err(|_| "Failed to lock current_session_id mutex for clearing".to_string())?;
-        if session_id_guard.is_some() {
-            println!("Clearing session ID: {:?}", *session_id_guard);
-            *session_id_guard = None;
+    match app_state.current_session_id.lock() {
+        Ok(mut session_id_guard) => {
+            if session_id_guard.is_some() {
+                println!("セッションID: {:?} をクリアします", *session_id_guard);
+                *session_id_guard = None;
+            }
+        }
+        Err(e) => {
+            eprintln!("セッションIDクリアのためのロックに失敗しました: {}", e);
+            // 処理は継続
         }
     }
 
@@ -136,30 +158,55 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
             // ホストとポートをクリア
             clear_server_info(app_state);
 
-            // セッションIDとDBプールの有無を事前チェック
-            if session_id_option.is_none() {
-                eprintln!("セッションIDが設定されていないため、セッション終了処理をスキップします");
-            }
-            if db_pool_option.is_none() {
-                eprintln!(
-                    "データベース接続が初期化されていないため、セッション終了処理をスキップします"
-                );
-            }
-
-            // DBにセッション終了を記録
-            if let (Some(session_id), Some(db_pool)) = (session_id_option, db_pool_option) {
-                let session_id_clone = session_id.clone();
-                let db_pool_clone = db_pool.clone();
-
-                println!("Ending session in database: {}", session_id);
-
-                // 非同期でセッション終了処理
-                runtime_handle.spawn(async move {
-                    match database::end_session(&db_pool_clone, &session_id_clone).await {
-                        Ok(_) => println!("セッションが正常に終了しました: {}", session_id_clone),
-                        Err(e) => eprintln!("セッション終了処理中にエラーが発生しました: {}", e),
-                    }
-                });
+            // セッション終了処理
+            let has_valid_session_id = session_id_option.is_some();
+            let has_valid_db_pool = db_pool_option.is_some();
+            
+            // 必要な情報がそろっている場合のみDBを更新
+            if has_valid_session_id && has_valid_db_pool {
+                // 元の変数から値を取り出す（これにより所有権が移動する）
+                if let (Some(session_id), Some(db_pool)) = (session_id_option, db_pool_option) {
+                    println!("データベースにセッション終了を記録します: ID={}", session_id);
+                    
+                    // 非同期でセッション終了処理
+                    let session_id_clone = session_id.clone();
+                    let db_pool_clone = db_pool.clone();
+                    runtime_handle.spawn(async move {
+                        match database::end_session(&db_pool_clone, &session_id_clone).await {
+                            Ok(_) => println!("セッションが正常に終了しました: {}", session_id_clone),
+                            Err(e) => {
+                                let error_msg = format!("セッション終了処理中にエラーが発生しました: {}", e);
+                                eprintln!("エラー: {}", error_msg);
+                                
+                                // エラーの詳細情報を分析
+                                match e {
+                                    sqlx::Error::Database(db_err) => {
+                                        eprintln!("データベースエラー詳細: {}", db_err);
+                                        if db_err.message().contains("no such table") {
+                                            eprintln!("テーブルが存在しない可能性があります。スキーマの初期化を確認してください。");
+                                        }
+                                    }
+                                    sqlx::Error::RowNotFound => {
+                                        eprintln!("セッションID: {} が見つかりませんでした。すでに終了しているか、削除された可能性があります。", 
+                                                 session_id_clone);
+                                    }
+                                    _ => {
+                                        eprintln!("その他のSQLエラー: {}", e);
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            } else {
+                println!("セッション終了処理をスキップします");
+                if !has_valid_session_id {
+                    println!("理由: セッションIDが設定されていません。サーバーが正常に起動していなかった可能性があります。");
+                }
+                
+                if !has_valid_db_pool {
+                    println!("理由: データベース接続が初期化されていません。アプリケーションの起動時にエラーが発生した可能性があります。");
+                }
             }
 
             // 両方のサーバーを停止するタスクをspawn

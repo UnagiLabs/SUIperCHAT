@@ -49,15 +49,24 @@ pub fn run() {
                 let connect_options_result = async {
                     let db_path = if cfg!(debug_assertions) {
                         // 開発ビルド時
-                        std::path::PathBuf::from("../prisma/dev.db") // src ディレクトリからの相対パス
+                        let path = std::path::PathBuf::from("../prisma/dev.db");
+                        println!("開発モードのデータベースパス: {}", path.display());
+                        
+                        // 開発用DBが存在するか確認
+                        if !path.exists() {
+                            println!("警告: 開発用データベースファイル({})が存在しません。自動的に作成されます。", path.display());
+                        }
+                        
+                        path
                     } else {
                         // リリースビルド時
                         let app_data_dir = match app_handle.path().app_data_dir() {
                             Ok(dir) => dir,
-                            Err(_) => {
-                                return Err(
-                                    "アプリデータディレクトリの取得に失敗しました。".to_string()
-                                );
+                            Err(e) => {
+                                return Err(format!(
+                                    "アプリデータディレクトリの取得に失敗しました: {}",
+                                    e
+                                ));
                             }
                         };
                         let db_dir = app_data_dir.join("data");
@@ -68,19 +77,28 @@ pub fn run() {
                                 e
                             ));
                         }
-                        db_dir.join("suiperchat_data.db")
+                        let path = db_dir.join("suiperchat_data.db");
+                        println!("本番モードのデータベースパス: {}", path.display());
+                        path
                     };
 
                     let db_url = format!("sqlite:{}", db_path.to_string_lossy());
                     println!("データベースURL: {}", db_url);
 
-                    // SQLiteConnectOptionsを設定（データベースが存在しない場合は作成する）
+                    // SQLiteConnectOptionsを設定
                     match SqliteConnectOptions::from_str(&db_url) {
-                        Ok(options) => Ok(options
-                            .create_if_missing(true)
-                            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
-                            .foreign_keys(true)),
-                        Err(e) => Err(format!("データベースURLのパースに失敗しました: {}", e)),
+                        Ok(options) => {
+                            println!("SQLite接続オプションを設定しました");
+                            Ok(options
+                                .create_if_missing(true)
+                                .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+                                .foreign_keys(true))
+                        }
+                        Err(e) => {
+                            let error_msg = format!("データベースURLのパースに失敗しました: {}", e);
+                            eprintln!("エラー: {}", error_msg);
+                            Err(error_msg)
+                        }
                     }
                 }
                 .await; // db_pathとconnect_options生成処理を完了
@@ -89,26 +107,42 @@ pub fn run() {
                 match connect_options_result {
                     Ok(connect_options) => {
                         // SQLiteプールの初期化（接続オプションを使用）
+                        println!("データベース接続プールを初期化しています...");
                         match sqlx::sqlite::SqlitePoolOptions::new()
                             .max_connections(5)
                             .connect_with(connect_options)
                             .await
                         {
                             Ok(pool) => {
-                                let app_state = app_handle.state::<AppState>();
-                                let mut pool_guard = app_state.db_pool.lock().unwrap(); // Mutexロック
-                                *pool_guard = Some(pool);
-                                println!("データベースプールの初期化に成功しました");
+                                println!("データベース接続プールの初期化に成功しました");
+
+                                // データベースプールの設定
+                                if let Ok(mut db_pool_guard) = app_handle.state::<AppState>().db_pool.lock() {
+                                    *db_pool_guard = Some(pool);
+                                    println!("AppStateにデータベースプールを設定しました");
+                                } else {
+                                    eprintln!("エラー: データベースプールのロックに失敗しました");
+                                }
                             }
                             Err(e) => {
                                 eprintln!("データベース接続エラー: {}", e);
-                                // connect_with エラー時の追加処理が必要な場合はここに記述
+                                // 接続エラーの詳細情報を取得してログに出力
+                                let err_details = match e {
+                                    sqlx::Error::Database(db_err) => {
+                                        format!("データベースエラー: {}", db_err)
+                                    }
+                                    sqlx::Error::PoolTimedOut => "接続プールのタイムアウト".to_string(),
+                                    sqlx::Error::PoolClosed => "接続プールが閉じられています".to_string(),
+                                    sqlx::Error::WorkerCrashed => "ワーカーがクラッシュしました".to_string(),
+                                    _ => format!("その他のエラー: {}", e),
+                                };
+                                eprintln!("詳細: {}", err_details);
                             }
                         }
                     }
                     Err(e) => {
                         eprintln!("DB接続オプション生成エラー: {}", e);
-                        eprintln!("データベース初期化をスキップします。");
+                        eprintln!("データベース初期化をスキップします。この状態ではメッセージの保存と履歴機能は動作しません。");
                     }
                 }
             });

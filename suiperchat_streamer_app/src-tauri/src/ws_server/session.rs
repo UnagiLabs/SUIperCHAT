@@ -15,9 +15,9 @@ use actix_web::HttpRequest;
 use actix_web_actors::ws;
 use chrono::Utc;
 use sqlx::sqlite::SqlitePool;
-use tauri::Manager;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use tauri::Manager;
 
 /// ## WsSession アクター
 ///
@@ -210,11 +210,13 @@ impl WsSession {
     /// - `client_msg`: クライアントから受信したメッセージ
     fn save_message_to_db(&self, client_msg: &ClientMessage) {
         // DB接続プールが設定されているか確認
-        let db_pool_option = {
-            if let Ok(pool_guard) = self.db_pool.lock() {
-                pool_guard.clone()
-            } else {
-                eprintln!("データベース接続プールのロックに失敗");
+        let db_pool_option = match self.db_pool.lock() {
+            Ok(pool_guard) => pool_guard.clone(),
+            Err(e) => {
+                eprintln!(
+                    "エラー: データベース接続プールのロックに失敗しました: {}",
+                    e
+                );
                 return;
             }
         };
@@ -230,11 +232,24 @@ impl WsSession {
             }
         };
 
-        // セッションIDがNoneの場合も処理をスキップ
-        let session_id = self.current_session_id.clone();
-        if session_id.is_none() {
-            println!("アクティブなセッションIDがないため、メッセージを保存できません");
-        }
+        // セッションIDの確認
+        let session_id = match &self.current_session_id {
+            Some(id) => Some(id.clone()),
+            None => {
+                println!("アクティブなセッションIDがないため、メッセージの関連付けができません");
+                None
+            }
+        };
+
+        // メッセージ情報ログ出力
+        let msg_type = match client_msg {
+            ClientMessage::Chat(msg) => format!("通常チャット from {}", msg.display_name),
+            ClientMessage::Superchat(msg) => format!(
+                "スーパーチャット from {}, 金額:{}",
+                msg.display_name, msg.superchat.amount
+            ),
+        };
+        println!("メッセージをデータベースに保存準備中: {}", msg_type);
 
         // DBに保存するMessageオブジェクトを作成
         let db_message = match client_msg {
@@ -260,25 +275,19 @@ impl WsSession {
             },
         };
 
-        // 非同期でDBにメッセージを保存
+        // 非同期タスクでDBに保存
         let db_pool_clone = db_pool.clone();
-        let db_message_clone = db_message.clone();
-
-        println!(
-            "メッセージをデータベースに保存します: ID={}, セッションID={}",
-            db_message.id,
-            db_message.session_id.as_deref().unwrap_or("不明")
-        );
+        let message_id = db_message.id.clone(); // エラー報告用にIDをクローン
 
         tokio::spawn(async move {
-            match database::save_message_db(&db_pool_clone, &db_message_clone).await {
+            match database::save_message_db(&db_pool_clone, &db_message).await {
                 Ok(_) => println!(
-                    "メッセージが正常に保存されました: ID={}",
-                    db_message_clone.id
+                    "メッセージをデータベースに正常に保存しました: ID={}",
+                    message_id
                 ),
                 Err(e) => eprintln!(
-                    "メッセージの保存中にエラーが発生しました: {}, ID={}",
-                    e, db_message_clone.id
+                    "メッセージの保存中にエラーが発生しました: ID={}, エラー={}",
+                    message_id, e
                 ),
             }
         });

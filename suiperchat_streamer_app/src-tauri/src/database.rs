@@ -107,17 +107,27 @@ pub async fn end_session(pool: &SqlitePool, session_id: &str) -> Result<(), Sqlx
 /// # エラー
 /// - データベース接続エラー
 /// - SQLクエリ実行エラー
+/// - セッションIDが不足している場合
 pub async fn save_message_db(pool: &SqlitePool, message: &Message) -> Result<(), SqlxError> {
+    // セッションIDのログを改善
+    let session_display = message
+        .session_id
+        .as_deref()
+        .unwrap_or("[セッションID未設定]");
+
     println!(
         "メッセージをデータベースに保存: ID={}, 送信者={}, セッションID={}",
-        message.id,
-        message.display_name,
-        message.session_id.as_deref().unwrap_or("不明")
+        message.id, message.display_name, session_display
     );
 
-    sqlx::query(
+    // セッションIDの存在確認（オプションだが、実質的に必須）
+    if message.session_id.is_none() {
+        println!("警告: メッセージにセッションIDが設定されていません。このメッセージの関連付けが不完全になる可能性があります。");
+    }
+
+    let result = sqlx::query(
         r#"
-        INSERT INTO messages (id, timestamp, display_name, message, amount, tx_hash, wallet_address, session_id) -- テーブル名を messages に変更
+        INSERT INTO messages (id, timestamp, display_name, message, amount, tx_hash, wallet_address, session_id) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         "#,
     )
@@ -132,7 +142,11 @@ pub async fn save_message_db(pool: &SqlitePool, message: &Message) -> Result<(),
     .execute(pool)
     .await?;
 
-    println!("メッセージ保存完了: {}", message.id);
+    println!(
+        "メッセージ保存完了: {} (影響行数: {})",
+        message.id,
+        result.rows_affected()
+    );
 
     Ok(())
 }
@@ -144,8 +158,8 @@ pub async fn save_message_db(pool: &SqlitePool, message: &Message) -> Result<(),
 ///
 /// # 引数
 /// * `pool` - SQLiteデータベース接続プール
-/// * `limit` - 取得するメッセージの最大数
-/// * `offset` - 結果セットのオフセット（ページネーション用）
+/// * `limit` - 取得するメッセージの最大数（1-1000、デフォルトは100）
+/// * `offset` - 結果セットのオフセット（ページネーション用、0以上）
 ///
 /// # 戻り値
 /// * `Result<Vec<Message>, SqlxError>` - 成功時はメッセージのベクター、エラー時は `SqlxError`
@@ -153,24 +167,43 @@ pub async fn save_message_db(pool: &SqlitePool, message: &Message) -> Result<(),
 /// # エラー
 /// - データベース接続エラー
 /// - SQLクエリ実行エラー
+/// - 無効な入力値（例: 負の値）は自動的に安全な値に調整されます
 pub async fn fetch_messages(
     pool: &SqlitePool,
     limit: i64,
     offset: i64,
 ) -> Result<Vec<Message>, SqlxError> {
-    println!(
-        "データベースからメッセージを取得: limit={}, offset={}",
-        limit, offset
-    );
-
-    // limitが負の値や不正な値の場合、デフォルト値を設定
-    let safe_limit = if limit <= 0 || limit > 1000 {
+    // パラメータの検証と調整
+    let safe_limit = if limit <= 0 {
+        println!(
+            "警告: 無効なlimit値({})が指定されました。デフォルト値(100)を使用します。",
+            limit
+        );
         100
+    } else if limit > 1000 {
+        println!(
+            "警告: limit値({})が大きすぎます。最大値(1000)に制限します。",
+            limit
+        );
+        1000
     } else {
         limit
     };
-    // offsetが負の値の場合、0に設定
-    let safe_offset = if offset < 0 { 0 } else { offset };
+
+    let safe_offset = if offset < 0 {
+        println!(
+            "警告: 無効なoffset値({})が指定されました。0を使用します。",
+            offset
+        );
+        0
+    } else {
+        offset
+    };
+
+    println!(
+        "データベースからメッセージを取得: limit={}, offset={}",
+        safe_limit, safe_offset
+    );
 
     let messages = sqlx::query_as::<_, Message>(
         r#"
@@ -193,7 +226,12 @@ pub async fn fetch_messages(
     .fetch_all(pool)
     .await?;
 
-    println!("メッセージ取得完了: {}件", messages.len());
+    println!(
+        "メッセージ取得完了: {}件（要求limit: {}, offset: {}）",
+        messages.len(),
+        safe_limit,
+        safe_offset
+    );
 
     Ok(messages)
 }
