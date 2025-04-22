@@ -26,6 +26,34 @@ pub use commands::connection::{disconnect_client, get_connections_info, set_conn
 // 履歴関連コマンドの再エクスポート
 pub use commands::history::get_message_history;
 
+/// ## テーブル作成のためのSQL文
+///
+/// データベース初期化時に実行されるテーブル作成のためのSQL文を定義します。
+/// アプリケーションの初回起動時に必要なテーブルを自動的に作成します。
+const CREATE_SESSIONS_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+"#;
+
+const CREATE_MESSAGES_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY NOT NULL,
+    timestamp TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    message TEXT NOT NULL,
+    amount REAL DEFAULT 0,
+    tx_hash TEXT,
+    wallet_address TEXT,
+    session_id TEXT NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+"#;
+
 /// ## Tauriアプリケーションのエントリーポイント
 ///
 /// Tauriアプリケーションの実行に必要な設定と初期化を行います。
@@ -117,12 +145,44 @@ pub fn run() {
                                 println!("データベース接続プールの初期化に成功しました");
 
                                 // データベースプールの設定
-                                if let Ok(mut db_pool_guard) = app_handle.state::<AppState>().db_pool.lock() {
-                                    *db_pool_guard = Some(pool);
-                                    println!("AppStateにデータベースプールを設定しました");
-                                } else {
-                                    eprintln!("エラー: データベースプールのロックに失敗しました");
+                                // MutexGuardのスコープを制限するためブロックで囲む
+                                {
+                                    if let Ok(mut db_pool_guard) = app_handle.state::<AppState>().db_pool.lock() {
+                                        *db_pool_guard = Some(pool.clone());
+                                        println!("AppStateにデータベースプールを設定しました");
+                                    } else {
+                                        eprintln!("エラー: データベースプールのロックに失敗しました");
+                                    }
+                                } // ここでdb_pool_guardは解放される
+                                
+                                // テーブル作成処理の実行
+                                println!("必要なテーブルの作成を開始します...");
+                                
+                                // sessionsテーブルの作成
+                                match sqlx::query(CREATE_SESSIONS_TABLE_SQL)
+                                    .execute(&pool)
+                                    .await
+                                {
+                                    Ok(_) => println!("sessionsテーブルの作成に成功しました"),
+                                    Err(e) => {
+                                        eprintln!("sessionsテーブル作成中にエラーが発生しました: {}", e);
+                                        eprintln!("警告: sessionsテーブルが作成できなかったため、一部の機能が動作しない可能性があります");
+                                    }
                                 }
+                                
+                                // messagesテーブルの作成
+                                match sqlx::query(CREATE_MESSAGES_TABLE_SQL)
+                                    .execute(&pool)
+                                    .await
+                                {
+                                    Ok(_) => println!("messagesテーブルの作成に成功しました"),
+                                    Err(e) => {
+                                        eprintln!("messagesテーブル作成中にエラーが発生しました: {}", e);
+                                        eprintln!("警告: messagesテーブルが作成できなかったため、履歴機能が動作しない可能性があります");
+                                    }
+                                }
+                                
+                                println!("テーブル作成処理が完了しました");
                             }
                             Err(e) => {
                                 eprintln!("データベース接続エラー: {}", e);
