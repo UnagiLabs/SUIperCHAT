@@ -107,7 +107,6 @@
     -   プロジェクトルートの `prisma` ディレクトリを削除する。
     -   `suiperchat_streamer_app/package.json` ファイルを開き、`devDependencies` から `@prisma/client` と `prisma` の行を削除する。その後 `npm install` または `yarn install` を実行して `node_modules` と `package-lock.json` を更新する。
     -   ルートディレクトリの `.env` ファイルから `DATABASE_URL` の行を削除する（Rust側でパス解決するため）。
-    -   `docs/sqlite_integration_plan.md` や他の関連ドキュメントから、Prisma Migrate に関する記述を削除・修正する。
 -   **変更ファイル:** `package.json`, `.env`, `docs/*.md`
 -   **削除対象:** `prisma` ディレクトリ
 -   **確認手段:**
