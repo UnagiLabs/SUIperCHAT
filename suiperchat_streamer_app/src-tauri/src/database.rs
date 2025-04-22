@@ -239,57 +239,18 @@ pub async fn fetch_messages(
 #[cfg(test)]
 mod tests {
     use crate::db_models::{Message, Session};
+    use crate::{CREATE_MESSAGES_TABLE_SQL, CREATE_SESSIONS_TABLE_SQL};
 
     use super::*;
     use uuid::Uuid;
-
-    /// テスト用データベースにSessionテーブルを作成する
-    async fn setup_test_db(pool: &SqlitePool) -> Result<(), SqlxError> {
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS sessions ( -- テーブル名を sessions に変更
-                id TEXT PRIMARY KEY NOT NULL, -- 型もスキーマに合わせる
-                started_at TEXT NOT NULL,     -- 型もスキーマに合わせる
-                ended_at TEXT,                -- 型もスキーマに合わせる
-                created_at TEXT NOT NULL,     -- Prismaスキーマに合わせて追加
-                updated_at TEXT NOT NULL      -- Prismaスキーマに合わせて追加
-            )
-            "#,
-        )
-        .execute(pool)
-        .await?;
-
-        Ok(())
-    }
-
-    /// テスト用データベースにMessageテーブルを作成する
-    async fn setup_message_table(pool: &SqlitePool) -> Result<(), SqlxError> {
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS messages ( -- テーブル名を messages に変更
-                id TEXT PRIMARY KEY NOT NULL,     -- 型もスキーマに合わせる
-                timestamp TEXT NOT NULL,          -- 型もスキーマに合わせる
-                display_name TEXT NOT NULL,
-                message TEXT NOT NULL,
-                amount REAL DEFAULT 0,         -- スキーマに合わせて DEFAULT 追加
-                tx_hash TEXT,
-                wallet_address TEXT,
-                session_id TEXT NOT NULL,         -- NOT NULL 制約を追加 (スキーマ依存)
-                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE -- 参照先テーブル名と ON DELETE を変更
-            )
-            "#,
-        )
-        .execute(pool)
-        .await?;
-
-        Ok(())
-    }
 
     /// `create_session`関数のテスト
     #[sqlx::test]
     async fn test_create_session(pool: SqlitePool) -> Result<(), SqlxError> {
         // テスト用DBのセットアップ
-        setup_test_db(&pool).await?;
+        sqlx::query(CREATE_SESSIONS_TABLE_SQL)
+            .execute(&pool)
+            .await?;
 
         // テスト用のセッションIDを生成
         let session_id = Uuid::new_v4().to_string();
@@ -313,7 +274,9 @@ mod tests {
     #[sqlx::test]
     async fn test_end_session(pool: SqlitePool) -> Result<(), SqlxError> {
         // テスト用DBのセットアップ
-        setup_test_db(&pool).await?;
+        sqlx::query(CREATE_SESSIONS_TABLE_SQL)
+            .execute(&pool)
+            .await?;
 
         // テスト用のセッションIDを生成
         let session_id = Uuid::new_v4().to_string();
@@ -340,8 +303,12 @@ mod tests {
     #[sqlx::test]
     async fn test_save_message_db(pool: SqlitePool) -> Result<(), SqlxError> {
         // テスト用DBのセットアップ
-        setup_test_db(&pool).await?;
-        setup_message_table(&pool).await?;
+        sqlx::query(CREATE_SESSIONS_TABLE_SQL)
+            .execute(&pool)
+            .await?;
+        sqlx::query(CREATE_MESSAGES_TABLE_SQL)
+            .execute(&pool)
+            .await?;
 
         // テスト用のセッションを作成
         let session_id = uuid::Uuid::new_v4().to_string();
@@ -384,8 +351,12 @@ mod tests {
     #[sqlx::test]
     async fn test_fetch_messages(pool: SqlitePool) -> Result<(), SqlxError> {
         // テスト用DBのセットアップ
-        setup_test_db(&pool).await?;
-        setup_message_table(&pool).await?;
+        sqlx::query(CREATE_SESSIONS_TABLE_SQL)
+            .execute(&pool)
+            .await?;
+        sqlx::query(CREATE_MESSAGES_TABLE_SQL)
+            .execute(&pool)
+            .await?;
 
         // テスト用のセッションIDを生成
         let session_id = Uuid::new_v4().to_string();
