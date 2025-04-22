@@ -79,12 +79,12 @@ pub fn run() {
                         // 開発ビルド時
                         let path = std::path::PathBuf::from("../prisma/dev.db");
                         println!("開発モードのデータベースパス: {}", path.display());
-                        
+
                         // 開発用DBが存在するか確認
                         if !path.exists() {
                             println!("警告: 開発用データベースファイル({})が存在しません。自動的に作成されます。", path.display());
                         }
-                        
+
                         path
                     } else {
                         // リリースビルド時
@@ -154,10 +154,10 @@ pub fn run() {
                                         eprintln!("エラー: データベースプールのロックに失敗しました");
                                     }
                                 } // ここでdb_pool_guardは解放される
-                                
+
                                 // テーブル作成処理の実行
                                 println!("必要なテーブルの作成を開始します...");
-                                
+
                                 // sessionsテーブルの作成
                                 match sqlx::query(CREATE_SESSIONS_TABLE_SQL)
                                     .execute(&pool)
@@ -169,7 +169,7 @@ pub fn run() {
                                         eprintln!("警告: sessionsテーブルが作成できなかったため、一部の機能が動作しない可能性があります");
                                     }
                                 }
-                                
+
                                 // messagesテーブルの作成
                                 match sqlx::query(CREATE_MESSAGES_TABLE_SQL)
                                     .execute(&pool)
@@ -181,7 +181,7 @@ pub fn run() {
                                         eprintln!("警告: messagesテーブルが作成できなかったため、履歴機能が動作しない可能性があります");
                                     }
                                 }
-                                
+
                                 println!("テーブル作成処理が完了しました");
                             }
                             Err(e) => {

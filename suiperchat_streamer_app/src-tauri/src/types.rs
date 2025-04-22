@@ -254,7 +254,8 @@ mod tests {
                     parsed_superchat.superchat.wallet_address,
                     "0xabcdef1234567890"
                 );
-                assert_eq!(parsed_superchat.timestamp, Some(1679401800000_i64)); // timestampのアサーション変更
+                // timestampのアサーション変更
+                assert_eq!(parsed_superchat.timestamp, Some(1679401800000_i64));
             }
             _ => panic!("スーパーチャットメッセージが正しくパースされませんでした"),
         }

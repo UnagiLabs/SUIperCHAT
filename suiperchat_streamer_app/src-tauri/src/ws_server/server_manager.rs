@@ -124,7 +124,9 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
     let db_pool_option = match app_state.db_pool.lock() {
         Ok(db_pool_guard) => {
             if db_pool_guard.is_none() {
-                println!("データベース接続が初期化されていません - セッション終了処理をスキップします");
+                println!(
+                    "データベース接続が初期化されていません - セッション終了処理をスキップします"
+                );
             }
             db_pool_guard.clone()
         }
@@ -161,13 +163,16 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
             // セッション終了処理
             let has_valid_session_id = session_id_option.is_some();
             let has_valid_db_pool = db_pool_option.is_some();
-            
+
             // 必要な情報がそろっている場合のみDBを更新
             if has_valid_session_id && has_valid_db_pool {
                 // 元の変数から値を取り出す（これにより所有権が移動する）
                 if let (Some(session_id), Some(db_pool)) = (session_id_option, db_pool_option) {
-                    println!("データベースにセッション終了を記録します: ID={}", session_id);
-                    
+                    println!(
+                        "データベースにセッション終了を記録します: ID={}",
+                        session_id
+                    );
+
                     // 非同期でセッション終了処理
                     let session_id_clone = session_id.clone();
                     let db_pool_clone = db_pool.clone();
@@ -177,7 +182,7 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
                             Err(e) => {
                                 let error_msg = format!("セッション終了処理中にエラーが発生しました: {}", e);
                                 eprintln!("エラー: {}", error_msg);
-                                
+
                                 // エラーの詳細情報を分析
                                 match e {
                                     sqlx::Error::Database(db_err) => {
@@ -187,8 +192,7 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
                                         }
                                     }
                                     sqlx::Error::RowNotFound => {
-                                        eprintln!("セッションID: {} が見つかりませんでした。すでに終了しているか、削除された可能性があります。", 
-                                                 session_id_clone);
+                                        eprintln!("セッションID: {} が見つかりませんでした。すでに終了しているか、削除された可能性があります。", session_id_clone);
                                     }
                                     _ => {
                                         eprintln!("その他のSQLエラー: {}", e);
@@ -203,7 +207,7 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
                 if !has_valid_session_id {
                     println!("理由: セッションIDが設定されていません。サーバーが正常に起動していなかった可能性があります。");
                 }
-                
+
                 if !has_valid_db_pool {
                     println!("理由: データベース接続が初期化されていません。アプリケーションの起動時にエラーが発生した可能性があります。");
                 }
@@ -528,7 +532,8 @@ async fn run_servers(
 
             // DBにセッションを作成（同期的に完了を待つ）
             if let Some(db_pool) = db_pool_option {
-                match database::create_session(&db_pool, &session_id).await { // tokio::spawn を削除し、直接 await
+                match database::create_session(&db_pool, &session_id).await {
+                    // tokio::spawn を削除し、直接 await
                     Ok(_) => println!(
                         "セッションがデータベースに正常に保存されました: {}",
                         session_id
