@@ -41,6 +41,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
+// Sui SDK インポート
+import {
+	useCurrentAccount,
+	useSignAndExecuteTransaction,
+} from "@mysten/dapp-kit";
+
 // フォームのバリデーションスキーマ
 const superchat_form_schema = z.object({
 	amount: z.number().min(0).max(10),
@@ -124,6 +130,10 @@ export function SuperchatForm({
 	// WebSocketコンテキストを取得
 	const { actions } = useWebSocket();
 
+	// Suiクライアントとウォレット接続ステータスを取得
+	const currentAccount = useCurrentAccount();
+	const { isPending } = useSignAndExecuteTransaction();
+
 	// フォーム作成
 	const form = useForm<SuperchatFormValues>({
 		resolver: zodResolver(superchat_form_schema),
@@ -145,7 +155,15 @@ export function SuperchatForm({
 	 *
 	 * @param values - フォームの入力値
 	 */
-	function on_submit(values: SuperchatFormValues) {
+	async function on_submit(values: SuperchatFormValues) {
+		// ウォレット接続チェック
+		if (!currentAccount) {
+			toast.error("Wallet not connected", {
+				description: "Please connect your wallet to send a Super Chat",
+			});
+			return;
+		}
+
 		if (!confirm_mode) {
 			// 確認モードに切り替え
 			set_confirm_mode(true);
@@ -398,8 +416,9 @@ export function SuperchatForm({
 									<Button
 										type="submit"
 										className={`flex-1 ${selected_option?.color} text-white`}
+										disabled={isPending}
 									>
-										Send
+										{isPending ? "Sending..." : "Send"}
 									</Button>
 								</>
 							) : (

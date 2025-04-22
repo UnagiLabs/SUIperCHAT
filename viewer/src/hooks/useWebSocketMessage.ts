@@ -1,25 +1,25 @@
+// Provider修正後に有効化
+import { useWebSocket } from "@/components/providers/WebSocketProvider";
+import {
+	type ChatMessage,
+	ConnectionStatus,
+	MessageType,
+	type SuperchatData,
+	type SuperchatMessage,
+	type WebSocketState,
+} from "@/lib/types/websocket";
 /**
  * WebSocketメッセージ送受信管理フック
  *
  * @module hooks/useWebSocketMessage
  */
 import {
+	type Dispatch,
+	type MutableRefObject,
+	type SetStateAction,
 	useCallback,
 	useMemo,
-	type MutableRefObject,
-	type Dispatch,
-	type SetStateAction,
 } from "react";
-import {
-	ConnectionStatus,
-	MessageType,
-	type ChatMessage,
-	type SuperchatData,
-	type SuperchatMessage,
-	type WebSocketState,
-} from "@/lib/types/websocket";
-// Provider修正後に有効化
-import { useWebSocket } from "@/components/providers/WebSocketProvider";
 
 // --- 内部的なメッセージ処理ロジックフック ---
 interface UseWebSocketMessageHandlerOptions {
@@ -78,7 +78,10 @@ export function useWebSocketMessageHandler({
 							!parsedData.timestamp ||
 							typeof parsedData.timestamp !== "number" // Timestampの型もチェック
 						) {
-							console.error("必須フィールド不足(CHAT/SUPERCHAT) (hook):", parsedData);
+							console.error(
+								"必須フィールド不足(CHAT/SUPERCHAT) (hook):",
+								parsedData,
+							);
 							return;
 						}
 
@@ -100,7 +103,10 @@ export function useWebSocketMessageHandler({
 								typeof superchat.tx_hash !== "string" ||
 								typeof superchat.wallet_address !== "string"
 							) {
-								console.error("必須フィールド不足(SUPERCHAT data) (hook):", parsedData);
+								console.error(
+									"必須フィールド不足(SUPERCHAT data) (hook):",
+									parsedData,
+								);
 								return;
 							}
 							(baseMessage as Partial<SuperchatMessage>).superchat = {
@@ -122,7 +128,9 @@ export function useWebSocketMessageHandler({
 								return prev;
 							}
 							const newMessages = [...prev.messages, message];
-							console.debug(`メッセージ追加(hook)。新メッセージ数: ${newMessages.length}`);
+							console.debug(
+								`メッセージ追加(hook)。新メッセージ数: ${newMessages.length}`,
+							);
 							return { ...prev, messages: newMessages };
 						});
 						break;
@@ -130,15 +138,28 @@ export function useWebSocketMessageHandler({
 					case MessageType.ERROR: {
 						if (typeof parsedData.message === "string") {
 							console.error("サーバーエラー受信 (hook):", parsedData.message);
-							updateStatus(ConnectionStatus.CONNECTED, `サーバーエラー: ${parsedData.message}`);
+							updateStatus(
+								ConnectionStatus.CONNECTED,
+								`サーバーエラー: ${parsedData.message}`,
+							);
 						} else {
-							console.error("不正なサーバーエラーメッセージ (hook):", parsedData);
-							updateStatus(ConnectionStatus.CONNECTED, "不正なサーバーエラー受信");
+							console.error(
+								"不正なサーバーエラーメッセージ (hook):",
+								parsedData,
+							);
+							updateStatus(
+								ConnectionStatus.CONNECTED,
+								"不正なサーバーエラー受信",
+							);
 						}
 						break;
 					}
 					case MessageType.CONNECTION_STATUS: {
-						console.log("接続状態更新(サーバー通知) (hook):", parsedData.status, parsedData.info ?? "");
+						console.log(
+							"接続状態更新(サーバー通知) (hook):",
+							parsedData.status,
+							parsedData.info ?? "",
+						);
 						// クライアント側の状態管理に影響を与えるかは要検討
 						break;
 					}
@@ -238,7 +259,9 @@ export function useWebSocketMessage() {
 	const sendChat = useCallback(
 		(displayName: string, message: string): boolean => {
 			if (!canSend || !actions.sendChatMessage) {
-				console.warn("Cannot send chat message, not connected or action unavailable.");
+				console.warn(
+					"Cannot send chat message, not connected or action unavailable.",
+				);
 				return false;
 			}
 			actions.sendChatMessage(displayName, message);
@@ -248,9 +271,15 @@ export function useWebSocketMessage() {
 	);
 
 	const sendSuperchat = useCallback(
-		(displayName: string, message: string, superchatData: SuperchatData): boolean => {
+		(
+			displayName: string,
+			message: string,
+			superchatData: SuperchatData,
+		): boolean => {
 			if (!canSend || !actions.sendSuperchatMessage) {
-				console.warn("Cannot send superchat message, not connected or action unavailable.");
+				console.warn(
+					"Cannot send superchat message, not connected or action unavailable.",
+				);
 				return false;
 			}
 			actions.sendSuperchatMessage(displayName, message, superchatData);

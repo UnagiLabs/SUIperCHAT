@@ -6,6 +6,8 @@
  */
 "use client";
 
+import { useWebSocketConnectionManager } from "@/hooks/useWebSocketConnect"; // 接続管理ロジック
+import { useWebSocketMessageHandler } from "@/hooks/useWebSocketMessage"; // メッセージ処理ロジック
 import {
 	ConnectionStatus,
 	type WebSocketContextType,
@@ -20,8 +22,6 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { useWebSocketConnectionManager } from "@/hooks/useWebSocketConnect"; // 接続管理ロジック
-import { useWebSocketMessageHandler } from "@/hooks/useWebSocketMessage"; // メッセージ処理ロジック
 
 /**
  * WebSocketコンテキスト
@@ -50,7 +50,9 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 		(url: string) => {
 			// 既存のインスタンスがあれば閉じる（念のため）
 			if (wsRef.current) {
-				console.warn("既存のWebSocketインスタンスを閉じてから新規作成します (Provider)");
+				console.warn(
+					"既存のWebSocketインスタンスを閉じてから新規作成します (Provider)",
+				);
 				wsRef.current.onopen = null;
 				wsRef.current.onmessage = null;
 				wsRef.current.onerror = null;
@@ -94,13 +96,19 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 		// setStateは安定しているので依存配列から除外 (linter指摘対応)
 		// フックのハンドラへの依存は useEffect で解決
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[/* setState */ /* connectionManager, messageHandler が初期化されるまで待つ */],
+		[
+			/* setState */
+			/* connectionManager, messageHandler が初期化されるまで待つ */
+		],
 	);
 
 	const closeWebSocketInstance = useCallback(
 		(code?: number, reason?: string) => {
 			if (wsRef.current) {
-				console.log("WebSocketインスタンス閉鎖開始 (Provider):", { code, reason });
+				console.log("WebSocketインスタンス閉鎖開始 (Provider):", {
+					code,
+					reason,
+				});
 				// oncloseハンドラが呼ばれる前にハンドラを削除しないこと
 				// wsRef.current.onopen = null;
 				// wsRef.current.onmessage = null;
@@ -112,7 +120,9 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 				console.debug("閉鎖するWebSocketインスタンスなし (Provider)");
 			}
 		},
-		[/* wsRef is stable */], // wsRefは安定しているので依存配列から除外 (linter指摘対応)
+		[
+			/* wsRef is stable */
+		], // wsRefは安定しているので依存配列から除外 (linter指摘対応)
 	);
 
 	// --- カスタムフックの利用 ---
@@ -120,21 +130,28 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 	const updateStatus = useCallback(
 		(status: ConnectionStatus, error: string | null = null) => {
 			setState((prev) => {
-				const newError = error === null ? null : error !== prev.error ? error : prev.error;
+				const newError =
+					error === null ? null : error !== prev.error ? error : prev.error;
 				if (prev.status === status && prev.error === newError) return prev;
 
 				const newState = { ...prev, status, error: newError };
 				// ログ
-				if (error && error !== prev.error) console.warn(`WebSocket状態更新(Provider): ${status}`, error);
-				else if (!error && prev.error) console.debug(`WebSocket状態更新(Provider): ${status} (エラークリア)`);
-				else if (prev.status !== status) console.debug(`WebSocket状態更新(Provider): ${status}`);
+				if (error && error !== prev.error)
+					console.warn(`WebSocket状態更新(Provider): ${status}`, error);
+				else if (!error && prev.error)
+					console.debug(
+						`WebSocket状態更新(Provider): ${status} (エラークリア)`,
+					);
+				else if (prev.status !== status)
+					console.debug(`WebSocket状態更新(Provider): ${status}`);
 
 				return newState;
 			});
 		},
-		[/* setState is stable */], // setStateは安定しているので依存配列から除外 (linter指摘対応)
+		[
+			/* setState is stable */
+		], // setStateは安定しているので依存配列から除外 (linter指摘対応)
 	);
-
 
 	const connectionManager = useWebSocketConnectionManager({
 		wsRef,
@@ -158,12 +175,14 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 		memoizedConnectWebSocketInstance.current = (url: string) => {
 			// 既存のインスタンスがあれば閉じる
 			if (wsRef.current) {
-				console.warn("既存のWebSocketインスタンスを閉じてから新規作成します (Provider - Effect)");
+				console.warn(
+					"既存のWebSocketインスタンスを閉じてから新規作成します (Provider - Effect)",
+				);
 				// イベントハンドラをnullに設定してから閉じる
 				wsRef.current.onopen = null;
-        wsRef.current.onmessage = null;
-        wsRef.current.onerror = null;
-        wsRef.current.onclose = null;
+				wsRef.current.onmessage = null;
+				wsRef.current.onerror = null;
+				wsRef.current.onclose = null;
 				wsRef.current.close();
 				wsRef.current = null;
 			}
@@ -178,7 +197,9 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 				newWs.onclose = (event) => {
 					connectionManager.handleClose(event);
 					wsRef.current = null; // ここでクリア
-					console.log("WebSocketインスタンス参照をクリア (Provider onclose - Effect)");
+					console.log(
+						"WebSocketインスタンス参照をクリア (Provider onclose - Effect)",
+					);
 				};
 				wsRef.current = newWs;
 				console.log("イベントハンドラ設定完了 (Provider - Effect)");
@@ -201,17 +222,20 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 	//   => 今回は connectionManager の引数を更新するアプローチを試す。
 
 	// --- コンテキストに渡す値 ---
-	const contextValue = useMemo<WebSocketContextType>(() => ({
-		state,
-		actions: {
-			// connectionManager と messageHandler から公開されているアクションを渡す
-			connect: connectionManager.connect,
-			disconnect: connectionManager.disconnect,
-			sendChatMessage: messageHandler.sendChatMessage,
-			sendSuperchatMessage: messageHandler.sendSuperchatMessage,
-		},
-	// connectionManagerとmessageHandlerのインスタンスも依存配列に入れる
-	}), [state, connectionManager, messageHandler]);
+	const contextValue = useMemo<WebSocketContextType>(
+		() => ({
+			state,
+			actions: {
+				// connectionManager と messageHandler から公開されているアクションを渡す
+				connect: connectionManager.connect,
+				disconnect: connectionManager.disconnect,
+				sendChatMessage: messageHandler.sendChatMessage,
+				sendSuperchatMessage: messageHandler.sendSuperchatMessage,
+			},
+			// connectionManagerとmessageHandlerのインスタンスも依存配列に入れる
+		}),
+		[state, connectionManager, messageHandler],
+	);
 
 	// --- アンマウント時のクリーンアップ ---
 	// useWebSocketConnect フック内で useEffect を使用してアンマウント時の disconnect を呼び出すため、
@@ -223,7 +247,6 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 	// 		connectionManager.disconnect();
 	// 	};
 	// }, [connectionManager]); // connectionManagerインスタンスに依存
-
 
 	return (
 		<WebSocketContext.Provider value={contextValue}>

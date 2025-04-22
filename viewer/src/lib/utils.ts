@@ -104,8 +104,10 @@ export function sleep(ms: number): Promise<void> {
  */
 export function suiToMist(sui: bigint | number): bigint {
 	// number型の場合は整数であることを前提とする（もしくはエラーハンドリングを追加）
-	if (typeof sui === 'number' && !Number.isInteger(sui)) {
-		console.warn("suiToMist received a non-integer number. Potential precision loss.");
+	if (typeof sui === "number" && !Number.isInteger(sui)) {
+		console.warn(
+			"suiToMist received a non-integer number. Potential precision loss.",
+		);
 		// 必要であればエラーをスローするか、丸める処理を追加
 		// throw new Error("Input must be an integer or BigInt");
 	}

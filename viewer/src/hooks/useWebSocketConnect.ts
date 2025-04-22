@@ -1,23 +1,23 @@
+// useWebSocketはProviderを参照するため、Providerの修正後にimportを有効化
+import { useWebSocket } from "@/components/providers/WebSocketProvider";
+import {
+	ConnectionStatus,
+	type WebSocketState,
+	// type WebSocketContextType, // Provider側で定義されるため不要になる想定
+} from "@/lib/types/websocket";
 /**
  * WebSocket接続管理フック
  *
  * @module hooks/useWebSocketConnect
  */
 import {
-	useCallback,
-	useRef,
-	useEffect,
-	type MutableRefObject,
 	type Dispatch,
+	type MutableRefObject,
 	type SetStateAction,
+	useCallback,
+	useEffect,
+	useRef,
 } from "react";
-import {
-	ConnectionStatus,
-	type WebSocketState,
-	// type WebSocketContextType, // Provider側で定義されるため不要になる想定
-} from "@/lib/types/websocket";
-// useWebSocketはProviderを参照するため、Providerの修正後にimportを有効化
-import { useWebSocket } from "@/components/providers/WebSocketProvider";
 
 // --- 定数 ---
 const MAX_RECONNECT_ATTEMPTS = 5;
@@ -68,11 +68,14 @@ export function useWebSocketConnectionManager({
 				};
 
 				// ログ出力
-				if (error && error !== prev.error) { // エラー内容が変化した場合のみログ出力
+				if (error && error !== prev.error) {
+					// エラー内容が変化した場合のみログ出力
 					console.warn(`WebSocket状態更新(hook): ${status}`, error);
-				} else if (!error && prev.error) { // エラーがクリアされた場合
+				} else if (!error && prev.error) {
+					// エラーがクリアされた場合
 					console.debug(`WebSocket状態更新(hook): ${status} (エラークリア)`);
-				} else if (prev.status !== status) { // ステータスのみ変化した場合
+				} else if (prev.status !== status) {
+					// ステータスのみ変化した場合
 					console.debug(`WebSocket状態更新(hook): ${status}`);
 				}
 
@@ -164,7 +167,9 @@ export function useWebSocketConnectionManager({
 					currentState === WebSocket.OPEN
 				) {
 					console.warn("WebSocketは既に接続中または接続済み (hook check)", {
-						url: wsRef.current.url, readyState: currentState, status: state.status
+						url: wsRef.current.url,
+						readyState: currentState,
+						status: state.status,
 					});
 					// すでに接続済みなら何もしない (エラーでも成功でもない)
 					return false; // 新規接続は開始しない
@@ -199,8 +204,14 @@ export function useWebSocketConnectionManager({
 	const disconnect = useCallback(() => {
 		console.log("Disconnect logic called in hook");
 		// WebSocketがない、または既に閉じている/閉じている最中なら何もしない
-		if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED || wsRef.current.readyState === WebSocket.CLOSING) {
-			console.debug("No active/open WebSocket connection to disconnect or already closing/closed (hook check)");
+		if (
+			!wsRef.current ||
+			wsRef.current.readyState === WebSocket.CLOSED ||
+			wsRef.current.readyState === WebSocket.CLOSING
+		) {
+			console.debug(
+				"No active/open WebSocket connection to disconnect or already closing/closed (hook check)",
+			);
 			// 状態が既にDISCONNECTEDでなければ更新
 			if (state.status !== ConnectionStatus.DISCONNECTED) {
 				updateStatus(ConnectionStatus.DISCONNECTED);
@@ -243,13 +254,18 @@ export function useWebSocketConnectionManager({
 			if (state.status === ConnectionStatus.CONNECTED || isRecentConnection) {
 				console.debug("WebSocketエラーイベント無視 (handled by hook)", {
 					isConnected: state.status === ConnectionStatus.CONNECTED,
-					isRecent: isRecentConnection, wsState, eventType: event.type,
+					isRecent: isRecentConnection,
+					wsState,
+					eventType: event.type,
 				});
 				return;
 			}
 
 			const errorMsg = "WebSocketサーバーに接続できませんでした";
-			console.error("WebSocket error (handled by hook)", { eventType: event.type, wsState });
+			console.error("WebSocket error (handled by hook)", {
+				eventType: event.type,
+				wsState,
+			});
 			// エラー状態にしつつ、再接続を試みる
 			updateStatus(ConnectionStatus.ERROR, errorMsg);
 			// attemptReconnectは次のレンダリングサイクルで最新のstateを見るようにする
@@ -261,7 +277,12 @@ export function useWebSocketConnectionManager({
 
 	const handleClose = useCallback(
 		(event: CloseEvent) => {
-			const closeDetails = { code: event.code, reason: event.reason, wasClean: event.wasClean, statusBeforeClose: state.status };
+			const closeDetails = {
+				code: event.code,
+				reason: event.reason,
+				wasClean: event.wasClean,
+				statusBeforeClose: state.status,
+			};
 			console.log("WebSocket closed (handled by hook)", closeDetails);
 
 			connectedAtRef.current = null; // 接続時刻リセット
@@ -270,8 +291,10 @@ export function useWebSocketConnectionManager({
 			// (ただし、Provider側で切断処理中の場合は再接続しない)
 			if (!event.wasClean && state.status !== ConnectionStatus.DISCONNECTING) {
 				let disconnectReason = "接続が切断されました";
-				if (event.code === 1006) { // 異常切断
-					disconnectReason = "配信サーバーとの接続が異常切断されました。再接続試行中...";
+				if (event.code === 1006) {
+					// 異常切断
+					disconnectReason =
+						"配信サーバーとの接続が異常切断されました。再接続試行中...";
 				}
 				updateStatus(ConnectionStatus.DISCONNECTED, disconnectReason);
 				attemptReconnect();
@@ -279,7 +302,10 @@ export function useWebSocketConnectionManager({
 				// 意図的な切断 or 再接続上限 or すでに切断済み
 				let finalReason: string | null = null;
 				// 再接続上限に達し、かつ意図的な切断ではない場合
-				if (state.retryCount >= MAX_RECONNECT_ATTEMPTS && state.status !== ConnectionStatus.DISCONNECTING) {
+				if (
+					state.retryCount >= MAX_RECONNECT_ATTEMPTS &&
+					state.status !== ConnectionStatus.DISCONNECTING
+				) {
 					finalReason = "配信サーバーへの再接続上限に達しました。";
 					console.warn("WebSocket再接続上限到達 (handled by hook)");
 				} else if (state.status === ConnectionStatus.DISCONNECTING) {
@@ -336,7 +362,10 @@ export function useWebSocketConnect({
 		// autoConnectが有効、URLがあり、connectアクションが存在する場合
 		if (autoConnect && url && actions.connect) {
 			// まだ接続中でない、または接続済みでない場合のみ接続試行
-			if (state.status !== ConnectionStatus.CONNECTED && state.status !== ConnectionStatus.CONNECTING) {
+			if (
+				state.status !== ConnectionStatus.CONNECTED &&
+				state.status !== ConnectionStatus.CONNECTING
+			) {
 				console.log("Auto-connecting from useWebSocketConnect:", url);
 				actions.connect(url);
 				// isConnectedByHook = true; // 未使用のため削除
