@@ -41,13 +41,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
-// Sui SDK インポート
-import {
-	useCurrentAccount,
-	useSignAndExecuteTransaction,
-	useSuiClient, // useSuiClient をインポート
-} from "@mysten/dapp-kit";
-import { Transaction } from "@mysten/sui/transactions"; // Transaction をインポート
 import {
 	DEFAULT_GAS_BUDGET,
 	PACKAGE_ID,
@@ -55,6 +48,13 @@ import {
 	SUI_TYPE_ARG,
 } from "@/lib/constants"; // 定数をインポート
 import { suiToMist } from "@/lib/utils"; // ユーティリティをインポート
+// Sui SDK インポート
+import {
+	useCurrentAccount,
+	useSignAndExecuteTransaction,
+	useSuiClient, // useSuiClient をインポート
+} from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions"; // Transaction をインポート
 
 // フォームのバリデーションスキーマ
 const superchat_form_schema = z.object({
@@ -85,6 +85,12 @@ const superchat_form_schema = z.object({
 
 // フォームの入力値の型
 type SuperchatFormValues = z.infer<typeof superchat_form_schema>;
+
+// ウォレットエラーの型
+interface WalletError extends Error {
+	code?: number;
+	name: string;
+}
 
 // スーパーチャット金額のオプション
 const amount_options = [
@@ -142,8 +148,8 @@ export function SuperchatForm({
 	// Suiクライアントとウォレット接続ステータスを取得
 	const suiClient = useSuiClient(); // suiClient を取得
 	const currentAccount = useCurrentAccount();
-	const { isPending } = // mutate も取得
-		useSignAndExecuteTransaction();
+	const { isPending, mutate: signAndExecuteTransaction } =
+		useSignAndExecuteTransaction(); // mutate も取得
 
 	// フォーム作成
 	const form = useForm<SuperchatFormValues>({
@@ -210,9 +216,12 @@ export function SuperchatForm({
 			const tx = new Transaction();
 
 			// 4. 支払い用コインを分割
-			const [paymentCoin] = tx.splitCoins(tx.object(paymentCoinObject.coinObjectId), [
-				tx.pure.u64(suiAmountMist), // BigIntをtx.pure.u64でラップ
-			]);
+			const [paymentCoin] = tx.splitCoins(
+				tx.object(paymentCoinObject.coinObjectId),
+				[
+					tx.pure.u64(suiAmountMist), // BigIntをtx.pure.u64でラップ
+				],
+			);
 
 			// 5. Moveコントラクト呼び出し
 			tx.moveCall({
@@ -271,20 +280,20 @@ export function SuperchatForm({
 						});
 						set_confirm_mode(false);
 					},
-					onError: (error) => {
+					onError: (error: WalletError) => {
 						console.error("Transaction failed:", error);
-						// エラーコードや型に基づいて詳細なメッセージを表示
-						// (dApp Kitのエラー型を確認して実装するのが望ましい)
 						let description = "An unknown error occurred.";
-						// @ts-expect-error code プロパティが存在する場合がある
-						if (error?.code === -32000 || error.message.includes("Rejected")) { // ウォレットでの拒否 (コードは一例)
+
+						// エラーオブジェクトのプロパティを安全にチェック
+						if (error.code === -32000 || error.message.includes("Rejected")) {
 							description = "Transaction rejected in wallet.";
-						// @ts-expect-error name プロパティが存在する場合がある
-						} else if (error?.name === "WalletNotConnectedError") {
+						} else if (error.name === "WalletNotConnectedError") {
 							description = "Wallet not connected. Please reconnect.";
-						} else if (error.message.includes("InsufficientGas")) { // ガス不足 (エラーメッセージはRPCにより異なる可能性)
+						} else if (error.message.includes("InsufficientGas")) {
+							// ガス不足 (エラーメッセージはRPCにより異なる可能性)
 							description = "Insufficient gas budget or SUI balance for gas.";
-						} else if (error.message.includes("Failure")) { // Move実行エラーなど
+						} else if (error.message.includes("Failure")) {
+							// Move実行エラーなど
 							description = "Transaction failed on the network.";
 							// TODO: エラーの詳細をパースして表示 (result.effects?.status?.error)
 						} else {
@@ -296,7 +305,6 @@ export function SuperchatForm({
 					},
 				},
 			);
-
 		} catch (error) {
 			console.error("Error during PTB construction or coin fetching:", error);
 			toast.error("Failed to prepare transaction", {
