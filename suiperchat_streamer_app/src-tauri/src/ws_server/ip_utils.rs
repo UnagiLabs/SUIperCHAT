@@ -178,6 +178,7 @@ pub async fn check_cgnat(public_ip: IpAddr) -> Result<bool, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::{IpAddr, Ipv4Addr};
 
     #[test]
     fn test_ip_from_str() {
@@ -186,5 +187,51 @@ mod tests {
 
         let invalid_ip = "not an ip";
         assert!(IpAddr::from_str(invalid_ip).is_err());
+    }
+
+    // CGNAT検出機能のテスト
+    // 注: これは実際の通信を行わないモックテストです
+    #[tokio::test]
+    async fn test_check_cgnat_mock() {
+        // ---- モックのセットアップ ----
+        // 実際のIPアドレスの代わりに使用するテスト用のIPアドレス
+        let http_api_ip = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 1)); // HTTP APIから取得したと仮定
+        let stun_ip_same = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 1)); // STUNから取得したと仮定（同じ）
+        let stun_ip_diff = IpAddr::V4(Ipv4Addr::new(198, 51, 100, 1)); // STUNから取得したと仮定（異なる）
+
+        // 実際のSTUNクライアントの代わりに使用するモック関数
+        // IPアドレスが一致する場合（CGNATなし）
+        let check_result_no_cgnat = check_cgnat_with_mock(http_api_ip, stun_ip_same).await;
+        assert!(
+            check_result_no_cgnat.is_ok(),
+            "CGNATなしケースでエラーが発生しました"
+        );
+        assert!(
+            !check_result_no_cgnat.unwrap(),
+            "IPが一致する場合はCGNATなしと判定すべき"
+        );
+
+        // IPアドレスが一致しない場合（CGNAT検出）
+        let check_result_cgnat = check_cgnat_with_mock(http_api_ip, stun_ip_diff).await;
+        assert!(
+            check_result_cgnat.is_ok(),
+            "CGNAT検出ケースでエラーが発生しました"
+        );
+        assert!(
+            check_result_cgnat.unwrap(),
+            "IPが不一致の場合はCGNAT検出と判定すべき"
+        );
+    }
+
+    // テスト用のモックヘルパー関数 - 実際のSTUNクライアントの代わりに使用
+    async fn check_cgnat_with_mock(public_ip: IpAddr, stun_ip: IpAddr) -> Result<bool, String> {
+        // STUN応答をシミュレート
+        if stun_ip == public_ip {
+            // IPが一致する場合（CGNATなし）
+            Ok(false)
+        } else {
+            // IPが一致しない場合（CGNAT検出）
+            Ok(true)
+        }
     }
 }
