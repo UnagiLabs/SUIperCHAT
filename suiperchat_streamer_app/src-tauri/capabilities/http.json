@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "http-cap",
+  "permissions": [
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://api.ipify.org/*" },
+        { "url": "https://ifconfig.me/*" }
+      ]
+    }
+  ]
+} 

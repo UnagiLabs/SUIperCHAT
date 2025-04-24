@@ -46,6 +46,7 @@ src-tauri/
 ---
 
 ## 4. 依存ライブラリ (+features)
+**実装の際はcargo.tomlは直接編集せずに､cargo add <crate_name> を必ず使用してください**
 ```toml
 # 依存関係を追加する際は `cargo add <crate_name>` を使用することを推奨します。
 [dependencies]
@@ -111,7 +112,6 @@ graph TD
 
 ### 6-1. Loophole CLI ライセンス確認と準備 (macOS/Windows)
 *   **具体的な実施内容:**
-    *   Loopholeの公式サイト、GitHubリポジトリでMITライセンスであることを再確認する。
     *   ターゲットプラットフォーム ( `windows-x86_64`, `macos-aarch64`, `macos-x86_64` ) 用のLoophole CLI実行ファイルをダウンロードする。
     *   プロジェクト内の `src-tauri/binaries/` ディレクトリを作成し、各ターゲット用のバイナリを `loophole-$TARGET_TRIPLE` 命名規則で配置する。
     *   Loopholeリポジトリから `LICENSE` ファイルを取得し、`src-tauri/binaries/` に配置する。
