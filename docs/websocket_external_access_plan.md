@@ -96,16 +96,18 @@ graph TD
 
 ## 6. 実装ステップ
 
-### 6-1. Loophole CLI ライセンス確認と準備
+### 6-1. Loophole CLI ライセンス確認と準備 (macOS/Windows)
 *   **具体的な実施内容:**
     *   Loopholeの公式サイト、GitHubリポジトリでMITライセンスであることを再確認する。
-    *   ターゲットプラットフォーム (例: `windows-x86_64`, `macos-aarch64`, `macos-x86_64`, `linux-x86_64`) 用のLoophole CLI実行ファイルをダウンロードする。
-    *   プロジェクト内の `src-tauri/binaries/` ディレクトリを作成し、プラットフォーム名を付けたサブディレクトリ (例: `macos-aarch64`) を作成し、対応するバイナリを配置する (例: `src-tauri/binaries/macos-aarch64/loophole`)。
+    *   ターゲットプラットフォーム ( `windows-x86_64`, `macos-aarch64`, `macos-x86_64` ) 用のLoophole CLI実行ファイルをダウンロードする。
+    *   プロジェクト内の `src-tauri/binaries/` ディレクトリを作成し、プラットフォーム名を付けたサブディレクトリ (例: `macos-aarch64`, `windows-x86_64`) を作成し、対応するバイナリを配置する (例: `src-tauri/binaries/macos-aarch64/loophole`, `src-tauri/binaries/windows-x86_64/loophole.exe`)。
     *   Loopholeリポジトリから `LICENSE` ファイルを取得し、`src-tauri/binaries/` に配置する。
+
 *   **検証方法:**
-    *   `cargo tauri build` 後、生成されたアプリケーションバンドル (例: `.app`, `.msi`, `.deb`) 内に、ターゲットプラットフォームに応じたLoopholeバイナリとLICENSEファイルが含まれていることを確認する (インストーラー展開、アーカイブ内容確認)。
-    *   macOS/Linuxではバンドルされたバイナリに実行権限が付与されているか確認する (必要なら `build.rs` で調整)。
-*   **コミットメッセージ案:** `[機能] Loophole CLIバイナリとライセンスをバンドル`
+    *   `cargo tauri build` 後、生成されたアプリケーションバンドル (例: `.app`, `.msi`) 内に、ターゲットプラットフォームに応じたLoopholeバイナリとLICENSEファイルが含まれていることを確認する (インストーラー展開、アーカイブ内容確認)。
+    *   macOSではバンドルされたバイナリに実行権限が付与されているか確認する (必要なら `build.rs` で調整)。
+
+*   **コミットメッセージ案:** `[機能] Loophole CLIバイナリとライセンスをバンドル (macOS/Windows)`
 
 ### 6-2. Tauri 設定 (`tauri.conf.json`)
 *   **具体的な実施内容:**
