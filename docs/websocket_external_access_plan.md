@@ -167,7 +167,7 @@ graph TD
             {
               "identifier": "shell:allow-spawn",
               "allow": [
-                { "name": "binaries/loophole-$TARGET", "sidecar": true }
+                { "name": "loophole", "sidecar": true }
               ]
             }
           ]
@@ -250,7 +250,7 @@ graph TD
 *   **具体的な実施内容:**
     *   `src/ws_server/tunnel.rs` を作成。
     *   `struct TunnelInfo { process: Arc<Mutex<Child>>, url: String }` を定義 (`Arc<Mutex<>>` でプロセスハンドルを共有可能に)。
-    *   `TunnelError` enum を定義 (例: `SpawnFailed`, `StdioError`, `UrlNotFound`, `Timeout`)。
+    *   `TunnelError` enum を定義 (例: `SpawnFailed`, `StdioError`, `UrlNotFound`, `Timeout`, `UnsupportedPlatform`).
 *   **検証方法:**
     *   (特になし、後続ステップで利用される)
 *   **コミットメッセージ案:** `[refactor] Loophole Tunnel関連の構造体とエラー型を定義`
@@ -267,7 +267,14 @@ graph TD
         pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<String, TunnelError> {
             let (mut rx, mut child): (mpsc::UnboundedReceiver<CommandEvent>, CommandChild) =
                 app.shell()
-                    .sidecar("binaries/loophole-$TARGET")?      // プラットフォーム固有バイナリ
+                    .sidecar(match std::env::consts::OS {
+                        "macos" => match std::env::consts::ARCH {
+                            "aarch64" => "binaries/loophole-macos-aarch64",
+                            _ => "binaries/loophole-macos-x86_64",
+                        },
+                        "windows" => "binaries/loophole-windows-x86_64.exe",
+                        _ => return Err(TunnelError::UnsupportedPlatform),
+                    })?      // プラットフォーム固有バイナリ
                     .args(["http", &ws_port.to_string()])
                     .spawn()
                     .map_err(|_| TunnelError::SpawnFailed)?;
@@ -340,26 +347,4 @@ graph TD
 *   **検証方法:**
     *   ブラウザの開発者ツールや Tauri DevTools を使用し、バックエンドから送信される `server_status_updated` イベントのペイロード内容を監視する。
     *   トンネル起動成功/失敗、IP取得成功/失敗、CGNAT検出あり/なし の各シナリオで、ペイロードの各フィールド (`wsUrl`, `loopholeHttpUrl`, `globalIpFetchFailed`, `cgnatDetected` など) が期待通りに設定されていることを確認する。
-    *   フロントエンドのUIが、受け取った `ServerStatus` に応じて表示するURL (`wsUrl`) や警告メッセージを正しく切り替えることを確認する。
-*   **コミットメッセージ案:** `[feat] ServerStatusイベントペイロードをLoophole必須化に合わせて更新`
-
----
-
-## 7. セキュリティ & レート制限
-*   Tauri v2 のCapability Systemによって、HTTP/Shellへのアクセスが最小権限で強制される
-*   `tracing` の設定を `env-filter` を使って柔軟に行えるようにする。
-
----
-
-## 8. テスト計画
-| 種類        | 内容                                                                                               |
-| ----------- | -------------------------------------------------------------------------------------------------- |
-| Unit        | IP取得, URLパース, ServerStatus生成                                                                |
-| Integration | GitHub ActionsでトンネルなしWSエコーテスト                                                         |
-| E2E         | **ローカル環境で Loophole 経由の WSS 接続と通信安定性を重点的にテスト**。OBSプラグイン接続テスト。 |
-| Network     | STUN CGNAT判定 → フラグ検証                                                                        |
-
----
-
-## 9. 今後の展開メモ
-*   変更なし (v2.0 計画の通り)。
+    *   フロントエンドのUIが、受け取った `ServerStatus` に応じて表示するURL (`

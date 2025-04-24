@@ -33,8 +33,7 @@
 			"icons/icon.icns",
 			"icons/icon.ico"
 		],
-		"identifier": "com.suiperchat.streamer",
-		"externalBin": ["binaries/loophole-$TARGET"]
+		"externalBin": ["binaries/loophole"]
 	},
 	"plugins": {
 		"shell": {},

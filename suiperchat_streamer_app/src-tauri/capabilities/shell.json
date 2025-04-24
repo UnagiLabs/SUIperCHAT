@@ -5,7 +5,7 @@
     {
       "identifier": "shell:allow-spawn",
       "allow": [
-        { "name": "binaries/loophole-$TARGET", "sidecar": true }
+        { "name": "loophole", "sidecar": true }
       ]
     }
   ]
