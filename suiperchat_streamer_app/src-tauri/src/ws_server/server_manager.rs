@@ -249,6 +249,52 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
     }
 }
 
+/// ## サーバーステータスイベントを発行する
+///
+/// サーバーの状態を通知するイベントを発行します。
+///
+/// ### Arguments
+/// - `app_handle`: Tauriアプリケーションハンドル
+/// - `is_running`: サーバーが実行中かどうか
+/// - `ws_url`: WebSocket URL (オプション)
+/// - `obs_url`: OBS URL (オプション)
+fn emit_server_status(
+    app_handle: &tauri::AppHandle,
+    is_running: bool,
+    ws_url: Option<String>,
+    obs_url: Option<String>,
+) {
+    // AppStateを取得
+    let app_state = app_handle.state::<AppState>();
+
+    // 外部IP取得の状態を取得
+    let global_ip_fetch_failed = *app_state.global_ip_fetch_failed.lock().unwrap();
+
+    // CGNATフラグは未実装のため、現時点ではfalseを設定
+    let cgnat_detected = false;
+
+    // Loopholeのトンネル情報も未実装のため、現時点ではNoneを設定
+    let loophole_http_url = None;
+
+    let status_payload = ServerStatus {
+        is_running,
+        ws_url,
+        obs_url,
+        global_ip_fetch_failed,
+        cgnat_detected,
+        loophole_http_url,
+    };
+
+    if let Err(e) = app_handle.emit("server_status_updated", status_payload) {
+        eprintln!("Failed to emit server_status_updated event: {}", e);
+    } else {
+        println!(
+            "Event 'server_status_updated' emitted with running state: {}",
+            is_running
+        );
+    }
+}
+
 /// ## 現在のサーバー状態を送信する
 ///
 /// 現在のサーバー状態をクライアントに通知します。
@@ -263,6 +309,15 @@ fn send_current_server_status(
     app_state: &AppState,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
+    // 外部IP取得の状態を取得
+    let global_ip_fetch_failed = *app_state.global_ip_fetch_failed.lock().unwrap();
+
+    // CGNATフラグは未実装のため、現時点ではfalseを設定
+    let cgnat_detected = false;
+
+    // Loopholeのトンネル情報も未実装のため、現時点ではNoneを設定
+    let loophole_http_url = None;
+
     // 既存のサーバーステータスを取得して送信
     if let (Some(ws_url), Some(obs_url)) = (
         app_state.host.lock().unwrap().as_ref().and_then(|h| {
@@ -290,6 +345,9 @@ fn send_current_server_status(
             is_running: true,
             obs_url: Some(obs_url),
             ws_url: Some(ws_url),
+            global_ip_fetch_failed,
+            cgnat_detected,
+            loophole_http_url,
         };
 
         if let Err(e) = app_handle.emit("server_status_updated", status_payload) {
@@ -300,6 +358,12 @@ fn send_current_server_status(
             return Err(format!("Failed to emit server status: {}", e));
         }
     }
+
+    // 新しいクローンを作成
+    let app_handle_for_status = app_handle.clone();
+    send_current_server_status(app_state, app_handle_for_status).unwrap_or_else(|e| {
+        eprintln!("IP取得後のステータス送信に失敗: {}", e);
+    });
 
     Ok(())
 }
@@ -382,6 +446,39 @@ async fn run_servers(
     );
     println!("Starting OBS server at http://{}:{}/obs/", host, obs_port);
     println!("Note: Client connections MUST include the '/ws' path");
+
+    // 外部IP取得処理を非同期で実行
+    let app_handle_clone = app_handle.clone();
+    tokio::spawn(async move {
+        // AppStateを取得
+        let app_state = app_handle_clone.state::<AppState>();
+
+        // 外部IP取得を実行
+        match crate::ws_server::ip_utils::get_external_ip(&app_handle_clone).await {
+            Ok(ip) => {
+                // 成功した場合、IPをAppStateに保存
+                println!("外部IPアドレスの取得に成功: {}", ip);
+                let mut external_ip_guard = app_state.external_ip.lock().unwrap();
+                *external_ip_guard = Some(ip);
+
+                // 失敗フラグをfalseに設定
+                let mut failed_guard = app_state.global_ip_fetch_failed.lock().unwrap();
+                *failed_guard = false;
+            }
+            Err(e) => {
+                // 失敗した場合、エラーログを出力し失敗フラグを設定
+                eprintln!("外部IP取得エラー: {}", e);
+                let mut failed_guard = app_state.global_ip_fetch_failed.lock().unwrap();
+                *failed_guard = true;
+            }
+        }
+
+        // 新しいクローンを作成
+        let app_handle_for_status = app_handle_clone.clone();
+        send_current_server_status(&app_state, app_handle_for_status).unwrap_or_else(|e| {
+            eprintln!("IP取得後のステータス送信に失敗: {}", e);
+        });
+    });
 
     // 静的ファイルの配信パスを解決
     let static_path = resolve_static_file_path();
@@ -596,37 +693,6 @@ async fn run_servers(
         port_arc,
         obs_port_arc,
     );
-}
-
-/// ## サーバーステータスイベントを発行する
-///
-/// サーバーの状態を通知するイベントを発行します。
-///
-/// ### Arguments
-/// - `app_handle`: Tauriアプリケーションハンドル
-/// - `is_running`: サーバーが実行中かどうか
-/// - `ws_url`: WebSocket URL (オプション)
-/// - `obs_url`: OBS URL (オプション)
-fn emit_server_status(
-    app_handle: &tauri::AppHandle,
-    is_running: bool,
-    ws_url: Option<String>,
-    obs_url: Option<String>,
-) {
-    let status_payload = ServerStatus {
-        is_running,
-        ws_url,
-        obs_url,
-    };
-
-    if let Err(e) = app_handle.emit("server_status_updated", status_payload) {
-        eprintln!("Failed to emit server_status_updated event: {}", e);
-    } else {
-        println!(
-            "Event 'server_status_updated' emitted with running state: {}",
-            is_running
-        );
-    }
 }
 
 /// ## サーバー情報をクリアする

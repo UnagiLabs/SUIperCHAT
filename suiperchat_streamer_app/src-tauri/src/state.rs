@@ -1,5 +1,6 @@
 use actix_web::dev::ServerHandle;
 use sqlx::sqlite::SqlitePool;
+use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Handle as TokioHandle;
 
@@ -36,6 +37,14 @@ pub struct AppState {
     ///
     /// 配信中（WebSocketサーバー起動中）は `Some(session_id)`、未配信時は `None`。
     pub current_session_id: Arc<Mutex<Option<String>>>,
+    /// 外部IPアドレス
+    ///
+    /// 外部IP取得に成功した場合は `Some(ip)`、失敗または未取得の場合は `None`
+    pub external_ip: Arc<Mutex<Option<IpAddr>>>,
+    /// 外部IP取得が失敗したかどうかのフラグ
+    ///
+    /// 外部IP取得に失敗した場合は `true`、成功または未試行の場合は `false`
+    pub global_ip_fetch_failed: Arc<Mutex<bool>>,
 }
 
 impl AppState {
@@ -53,6 +62,8 @@ impl AppState {
             obs_port: Arc::new(Mutex::new(None)),
             db_pool: Arc::new(Mutex::new(None)),
             current_session_id: Arc::new(Mutex::new(None)),
+            external_ip: Arc::new(Mutex::new(None)),
+            global_ip_fetch_failed: Arc::new(Mutex::new(false)),
         }
     }
 }

@@ -6,6 +6,7 @@
 // サブモジュールの宣言
 pub mod client_info;
 pub mod connection_manager;
+pub mod ip_utils;
 pub mod routes;
 pub mod server_manager;
 pub mod server_utils;

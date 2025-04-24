@@ -325,9 +325,9 @@ mod tests {
 // Tauri イベント関連の型定義
 //=============================================================================
 
-/// ## サーバー状態通知イベントのペイロード
+/// ## サーバーステータス構造体
 ///
-/// `server_status_updated` イベントでフロントエンドに送信されるデータ構造です。
+/// サーバーの実行状態と接続情報を格納します。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerStatus {
     /// サーバーが実行中かどうか
@@ -338,4 +338,13 @@ pub struct ServerStatus {
     /// WebSocket用URL (例: "ws://127.0.0.1:8080/ws")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ws_url: Option<String>,
+    /// 外部IP取得に失敗したかどうかのフラグ
+    #[serde(default)]
+    pub global_ip_fetch_failed: bool,
+    /// CGNATが検出されたかどうかのフラグ
+    #[serde(default)]
+    pub cgnat_detected: bool,
+    /// Loophole HTTPS URL (例: "https://xxxx.loophole.cloud")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loophole_http_url: Option<String>,
 }
