@@ -172,10 +172,15 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
             // Loopholeトンネルを停止
             if let Some(Ok(tunnel_info)) = loophole_info_result {
                 println!("Stopping Loophole tunnel...");
-                let tunnel_info_clone = tunnel_info.clone(); // クローンが必要な場合
+                let tunnel_info_clone = tunnel_info.clone(); // クローンする
                 runtime_handle.spawn(async move {
                     tunnel::stop_tunnel(&tunnel_info_clone).await;
+                    println!("Loophole tunnel stopped successfully.");
                 });
+            } else if let Some(Err(e)) = loophole_info_result {
+                println!("No active Loophole tunnel to stop (previous error: {})", e);
+            } else {
+                println!("No active Loophole tunnel to stop.");
             }
 
             // セッション終了処理
@@ -248,22 +253,12 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
 
             Ok(())
         } else {
-            eprintln!("Error: Server handles exist but runtime handle is missing.");
-            // 停止できなかったサーバーハンドルを戻す
-            {
-                let mut handle_guard = app_state
-                    .server_handle
-                    .lock()
-                    .expect("Failed to re-lock server handle mutex");
-                *handle_guard = Some((ws_server_handle, obs_server_handle));
-            }
-            Err("Internal error: Runtime handle missing, cannot stop servers.".to_string())
+            Err("No runtime handle available to stop the servers properly.".to_string())
         }
     } else {
-        println!("Server is not running or already stopped.");
-        // サーバーが起動していない場合も停止イベントを送信する
         emit_server_status(&app_handle, false, None, None);
-        Err("Server not running.".to_string())
+        println!("No active servers to stop.");
+        Ok(())
     }
 }
 
@@ -286,9 +281,9 @@ fn emit_server_status(
     emit_server_status_with_tunnel(app_handle);
 }
 
-/// ## 現在のサーバー状態を送信する
+/// ## 現在のサーバーステータスを送信する
 ///
-/// 現在のサーバー状態をクライアントに通知します。
+/// 現在のサーバー状態を取得し、フロントエンドにイベントを発行します。
 ///
 /// ### Arguments
 /// - `app_state`: アプリケーション状態
@@ -300,10 +295,93 @@ fn send_current_server_status(
     app_state: &AppState,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let _is_running = app_state.server_handle.lock().unwrap().is_some();
+    // 現在のサーバー状態を取得
+    let is_running = app_state
+        .server_handle
+        .lock()
+        .map_err(|_| "Failed to lock server handle mutex".to_string())?
+        .is_some();
 
-    // ステータスを発行
-    emit_server_status_with_tunnel(&app_handle);
+    // CGNAT検出とIP取得失敗フラグを取得
+    let cgnat_detected = *app_state
+        .cgnat_detected
+        .lock()
+        .map_err(|_| "Failed to lock cgnat_detected mutex".to_string())?;
+
+    let global_ip_fetch_failed = *app_state
+        .global_ip_fetch_failed
+        .lock()
+        .map_err(|_| "Failed to lock global_ip_fetch_failed mutex".to_string())?;
+
+    // Loopholeトンネル情報を取得
+    let loophole_http_url = if let Ok(loophole_guard) = app_state.loophole_info.lock() {
+        if let Some(Ok(ref tunnel_info)) = *loophole_guard {
+            Some(tunnel_info.url.clone())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // URLを構築
+    let ws_url = if is_running {
+        let host = app_state
+            .host
+            .lock()
+            .map_err(|_| "Failed to lock host mutex".to_string())?
+            .clone()
+            .unwrap_or_else(|| "127.0.0.1".to_string());
+
+        let port = app_state
+            .port
+            .lock()
+            .map_err(|_| "Failed to lock port mutex".to_string())?
+            .unwrap_or(8082);
+
+        // LoopholeのURLがあればそれを優先
+        if let Some(url) = &loophole_http_url {
+            url.replace("https://", "wss://") + "/ws"
+        } else {
+            format!("ws://{}:{}/ws", host, port)
+        }
+    } else {
+        String::new()
+    };
+
+    let obs_url = if is_running {
+        let host = app_state
+            .host
+            .lock()
+            .map_err(|_| "Failed to lock host mutex".to_string())?
+            .clone()
+            .unwrap_or_else(|| "127.0.0.1".to_string());
+
+        let obs_port = app_state
+            .obs_port
+            .lock()
+            .map_err(|_| "Failed to lock obs_port mutex".to_string())?
+            .unwrap_or(8081);
+
+        format!("http://{}:{}/obs/", host, obs_port)
+    } else {
+        String::new()
+    };
+
+    // ServerStatusを構築
+    let status = ServerStatus {
+        is_running,
+        ws_url,
+        obs_url,
+        global_ip_fetch_failed,
+        cgnat_detected,
+        loophole_http_url,
+    };
+
+    // イベント発行
+    app_handle
+        .emit("server_status_updated", status)
+        .map_err(|e| format!("Failed to emit server status event: {}", e))?;
 
     Ok(())
 }
@@ -386,6 +464,11 @@ async fn run_servers(
     );
     println!("Starting OBS server at http://{}:{}/obs/", host, obs_port);
     println!("Note: Client connections MUST include the '/ws' path");
+
+    // フロントエンドにトンネル起動中のステータスを通知
+    let app_state = app_handle.state::<AppState>();
+    let _ = send_current_server_status(&app_state, app_handle.clone());
+    println!("Tunnel startup in progress notification sent to frontend.");
 
     // 外部IP取得とCGNAT判定処理を非同期で実行
     let app_handle_clone = app_handle.clone();
@@ -480,6 +563,49 @@ async fn run_servers(
         send_current_server_status(&app_state, app_handle_for_status).unwrap_or_else(|e| {
             eprintln!("IP取得・CGNAT判定後のステータス送信に失敗: {}", e);
         });
+    });
+
+    // Loopholeトンネルを必ず起動（WebSocketサーバー起動前）
+    println!("Starting Loophole tunnel for WebSocket port {}...", ws_port);
+    let app_handle_for_tunnel = app_handle.clone();
+
+    // トンネル起動処理を非同期で実行
+    tokio::spawn(async move {
+        match tunnel::start_tunnel(&app_handle_for_tunnel, ws_port).await {
+            Ok(tunnel_info) => {
+                println!(
+                    "Loophole tunnel started successfully at: {}",
+                    tunnel_info.url
+                );
+
+                // トンネル情報をAppStateに保存
+                if let Ok(mut loophole_guard) = app_handle_for_tunnel
+                    .state::<AppState>()
+                    .loophole_info
+                    .lock()
+                {
+                    *loophole_guard = Some(Ok(tunnel_info));
+                }
+
+                // サーバー状態変更イベントを発行
+                emit_server_status_with_tunnel(&app_handle_for_tunnel);
+            }
+            Err(e) => {
+                eprintln!("Failed to start Loophole tunnel: {}", e);
+
+                // エラー情報をAppStateに保存
+                if let Ok(mut loophole_guard) = app_handle_for_tunnel
+                    .state::<AppState>()
+                    .loophole_info
+                    .lock()
+                {
+                    *loophole_guard = Some(Err(e));
+                }
+
+                // サーバー状態変更イベントを発行
+                emit_server_status_with_tunnel(&app_handle_for_tunnel);
+            }
+        }
     });
 
     // 静的ファイルの配信パスを解決
@@ -655,54 +781,6 @@ async fn run_servers(
                 return; // ★★★★★ 早期リターンを追加 ★★★★★
             }
 
-            // WebSocket & OBSサーバーが起動した後、Loopholeトンネルを起動
-            let ws_port = match port_arc.lock() {
-                Ok(port_guard) => port_guard.unwrap_or(8082),
-                Err(_) => 8082, // デフォルト値
-            };
-
-            // app_handle をクローンして、所有権の問題を解決
-            let app_handle_for_tunnel = app_handle.clone();
-
-            // Loopholeトンネルを非同期で起動
-            tokio::spawn(async move {
-                match tunnel::start_tunnel(&app_handle_for_tunnel, ws_port).await {
-                    Ok(tunnel_info) => {
-                        println!(
-                            "Loophole tunnel started successfully at: {}",
-                            tunnel_info.url
-                        );
-
-                        // トンネル情報をAppStateに保存
-                        if let Ok(mut loophole_guard) = app_handle_for_tunnel
-                            .state::<AppState>()
-                            .loophole_info
-                            .lock()
-                        {
-                            *loophole_guard = Some(Ok(tunnel_info));
-                        }
-
-                        // サーバー状態変更イベントを発行
-                        emit_server_status_with_tunnel(&app_handle_for_tunnel);
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to start Loophole tunnel: {}", e);
-
-                        // エラー情報をAppStateに保存
-                        if let Ok(mut loophole_guard) = app_handle_for_tunnel
-                            .state::<AppState>()
-                            .loophole_info
-                            .lock()
-                        {
-                            *loophole_guard = Some(Err(e));
-                        }
-
-                        // サーバー状態変更イベントを発行
-                        emit_server_status_with_tunnel(&app_handle_for_tunnel);
-                    }
-                }
-            });
-
             // サーバー起動成功イベントを発行
             emit_server_status_with_tunnel(&app_handle);
 
@@ -859,18 +937,19 @@ fn emit_server_status_with_tunnel(app_handle: &tauri::AppHandle) {
             if let Ok(loophole_guard) = app_state.loophole_info.lock() {
                 if let Some(Ok(ref tunnel_info)) = *loophole_guard {
                     // HTTPSからWSSへ変換
-                    tunnel_info.url.replace("https://", "wss://") + "/ws"
+                    Some(tunnel_info.url.replace("https://", "wss://") + "/ws")
                 } else {
                     // ローカルWSアドレスをフォールバックとして使用
-                    format!("ws://{}:{}/ws", host, port)
+                    Some(format!("ws://{}:{}/ws", host, port))
                 }
             } else {
-                format!("ws://{}:{}/ws", host, port)
+                Some(format!("ws://{}:{}/ws", host, port))
             }
         } else {
-            String::new() // 空文字を返す
+            None // Noneを返す（以前は空文字列を返していた）
         }
-    };
+    }
+    .unwrap_or_default(); // Optionを解決して文字列に変換
 
     let obs_url = {
         if is_running {
