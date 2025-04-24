@@ -1,4 +1,10 @@
-# WebSocketサーバー外部アクセス対応 **実装計画 v5.0**
+# WebSocketサーバー外部アクセス対応 **実装計画 v5.1 (Tauri 2)**
+
+> **変更点概要**  
+> * Tauri v2 の公式プラグイン方式・Capability System に対応  
+> * `allowlist` → `capabilities/*.json` へ移行  
+> * HTTP は `tauri-plugin-http`、サイドカーは `tauri-plugin-shell` を使用  
+> * Sidecar 実行は `app.shell().sidecar()` API へ更新
 
 ## 1. 目標
 1.  `suiperchat_streamer_app` の WebSocket サーバーを `127.0.0.1` で待受け、Loophole 経由でのみ外部アクセスを可能にする。
@@ -10,24 +16,30 @@
 ---
 
 ## 2. 環境変数 (設定ファイルやUIからの変更も考慮)
-| 変数名 | 既定値 | 説明 |
-| --- | --- | --- |
-| `WS_BIND_ADDR` | `127.0.0.1` | WebSocket Listen アドレス (Loophole利用前提) |
-| `WS_PORT`      | `8082`    | WebSocket Listen ポート |
-| `OBS_PORT`     | `8081`    | OBS 静的サーバー ポート |
-| `EXTERNAL_IP_ENDPOINTS` | `https://api.ipify.org?format=json,https://ifconfig.me/all.json` | カンマ区切りで使用する外部IP取得API (JSON形式推奨) |
-| `LOOPHOLE_CLI_PATH` | `loophole` | 同梱された Loophole CLI 実行ファイル名 (またはパス) |
+| 変数名                  | 既定値                                                           | 説明                                                |
+| ----------------------- | ---------------------------------------------------------------- | --------------------------------------------------- |
+| `WS_BIND_ADDR`          | `127.0.0.1`                                                      | WebSocket Listen アドレス (Loophole利用前提)        |
+| `WS_PORT`               | `8082`                                                           | WebSocket Listen ポート                             |
+| `OBS_PORT`              | `8081`                                                           | OBS 静的サーバー ポート                             |
+| `EXTERNAL_IP_ENDPOINTS` | `https://api.ipify.org?format=json,https://ifconfig.me/all.json` | カンマ区切りで使用する外部IP取得API (JSON形式推奨)  |
+| `LOOPHOLE_CLI_PATH`     | `loophole`                                                       | 同梱された Loophole CLI 実行ファイル名 (またはパス) |
 
 ---
 
 ## 3. ファイル変更
 ```
 src-tauri/
- ├─ src/ws_server/server_manager.rs   ← 主要ロジック (IP取得, NAT判定, トンネル起動呼出)
- ├─ src/ws_server/tunnel.rs           ← Loophole Sidecar 制御 (非同期 subprocess, URLパース)
- ├─ Cargo.toml                        ← 依存追加
- ├─ tauri.conf.json                   ← externalBin設定, HTTP/Shell Allowlist 更新
- └─ (必要であれば) loophole/          ← 各プラットフォーム用CLIバイナリ格納
+ ├─ src/ws_server/
+ │   ├─ server_manager.rs   ← 主要ロジック (IP取得, NAT判定, トンネル起動呼出)
+ │   ├─ tunnel.rs           ← Loophole Sidecar 制御 (非同期 subprocess, URLパース)
+ │   └─ ip_utils.rs         ← 外部IP取得ユーティリティ
+ ├─ src/state.rs            ← アプリ状態管理
+ ├─ Cargo.toml              ← 依存追加
+ ├─ tauri.conf.json         ← externalBin設定
+ ├─ capabilities/           ← Tauri 2 Capability 設定
+ │   ├─ http.json           ← HTTP プラグイン用 Scope
+ │   └─ shell.json          ← サイドカー実行 Scope
+ ├─ binaries/               ← 各プラットフォーム用CLIバイナリ格納
  └─ build.rs / .github/workflows/*    ← CI 用モック & テスト
 ```
 
@@ -37,6 +49,9 @@ src-tauri/
 ```toml
 # 依存関係を追加する際は `cargo add <crate_name>` を使用することを推奨します。
 [dependencies]
+tauri              = { version = "2", default-features = false }  # Core
+tauri-plugin-http  = "2"   # HTTP クライアント
+tauri-plugin-shell = "2"   # サイドカー実行
 actix-web          = { version = "4" } # rustls feature は不要
 local-ip-address   = "0.6"
 if-addrs           = "0.11" # ローカルIP複数取得用 (代替)
@@ -51,9 +66,6 @@ once_cell          = "1" # static regex用
 
 [build-dependencies]
 # 必要であれば build.rs 用
-
-# Tauri 側も確認
-# tauri = { version = "...", features = ["http-api", "shell-sidecar", "native-tls-vendored"] }
 ```
 
 ---
@@ -88,8 +100,8 @@ graph TD
 
     subgraph Tauri Config & Bundle
        O[tauri.conf.json] --> P[externalBin: loopholeバイナリ指定];
-       O --> Q[allowlist: http, shell.sidecar];
-       R[App Bundle] -.-> P;
+       O --> Q[plugins: http, shell];
+       R[capabilities/*.json] -.-> Q;
     end
 ```
 
@@ -101,7 +113,7 @@ graph TD
 *   **具体的な実施内容:**
     *   Loopholeの公式サイト、GitHubリポジトリでMITライセンスであることを再確認する。
     *   ターゲットプラットフォーム ( `windows-x86_64`, `macos-aarch64`, `macos-x86_64` ) 用のLoophole CLI実行ファイルをダウンロードする。
-    *   プロジェクト内の `src-tauri/binaries/` ディレクトリを作成し、プラットフォーム名を付けたサブディレクトリ (例: `macos-aarch64`, `windows-x86_64`) を作成し、対応するバイナリを配置する (例: `src-tauri/binaries/macos-aarch64/loophole`, `src-tauri/binaries/windows-x86_64/loophole.exe`)。
+    *   プロジェクト内の `src-tauri/binaries/` ディレクトリを作成し、各ターゲット用のバイナリを `loophole-$TARGET_TRIPLE` 命名規則で配置する。
     *   Loopholeリポジトリから `LICENSE` ファイルを取得し、`src-tauri/binaries/` に配置する。
 
 *   **検証方法:**
@@ -110,39 +122,107 @@ graph TD
 
 *   **コミットメッセージ案:** `[feat] Loophole CLIバイナリとライセンスをバンドル (macOS/Windows)`
 
-### 6-2. Tauri 設定 (`tauri.conf.json`)
+### 6-2. Tauri 設定 (`tauri.conf.json` & Capabilities)
 *   **具体的な実施内容:**
-    *   `tauri.conf.json` を開いて編集する。
-    *   `"tauri"."bundle"."externalBin"` 配列に、各ターゲットプラットフォーム用のLoophole CLIバイナリへのパスを追加する。例: `["binaries/$TARGET/loophole"]` (Tauriが `$TARGET` を置換してくれる)。
-    *   `"tauri"."allowlist"."http"."scope"` 配列に、`EXTERNAL_IP_ENDPOINTS` で使用するAPIのオリジンを追加する。例: `"https://api.ipify.org/*"`, `"https://ifconfig.me/*"`。
-    *   `"tauri"."allowlist"."shell"."sidecar"` を `true` に設定する。
+    *   `tauri.conf.json` を開いて編集する：
+        ```jsonc
+        // tauri.conf.json
+        {
+          "build": { "beforeBuildCommand": "", "beforeDevCommand": "" },
+          "package": { "productName": "SUIperChat", "version": "0.1.0" },
+          "bundle": {
+            "identifier": "com.example.suiperchat",
+            "externalBin": ["binaries/loophole"]
+          },
+          "plugins": {
+            "shell": {},
+            "http": {}
+          }
+        }
+        ```
+    *   `capabilities/http.json` を作成する：
+        ```jsonc
+        // capabilities/http.json
+        {
+          "$schema": "../gen/schemas/desktop-schema.json",
+          "identifier": "http-cap",
+          "permissions": [
+            {
+              "identifier": "http:default",
+              "allow": [
+                { "url": "https://api.ipify.org/*" },
+                { "url": "https://ifconfig.me/*" }
+              ]
+            }
+          ]
+        }
+        ```
+    *   `capabilities/shell.json` を作成する：
+        ```jsonc
+        // capabilities/shell.json
+        {
+          "$schema": "../gen/schemas/desktop-schema.json",
+          "identifier": "shell-cap",
+          "permissions": [
+            {
+              "identifier": "shell:allow-spawn",
+              "allow": [
+                { "name": "binaries/loophole", "sidecar": true }
+              ]
+            }
+          ]
+        }
+        ```
+
 *   **検証方法:**
     *   `cargo tauri build` がエラーなく成功すること。
     *   アプリケーション起動時、開発者コンソールに `tauri.conf.json` の読み込みエラーが出ていないこと。
     *   後のステップで、許可したHTTPリクエストが成功し、Sidecarプロセスがエラーなく起動することを確認する。
-*   **コミットメッセージ案:** `[feat] LoopholeサイドカーとHTTP許可リスト用にTauriを設定`
+*   **コミットメッセージ案:** `[feat] Loopholeサイドカーとプラグイン設定用にTauri v2設定ファイルを構成`
 
 ### 6-3. IP 取得ユーティリティの実装
 *   **具体的な実施内容:**
-    *   `src/ws_server/ip_utils.rs` を作成。
+    *   `src/ws_server/ip_utils.rs` を作成：
+        ```rust
+        use tauri_plugin_http::reqwest; // re-exported reqwest
+        use std::{net::IpAddr, str::FromStr};
+        use tauri::AppHandle;
+
+        pub async fn get_external_ip(app: &AppHandle) -> Result<IpAddr, String> {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .build()
+                .map_err(|e| e.to_string())?;
+
+            let endpoints = std::env::var("EXTERNAL_IP_ENDPOINTS")
+                .unwrap_or_else(|_| "https://api.ipify.org?format=json,https://ifconfig.me/all.json".into());
+            for url in endpoints.split(',') {
+                match client.get(url).send().await {
+                    Ok(r) => {
+                        let v: serde_json::Value = r.json().await.map_err(|e| e.to_string())?;
+                        if let Some(ip_str) = v.get("ip").and_then(|v| v.as_str()) {
+                            if let Ok(ip) = IpAddr::from_str(ip_str) {
+                                return Ok(ip);
+                            }
+                        }
+                    }
+                    Err(_) => continue,
+                }
+            }
+            Err("Failed to fetch external IP".into())
+        }
+        ```
     *   `AppState` (`src/state.rs`) に `external_ip: Arc<Mutex<Option<IpAddr>>>`, `global_ip_fetch_failed: Arc<Mutex<bool>>` を追加。 (既存の `Option<String>` から変更の可能性あり)
-    *   `ip_utils.rs` に `get_external_ip(app_handle: &AppHandle) -> Result<IpAddr, String>` 関数を実装:
-        *   Tauri HTTP Client (`tauri::http::ClientBuilder::new().build()?`) を使用。 (`http-api` feature が必要)
-        *   環境変数 `EXTERNAL_IP_ENDPOINTS` を読み込み、カンマで分割してURLリストを取得。デフォルト値も定義。
-        *   URLリストをループし、各URLに `client.get(url).send().await?` でリクエスト。タイムアウト (`timeout()`) を設定。
-        *   成功したらレスポンスボディ (`response.body().await?`) をJSONパース (`serde_json::from_slice`) し、`"ip"` フィールド等を取得。
-        *   `IpAddr::from_str` で `IpAddr` に変換。
-        *   最初に成功したIPアドレスを `Ok(ip)` で返す。
-        *   ループが完了しても成功しなかった場合は `Err("Failed to fetch external IP from all sources.".to_string())` を返す。
-        *   エラー発生時は `tracing::error!` でログ記録。
+    *   外部IP取得、CGNAT判定などのロジックを新しいAPIに合わせて実装する。
+
 *   **検証方法:**
     *   `ip_utils.rs` の単体テスト:
-        *   Tauri HTTP Client をモック化 (難しい場合、テスト用HTTPサーバーを立てる)。
+        *   HTTP Client をモックとして用意し、正常系と異常系をテスト。
         *   正常系(複数API試行)、APIエラー、タイムアウト、JSONパースエラー、IPアドレス形式エラーをテスト。
     *   実機テスト (部分):
         *   `get_external_ip` を単体で呼び出し、グローバルIPが正しく取得できることを確認。
         *   意図的に `EXTERNAL_IP_ENDPOINTS` に無効なURLを設定し、`Err` が返ることを確認。
-*   **コミットメッセージ案:** `[feat] 外部IP取得ユーティリティを実装`
+*   **コミットメッセージ案:** `[feat] 外部IP取得ユーティリティをTauri v2対応に実装`
 
 ### 6-4. CGNAT 判定の実装と統合
 *   **具体的な実施内容:**
@@ -178,13 +258,27 @@ graph TD
 ### 6-6. Tunnel 起動処理の実装 (`start_tunnel`)
 *   **具体的な実施内容:**
     *   `tunnel.rs` に `start_tunnel(app_handle: &AppHandle, ws_port: u16) -> Result<TunnelInfo, TunnelError>` 関数を実装:
-        *   `LOOPHOLE_CLI_PATH` 環境変数から実行ファイル名を取得 (デフォルト: `"loophole"`)。
-        *   `Command::new_sidecar(cli_name)?.args(["http", &ws_port.to_string()]).stdout(Stdio::piped()).spawn()?` でプロセス起動。`Child` を取得 (`tokio::process::Command`, `shell-sidecar` feature が必要)。
-        *   `Arc::new(Mutex::new(child))` でラップ。
-        *   stdout を非同期に読み取るタスクを `tokio::spawn` で起動:
-            *   `BufReader::new(child_stdout).lines()` で一行ずつ読む (`tokio::io::AsyncBufReadExt`)。
+        ```rust
+        use tauri_plugin_shell::ShellExt;
+        use tauri_plugin_shell::process::{CommandEvent, CommandChild};
+        use tauri::{AppHandle, Manager};
+        use tokio::sync::mpsc;
+
+        pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<String, TunnelError> {
+            let (mut rx, mut child): (mpsc::UnboundedReceiver<CommandEvent>, CommandChild) =
+                app.shell()
+                    .sidecar("binaries/loophole")?      // filename only
+                    .args(["http", &ws_port.to_string()])
+                    .spawn()
+                    .map_err(|_| TunnelError::SpawnFailed)?;
+
+            // …stdout 監視して https://*.loophole.cloud を抽出…
+        }
+        ```
+        *   stdout を非同期に読み取るタスクを実装:
+            *   受信したイベントから標準出力を取得し、一行ずつ処理。
             *   `Regex::new(r"https://[a-zA-Z0-9-]+\.loophole\.cloud").unwrap()` (`regex`, `once_cell` クレートが必要) でURLを検索。
-            *   見つかったらURLをチャネル (`tokio::sync::mpsc`) などで `start_tunnel` 関数に送り返す。
+            *   見つかったらURLをチャネル (`tokio::sync::mpsc`) などで送り返す。
             *   タイムアウト処理 (例: `tokio::time::timeout`) を追加。
         *   チャネルからURLを受信するかタイムアウトしたら結果を返す (`Ok(TunnelInfo{...})` or `Err(TunnelError::Timeout)` / `UrlNotFound`)。
 *   **検証方法:**
@@ -195,7 +289,7 @@ graph TD
         *   返されたHTTPS URLにブラウザでアクセスし、ローカルのWebSocketサーバー (ポート `ws_port`) に接続できるか確認 (HTTP Upgradeが通るか)。
         *   **重要:** WebSocketクライアントで `wss://<hostname>.loophole.cloud/ws` (抽出したURLから生成) に接続し、メッセージ送受信が安定するかテスト。
         *   `start_tunnel` がタイムアウトした場合に `Err` が返ることをテスト (意図的にURLを出力しないプロセスを使うなど)。
-*   **コミットメッセージ案:** `[feat] Loopholeトンネル起動処理を実装 (start_tunnel)`
+*   **コミットメッセージ案:** `[feat] Loopholeトンネル起動処理をTauri v2 Shell対応に実装`
 
 ### 6-7. Tunnel 停止処理の実装 (`stop_tunnel`)
 *   **具体的な実施内容:**
@@ -252,21 +346,20 @@ graph TD
 ---
 
 ## 7. セキュリティ & レート制限
-*   変更なし (v2.0 計画の通り)。`tracing` の設定を `env-filter` を使って柔軟に行えるようにする。
+*   Tauri v2 のCapability Systemによって、HTTP/Shellへのアクセスが最小権限で強制される
+*   `tracing` の設定を `env-filter` を使って柔軟に行えるようにする。
 
 ---
 
 ## 8. テスト計画
-| 種類 | 内容 |
-| --- | --- |
-| Unit | IP取得, URLパース, ServerStatus生成 |
-| Integration | GitHub ActionsでトンネルなしWSエコーテスト |
-| E2E | **ローカル環境で Loophole 経由の WSS 接続と通信安定性を重点的にテスト**。OBSプラグイン接続テスト。 |
-| Network | STUN CGNAT判定 → フラグ検証 |
+| 種類        | 内容                                                                                               |
+| ----------- | -------------------------------------------------------------------------------------------------- |
+| Unit        | IP取得, URLパース, ServerStatus生成                                                                |
+| Integration | GitHub ActionsでトンネルなしWSエコーテスト                                                         |
+| E2E         | **ローカル環境で Loophole 経由の WSS 接続と通信安定性を重点的にテスト**。OBSプラグイン接続テスト。 |
+| Network     | STUN CGNAT判定 → フラグ検証                                                                        |
 
 ---
 
 ## 9. 今後の展開メモ
 *   変更なし (v2.0 計画の通り)。
-
----
