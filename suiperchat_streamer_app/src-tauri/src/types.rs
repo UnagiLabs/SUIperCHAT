@@ -332,12 +332,10 @@ mod tests {
 pub struct ServerStatus {
     /// サーバーが実行中かどうか
     pub is_running: bool,
-    /// OBS用URL (例: "http://127.0.0.1:8081/obs/")
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub obs_url: Option<String>,
-    /// WebSocket用URL (例: "ws://127.0.0.1:8080/ws")
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ws_url: Option<String>,
+    /// WebSocket用URL (例: "ws://127.0.0.1:8082/ws" または "wss://xxxx.loophole.cloud/ws")
+    pub ws_url: String,
+    /// OBS用URL (例: "http://127.0.0.1:8081")
+    pub obs_url: String,
     /// 外部IP取得に失敗したかどうかのフラグ
     #[serde(default)]
     pub global_ip_fetch_failed: bool,

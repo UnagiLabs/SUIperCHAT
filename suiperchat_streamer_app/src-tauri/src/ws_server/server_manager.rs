@@ -8,9 +8,9 @@ use crate::types::ServerStatus;
 use crate::ws_server::connection_manager::global::set_app_handle;
 use crate::ws_server::routes::{status_page, websocket_route};
 use crate::ws_server::server_utils::{format_socket_addr, resolve_static_file_path};
+use crate::ws_server::tunnel;
 use actix_files as fs;
 use actix_web::{dev::ServerHandle, web, App, HttpRequest, HttpResponse, HttpServer};
-use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use tokio::runtime::{Handle as TokioHandle, Runtime};
@@ -99,6 +99,15 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
         runtime_handle_option = rt_handle_guard.take();
     }
 
+    // Loopholeトンネルを停止
+    let loophole_info_result = {
+        let mut loophole_guard = app_state
+            .loophole_info
+            .lock()
+            .map_err(|_| "Failed to lock loophole info mutex".to_string())?;
+        loophole_guard.take()
+    };
+
     // 現在のセッションIDを取得
     let session_id_option = match app_state.current_session_id.lock() {
         Ok(session_id_guard) => {
@@ -159,6 +168,15 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
 
             // ホストとポートをクリア
             clear_server_info(app_state);
+
+            // Loopholeトンネルを停止
+            if let Some(Ok(tunnel_info)) = loophole_info_result {
+                println!("Stopping Loophole tunnel...");
+                let tunnel_info_clone = tunnel_info.clone(); // クローンが必要な場合
+                runtime_handle.spawn(async move {
+                    tunnel::stop_tunnel(&tunnel_info_clone).await;
+                });
+            }
 
             // セッション終了処理
             let has_valid_session_id = session_id_option.is_some();
@@ -260,39 +278,12 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
 /// - `obs_url`: OBS URL (オプション)
 fn emit_server_status(
     app_handle: &tauri::AppHandle,
-    is_running: bool,
-    ws_url: Option<String>,
-    obs_url: Option<String>,
+    _is_running: bool,
+    _ws_url: Option<String>,
+    _obs_url: Option<String>,
 ) {
-    // AppStateを取得
-    let app_state = app_handle.state::<AppState>();
-
-    // 外部IP取得の状態を取得
-    let global_ip_fetch_failed = *app_state.global_ip_fetch_failed.lock().unwrap();
-
-    // CGNAT検出フラグを取得
-    let cgnat_detected = *app_state.cgnat_detected.lock().unwrap();
-
-    // Loopholeのトンネル情報も未実装のため、現時点ではNoneを設定
-    let loophole_http_url = None;
-
-    let status_payload = ServerStatus {
-        is_running,
-        ws_url,
-        obs_url,
-        global_ip_fetch_failed,
-        cgnat_detected,
-        loophole_http_url,
-    };
-
-    if let Err(e) = app_handle.emit("server_status_updated", status_payload) {
-        eprintln!("Failed to emit server_status_updated event: {}", e);
-    } else {
-        println!(
-            "Event 'server_status_updated' emitted with running state: {}, CGNAT detected: {}",
-            is_running, cgnat_detected
-        );
-    }
+    // 新しい関数に処理を委譲
+    emit_server_status_with_tunnel(app_handle);
 }
 
 /// ## 現在のサーバー状態を送信する
@@ -309,55 +300,10 @@ fn send_current_server_status(
     app_state: &AppState,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    // 外部IP取得の状態を取得
-    let global_ip_fetch_failed = *app_state.global_ip_fetch_failed.lock().unwrap();
+    let _is_running = app_state.server_handle.lock().unwrap().is_some();
 
-    // CGNAT検出フラグを取得
-    let cgnat_detected = *app_state.cgnat_detected.lock().unwrap();
-
-    // Loopholeのトンネル情報も未実装のため、現時点ではNoneを設定
-    let loophole_http_url = None;
-
-    // 既存のサーバーステータスを取得して送信
-    if let (Some(ws_url), Some(obs_url)) = (
-        app_state.host.lock().unwrap().as_ref().and_then(|h| {
-            app_state.port.lock().unwrap().as_ref().map(|p| {
-                let addr = SocketAddr::new(
-                    h.parse()
-                        .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))),
-                    *p,
-                );
-                format_socket_addr(&addr, "ws", "/ws")
-            })
-        }),
-        app_state.host.lock().unwrap().as_ref().and_then(|h| {
-            app_state.port.lock().unwrap().map(|_p| {
-                let addr = SocketAddr::new(
-                    h.parse()
-                        .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))),
-                    8081,
-                );
-                format_socket_addr(&addr, "http", "/obs/")
-            })
-        }),
-    ) {
-        let status_payload = ServerStatus {
-            is_running: true,
-            obs_url: Some(obs_url),
-            ws_url: Some(ws_url),
-            global_ip_fetch_failed,
-            cgnat_detected,
-            loophole_http_url,
-        };
-
-        if let Err(e) = app_handle.emit("server_status_updated", status_payload) {
-            eprintln!(
-                "Failed to re-emit server_status_updated (already running) event: {}",
-                e
-            );
-            return Err(format!("Failed to emit server status: {}", e));
-        }
-    }
+    // ステータスを発行
+    emit_server_status_with_tunnel(&app_handle);
 
     Ok(())
 }
@@ -455,24 +401,33 @@ async fn run_servers(
                 {
                     let mut external_ip_guard = app_state.external_ip.lock().unwrap();
                     *external_ip_guard = Some(ip);
-                    println!("[Test Log] AppState.external_ip set to: {:?}", *external_ip_guard); // Test Log
+                    println!(
+                        "[Test Log] AppState.external_ip set to: {:?}",
+                        *external_ip_guard
+                    ); // Test Log
                 }
 
                 // 失敗フラグをfalseに設定
                 {
                     let mut failed_guard = app_state.global_ip_fetch_failed.lock().unwrap();
                     *failed_guard = false;
-                     println!("[Test Log] AppState.global_ip_fetch_failed set to: {}", *failed_guard); // Test Log
+                    println!(
+                        "[Test Log] AppState.global_ip_fetch_failed set to: {}",
+                        *failed_guard
+                    ); // Test Log
                 }
 
                 // CGNAT判定を実行
                 match crate::ws_server::ip_utils::check_cgnat(ip).await {
                     Ok(is_cgnat) => {
                         println!("[Test Log] CGNAT判定成功: is_cgnat = {}", is_cgnat); // Test Log
-                        // CGNAT判定結果をAppStateに保存
+                                                                                       // CGNAT判定結果をAppStateに保存
                         let mut cgnat_guard = app_state.cgnat_detected.lock().unwrap();
                         *cgnat_guard = is_cgnat;
-                        println!("[Test Log] AppState.cgnat_detected set to: {}", *cgnat_guard); // Test Log
+                        println!(
+                            "[Test Log] AppState.cgnat_detected set to: {}",
+                            *cgnat_guard
+                        ); // Test Log
 
                         if is_cgnat {
                             println!("警告: CGNAT環境が検出されました。WebSocketサーバーへの外部アクセスが制限される可能性があります。");
@@ -482,10 +437,16 @@ async fn run_servers(
                     }
                     Err(e) => {
                         // CGNAT判定に失敗した場合、警告としてtrueを設定
-                        println!("[Test Log] CGNAT判定に失敗: {}. Setting cgnat_detected to true.", e); // Test Log
+                        println!(
+                            "[Test Log] CGNAT判定に失敗: {}. Setting cgnat_detected to true.",
+                            e
+                        ); // Test Log
                         let mut cgnat_guard = app_state.cgnat_detected.lock().unwrap();
                         *cgnat_guard = true; // 判定失敗時は安全側に倒してtrueに
-                        println!("[Test Log] AppState.cgnat_detected set to: {}", *cgnat_guard); // Test Log
+                        println!(
+                            "[Test Log] AppState.cgnat_detected set to: {}",
+                            *cgnat_guard
+                        ); // Test Log
                     }
                 }
             }
@@ -495,14 +456,20 @@ async fn run_servers(
                 {
                     let mut failed_guard = app_state.global_ip_fetch_failed.lock().unwrap();
                     *failed_guard = true;
-                    println!("[Test Log] AppState.global_ip_fetch_failed set to: {}", *failed_guard); // Test Log
+                    println!(
+                        "[Test Log] AppState.global_ip_fetch_failed set to: {}",
+                        *failed_guard
+                    ); // Test Log
                 }
 
                 // IP取得に失敗した場合もCGNAT判定は不明なため警告としてtrueを設定
                 {
                     let mut cgnat_guard = app_state.cgnat_detected.lock().unwrap();
                     *cgnat_guard = true;
-                    println!("[Test Log] AppState.cgnat_detected set to: {} (due to IP fetch failure)", *cgnat_guard); // Test Log
+                    println!(
+                        "[Test Log] AppState.cgnat_detected set to: {} (due to IP fetch failure)",
+                        *cgnat_guard
+                    ); // Test Log
                 }
                 println!("外部IP取得に失敗したため、CGNATの有無を判定できません。安全のため、CGNATが存在する可能性があると仮定します。");
             }
@@ -688,8 +655,56 @@ async fn run_servers(
                 return; // ★★★★★ 早期リターンを追加 ★★★★★
             }
 
+            // WebSocket & OBSサーバーが起動した後、Loopholeトンネルを起動
+            let ws_port = match port_arc.lock() {
+                Ok(port_guard) => port_guard.unwrap_or(8082),
+                Err(_) => 8082, // デフォルト値
+            };
+
+            // app_handle をクローンして、所有権の問題を解決
+            let app_handle_for_tunnel = app_handle.clone();
+
+            // Loopholeトンネルを非同期で起動
+            tokio::spawn(async move {
+                match tunnel::start_tunnel(&app_handle_for_tunnel, ws_port).await {
+                    Ok(tunnel_info) => {
+                        println!(
+                            "Loophole tunnel started successfully at: {}",
+                            tunnel_info.url
+                        );
+
+                        // トンネル情報をAppStateに保存
+                        if let Ok(mut loophole_guard) = app_handle_for_tunnel
+                            .state::<AppState>()
+                            .loophole_info
+                            .lock()
+                        {
+                            *loophole_guard = Some(Ok(tunnel_info));
+                        }
+
+                        // サーバー状態変更イベントを発行
+                        emit_server_status_with_tunnel(&app_handle_for_tunnel);
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to start Loophole tunnel: {}", e);
+
+                        // エラー情報をAppStateに保存
+                        if let Ok(mut loophole_guard) = app_handle_for_tunnel
+                            .state::<AppState>()
+                            .loophole_info
+                            .lock()
+                        {
+                            *loophole_guard = Some(Err(e));
+                        }
+
+                        // サーバー状態変更イベントを発行
+                        emit_server_status_with_tunnel(&app_handle_for_tunnel);
+                    }
+                }
+            });
+
             // サーバー起動成功イベントを発行
-            emit_server_status(&app_handle, true, Some(ws_addr_str), Some(obs_addr_str));
+            emit_server_status_with_tunnel(&app_handle);
 
             // 両方のサーバーを並行して実行
             println!("Starting both servers concurrently using tokio::try_join!...");
@@ -815,4 +830,96 @@ fn cleanup_server_resources(
         println!("OBS Port cleared from AppState.");
     }
     println!("Cleanup finished.");
+}
+
+/// ## トンネル情報を含めたサーバーステータス送信関数を追加
+///
+/// サーバーの状態を通知するイベントを発行します。
+///
+/// ### Arguments
+/// - `app_handle`: Tauriアプリケーションハンドル
+fn emit_server_status_with_tunnel(app_handle: &tauri::AppHandle) {
+    let app_state = app_handle.state::<AppState>();
+
+    // 必要な情報を取得
+    let is_running = app_state.server_handle.lock().unwrap().is_some();
+
+    let ws_url = {
+        if is_running {
+            // ローカルWSアドレスを取得
+            let host = app_state
+                .host
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| "127.0.0.1".to_string());
+            let port = (*app_state.port.lock().unwrap()).unwrap_or(8082);
+
+            // LoopholeのURLがあればそれを優先
+            if let Ok(loophole_guard) = app_state.loophole_info.lock() {
+                if let Some(Ok(ref tunnel_info)) = *loophole_guard {
+                    // HTTPSからWSSへ変換
+                    tunnel_info.url.replace("https://", "wss://") + "/ws"
+                } else {
+                    // ローカルWSアドレスをフォールバックとして使用
+                    format!("ws://{}:{}/ws", host, port)
+                }
+            } else {
+                format!("ws://{}:{}/ws", host, port)
+            }
+        } else {
+            String::new() // 空文字を返す
+        }
+    };
+
+    let obs_url = {
+        if is_running {
+            let host = app_state
+                .host
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| "127.0.0.1".to_string());
+            let obs_port = (*app_state.obs_port.lock().unwrap()).unwrap_or(8081);
+            format!("http://{}:{}", host, obs_port)
+        } else {
+            String::new() // 空文字を返す
+        }
+    };
+
+    // Loophole HTTP URL
+    let loophole_http_url = {
+        if is_running {
+            if let Ok(loophole_guard) = app_state.loophole_info.lock() {
+                if let Some(Ok(ref tunnel_info)) = *loophole_guard {
+                    Some(tunnel_info.url.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    // CGNAT検出とIP取得失敗フラグ
+    let cgnat_detected = *app_state.cgnat_detected.lock().unwrap();
+    let global_ip_fetch_failed = *app_state.global_ip_fetch_failed.lock().unwrap();
+
+    // ServerStatusを構築
+    let status = ServerStatus {
+        is_running,
+        ws_url,
+        obs_url,
+        global_ip_fetch_failed,
+        cgnat_detected,
+        loophole_http_url,
+    };
+
+    // イベント発行
+    if let Err(e) = app_handle.emit("server_status_updated", status) {
+        eprintln!("Failed to emit server status event: {}", e);
+    }
 }
