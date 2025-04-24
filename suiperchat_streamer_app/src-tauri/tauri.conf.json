@@ -1,6 +1,6 @@
 {
 	"$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-	"productName": "suiperchat_streamer_app",
+	"productName": "SUIperChat",
 	"version": "0.1.0",
 	"identifier": "com.suiperchat.streamer",
 	"build": {
@@ -33,23 +33,11 @@
 			"icons/icon.icns",
 			"icons/icon.ico"
 		],
+		"identifier": "com.suiperchat.streamer",
 		"externalBin": ["binaries/loophole-$TARGET"]
 	},
-	"tauri": {
-		"allowlist": {
-			"http": {
-				"all": false,
-				"request": true,
-				"scope": [
-					"https://api.ipify.org/*",
-					"https://ifconfig.me/*"
-				]
-			},
-			"shell": {
-				"all": false,
-				"sidecar": true,
-				"open": false
-			}
-		}
+	"plugins": {
+		"shell": {},
+		"http": {}
 	}
 }

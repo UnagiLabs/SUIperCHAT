@@ -167,7 +167,7 @@ graph TD
             {
               "identifier": "shell:allow-spawn",
               "allow": [
-                { "name": "binaries/loophole", "sidecar": true }
+                { "name": "binaries/loophole-$TARGET", "sidecar": true }
               ]
             }
           ]
@@ -267,7 +267,7 @@ graph TD
         pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<String, TunnelError> {
             let (mut rx, mut child): (mpsc::UnboundedReceiver<CommandEvent>, CommandChild) =
                 app.shell()
-                    .sidecar("binaries/loophole")?      // filename only
+                    .sidecar("binaries/loophole-$TARGET")?      // プラットフォーム固有バイナリ
                     .args(["http", &ws_port.to_string()])
                     .spawn()
                     .map_err(|_| TunnelError::SpawnFailed)?;
