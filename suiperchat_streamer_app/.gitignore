@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Loophole binaries
+/src-tauri/binaries/*/loophole
+/src-tauri/binaries/*/loophole.exe
