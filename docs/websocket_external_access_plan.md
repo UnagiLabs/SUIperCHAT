@@ -35,6 +35,7 @@ src-tauri/
 
 ## 4. 依存ライブラリ (+features)
 ```toml
+# 依存関係を追加する際は `cargo add <crate_name>` を使用することを推奨します。
 [dependencies]
 actix-web          = { version = "4" } # rustls feature は不要
 local-ip-address   = "0.6"
@@ -121,12 +122,12 @@ graph TD
     *   後のステップで、許可したHTTPリクエストが成功し、Sidecarプロセスがエラーなく起動することを確認する。
 *   **コミットメッセージ案:** `[feat] LoopholeサイドカーとHTTP許可リスト用にTauriを設定`
 
-### 6-3. IP 取得ユーティリティ & CGNAT 判定
+### 6-3. IP 取得ユーティリティの実装
 *   **具体的な実施内容:**
     *   `src/ws_server/ip_utils.rs` を作成。
-    *   `AppState` (`src/state.rs`) に `external_ip: Arc<Mutex<Option<IpAddr>>>`, `global_ip_fetch_failed: Arc<Mutex<bool>>`, `cgnat_detected: Arc<Mutex<bool>>` を追加。
+    *   `AppState` (`src/state.rs`) に `external_ip: Arc<Mutex<Option<IpAddr>>>`, `global_ip_fetch_failed: Arc<Mutex<bool>>` を追加。 (既存の `Option<String>` から変更の可能性あり)
     *   `ip_utils.rs` に `get_external_ip(app_handle: &AppHandle) -> Result<IpAddr, String>` 関数を実装:
-        *   Tauri HTTP Client (`tauri::http::ClientBuilder::new().build()?`) を使用。
+        *   Tauri HTTP Client (`tauri::http::ClientBuilder::new().build()?`) を使用。 (`http-api` feature が必要)
         *   環境変数 `EXTERNAL_IP_ENDPOINTS` を読み込み、カンマで分割してURLリストを取得。デフォルト値も定義。
         *   URLリストをループし、各URLに `client.get(url).send().await?` でリクエスト。タイムアウト (`timeout()`) を設定。
         *   成功したらレスポンスボディ (`response.body().await?`) をJSONパース (`serde_json::from_slice`) し、`"ip"` フィールド等を取得。
@@ -134,52 +135,79 @@ graph TD
         *   最初に成功したIPアドレスを `Ok(ip)` で返す。
         *   ループが完了しても成功しなかった場合は `Err("Failed to fetch external IP from all sources.".to_string())` を返す。
         *   エラー発生時は `tracing::error!` でログ記録。
-    *   `ip_utils.rs` に `check_cgnat(public_ip: IpAddr) -> Result<bool, String>` 関数を実装:
-        *   `stun_client::query_any("stun.l.google.com:19302").await` (または他のSTUNサーバー) を呼び出す。
-        *   成功した場合、返された Mapped Address (`SocketAddr`) の `ip()` と引数の `public_ip` を比較。
-        *   一致しなければ `Ok(true)` (CGNAT検出)、一致すれば `Ok(false)` を返す。
-        *   STUNクエリ失敗時は `Err("STUN query failed.".to_string())` を返す。エラーログも記録。
-    *   `server_manager.rs` の `run_servers` 開始時に `get_external_ip` と `check_cgnat` を `tokio::spawn` で非同期に呼び出し、結果を `AppState` の対応するフィールドに `lock()` して書き込む。IP取得失敗時は `global_ip_fetch_failed` を `true` にする。
 *   **検証方法:**
     *   `ip_utils.rs` の単体テスト:
         *   Tauri HTTP Client をモック化 (難しい場合、テスト用HTTPサーバーを立てる)。
         *   正常系(複数API試行)、APIエラー、タイムアウト、JSONパースエラー、IPアドレス形式エラーをテスト。
-        *   `check_cgnat`: STUNサーバー応答をモックするか、既知の結果になるIPでテスト。
-    *   実機テスト:
-        *   通常のネットワークで起動し、グローバルIPが正しく取得され `AppState` に保存されることをログで確認。`cgnat_detected` が `false` であること。
-        *   可能であれば、VPNやモバイルテザリング等でネットワーク環境を変え、IPアドレスの変化やCGNAT検出 (検出されれば `true`) を確認。
-        *   意図的に `EXTERNAL_IP_ENDPOINTS` に無効なURLを設定し、フォールバック (ローカルIP等) が機能し、`global_ip_fetch_failed` が `true` になることを確認。
-*   **コミットメッセージ案:** `[feat] 外部IP取得とCGNAT判定ユーティリティを実装`
+    *   実機テスト (部分):
+        *   `get_external_ip` を単体で呼び出し、グローバルIPが正しく取得できることを確認。
+        *   意図的に `EXTERNAL_IP_ENDPOINTS` に無効なURLを設定し、`Err` が返ることを確認。
+*   **コミットメッセージ案:** `[feat] 外部IP取得ユーティリティを実装`
 
-### 6-4. トンネル制御 (`tunnel.rs`)
+### 6-4. CGNAT 判定の実装と統合
+*   **具体的な実施内容:**
+    *   `AppState` (`src/state.rs`) に `cgnat_detected: Arc<Mutex<bool>>` を追加。
+    *   `ip_utils.rs` に `check_cgnat(public_ip: IpAddr) -> Result<bool, String>` 関数を実装:
+        *   `stun_client::query_any("stun.l.google.com:19302").await` (または他のSTUNサーバー) を呼び出す。 (`stun_client` クレートが必要)
+        *   成功した場合、返された Mapped Address (`SocketAddr`) の `ip()` と引数の `public_ip` を比較。
+        *   一致しなければ `Ok(true)` (CGNAT検出)、一致すれば `Ok(false)` を返す。
+        *   STUNクエリ失敗時は `Err("STUN query failed.".to_string())` を返す。エラーログも記録。
+    *   `server_manager.rs` の `run_servers` 開始時に `tokio::spawn` を使って以下の処理を非同期に実行:
+        *   `get_external_ip` を呼び出す。
+        *   成功した場合、取得したIPを `AppState` の `external_ip` に保存し、そのIPを使って `check_cgnat` を呼び出す。
+        *   `check_cgnat` の結果 (`Ok(is_cgnat)` または `Err`) を `AppState` の `cgnat_detected` に保存する (`Ok(true)` or `Err` の場合は `true`、`Ok(false)` の場合は `false`)。
+        *   `get_external_ip` が失敗した場合、`AppState` の `global_ip_fetch_failed` を `true` に設定し、`cgnat_detected` も `true` (不明瞭なため警告を出す方向で) に設定する。
+*   **検証方法:**
+    *   `ip_utils.rs` の単体テスト:
+        *   `check_cgnat`: STUNサーバー応答をモックするか、既知の結果になるIPでテスト。
+    *   実機テスト (統合):
+        *   通常のネットワークで起動し、`AppState` に `external_ip` が保存され、`cgnat_detected` が `false` であることをログで確認。
+        *   可能であれば、VPNやモバイルテザリング等でネットワーク環境を変え、IPアドレスの変化やCGNAT検出 (`true`) を確認。
+        *   外部IP取得に失敗した場合 (`global_ip_fetch_failed` が `true`) に、`cgnat_detected` も `true` になることを確認。
+*   **コミットメッセージ案:** `[feat] CGNAT判定機能を追加し、IP取得と統合`
+
+### 6-5. Tunnel 構造体とエラー定義 (`tunnel.rs`)
 *   **具体的な実施内容:**
     *   `src/ws_server/tunnel.rs` を作成。
     *   `struct TunnelInfo { process: Arc<Mutex<Child>>, url: String }` を定義 (`Arc<Mutex<>>` でプロセスハンドルを共有可能に)。
     *   `TunnelError` enum を定義 (例: `SpawnFailed`, `StdioError`, `UrlNotFound`, `Timeout`)。
-    *   `start_tunnel(app_handle: &AppHandle, ws_port: u16) -> Result<TunnelInfo, TunnelError>` 関数を実装:
+*   **検証方法:**
+    *   (特になし、後続ステップで利用される)
+*   **コミットメッセージ案:** `[refactor] Loophole Tunnel関連の構造体とエラー型を定義`
+
+### 6-6. Tunnel 起動処理の実装 (`start_tunnel`)
+*   **具体的な実施内容:**
+    *   `tunnel.rs` に `start_tunnel(app_handle: &AppHandle, ws_port: u16) -> Result<TunnelInfo, TunnelError>` 関数を実装:
         *   `LOOPHOLE_CLI_PATH` 環境変数から実行ファイル名を取得 (デフォルト: `"loophole"`)。
-        *   `Command::new_sidecar(cli_name)?.args(["http", &ws_port.to_string()]).stdout(Stdio::piped()).spawn()?` でプロセス起動。`Child` を取得。
+        *   `Command::new_sidecar(cli_name)?.args(["http", &ws_port.to_string()]).stdout(Stdio::piped()).spawn()?` でプロセス起動。`Child` を取得 (`tokio::process::Command`, `shell-sidecar` feature が必要)。
         *   `Arc::new(Mutex::new(child))` でラップ。
         *   stdout を非同期に読み取るタスクを `tokio::spawn` で起動:
-            *   `BufReader::new(child_stdout).lines()` で一行ずつ読む。
-            *   `Regex::new(r"https://[a-zA-Z0-9-]+\.loophole\.cloud").unwrap()` (once_cell使用推奨) でURLを検索。
+            *   `BufReader::new(child_stdout).lines()` で一行ずつ読む (`tokio::io::AsyncBufReadExt`)。
+            *   `Regex::new(r"https://[a-zA-Z0-9-]+\.loophole\.cloud").unwrap()` (`regex`, `once_cell` クレートが必要) でURLを検索。
             *   見つかったらURLをチャネル (`tokio::sync::mpsc`) などで `start_tunnel` 関数に送り返す。
             *   タイムアウト処理 (例: `tokio::time::timeout`) を追加。
         *   チャネルからURLを受信するかタイムアウトしたら結果を返す (`Ok(TunnelInfo{...})` or `Err(TunnelError::Timeout)` / `UrlNotFound`)。
-    *   `stop_tunnel(tunnel_info: &TunnelInfo)` 関数を実装:
-        *   `tunnel_info.process.lock().unwrap().kill().await` でプロセスを停止。エラーをログ記録。
 *   **検証方法:**
     *   単体テスト: 正規表現のURL抽出ロジックをテスト。
-    *   ローカル実行テスト:
+    *   ローカル実行テスト (部分):
         *   `start_tunnel` を呼び出し、Loopholeプロセスがバックグラウンドで起動することを確認 (プロセスリスト確認)。
         *   標準出力のログからHTTPS URLが正しく抽出され、`TunnelInfo` として返されることを確認。
         *   返されたHTTPS URLにブラウザでアクセスし、ローカルのWebSocketサーバー (ポート `ws_port`) に接続できるか確認 (HTTP Upgradeが通るか)。
-        *   **最重要:** WebSocketクライアントで `wss://<hostname>.loophole.cloud/ws` (抽出したURLから生成) に接続し、メッセージ送受信が安定するかテスト。
-        *   `stop_tunnel` を呼び出し、Loopholeプロセスが終了することを確認。
+        *   **重要:** WebSocketクライアントで `wss://<hostname>.loophole.cloud/ws` (抽出したURLから生成) に接続し、メッセージ送受信が安定するかテスト。
         *   `start_tunnel` がタイムアウトした場合に `Err` が返ることをテスト (意図的にURLを出力しないプロセスを使うなど)。
-*   **コミットメッセージ案:** `[feat] サイドカープロセス経由でのLoopholeトンネル制御を実装`
+*   **コミットメッセージ案:** `[feat] Loopholeトンネル起動処理を実装 (start_tunnel)`
 
-### 6-5. `server_manager.rs` 統合
+### 6-7. Tunnel 停止処理の実装 (`stop_tunnel`)
+*   **具体的な実施内容:**
+    *   `tunnel.rs` に `stop_tunnel(tunnel_info: &TunnelInfo)` 関数を実装:
+        *   `tunnel_info.process.lock().unwrap().kill().await` でプロセスを停止 (`tokio::process::ChildExt`)。エラーをログ記録 (`tracing`)。
+*   **検証方法:**
+    *   ローカル実行テスト (部分):
+        *   `start_tunnel` で起動したプロセスを持つ `TunnelInfo` を用意する。
+        *   `stop_tunnel` を呼び出し、Loopholeプロセスが終了することを確認 (プロセスリスト確認)。
+*   **コミットメッセージ案:** `[feat] Loopholeトンネル停止処理を実装 (stop_tunnel)`
+
+### 6-8. `server_manager.rs` 統合
 *   **具体的な実施内容:**
     *   `AppState` に `loophole_info: Arc<Mutex<Option<Result<TunnelInfo, TunnelError>>>>` を追加。
     *   `run_servers` 関数内で、**常に**トンネル起動処理を行う。
@@ -193,7 +221,7 @@ graph TD
     *   IP取得、CGNAT判定、トンネル起動が並行して実行されても問題ないか確認。
 *   **コミットメッセージ案:** `[feat] Loopholeトンネル制御をサーバーマネージャーに必須機能として統合`
 
-### 6-6. フロントエンド連携 (`emit_server_status`)
+### 6-9. フロントエンド連携 (`emit_server_status`)
 *   **具体的な実施内容:**
     *   `src/types.rs` (または相当するファイル) に `ServerStatus` struct を定義し、`Serialize` と `Clone` を derive する。フィールドは TypeScript 側の定義に合わせる。
         ```rust
