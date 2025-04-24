@@ -76,8 +76,8 @@ pub fn run() {
                 // 開発/リリースビルドに応じたDBパス解決と接続オプション生成
                 let connect_options_result = async {
                     let db_path = if cfg!(debug_assertions) {
-                        // 開発ビルド時: src-tauri ディレクトリ直下に dev.db を作成
-                        let path = std::path::PathBuf::from("./dev.db"); // パスを ./dev.db に変更
+                        // 開発ビルド時: プロジェクトルート（suiperchat_streamer_app）直下に dev.db を作成
+                        let path = std::path::PathBuf::from("../dev.db"); // パスを ../dev.db に変更（プロジェクトルートを指す）
                         println!("開発モードのデータベースパス: {}", path.display());
 
                         // 開発用DBが存在するか確認
