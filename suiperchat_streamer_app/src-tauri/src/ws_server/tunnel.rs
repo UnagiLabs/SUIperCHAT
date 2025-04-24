@@ -1,5 +1,6 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
+use std::mem;
 use std::sync::{Arc, Mutex};
 use tauri::AppHandle;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
@@ -19,13 +20,13 @@ const TUNNEL_START_TIMEOUT_SECS: u64 = 30;
 /**
  * トンネル情報を保持する構造体
  *
- * @property {Arc<Mutex<CommandChild>>} process - LoopholeのCLIプロセスへの参照 (CommandChild型)
+ * @property {Arc<Mutex<Option<CommandChild>>>} process - LoopholeのCLIプロセスへの参照 (Option<CommandChild>型)
  * @property {String} url - 生成されたHTTPSトンネルURL
  */
 #[derive(Clone)]
 pub struct TunnelInfo {
-    /// LoopholeのCLIプロセスへの参照 (CommandChild型)
-    pub process: Arc<Mutex<CommandChild>>,
+    /// LoopholeのCLIプロセスへの参照 (Option<CommandChild>型)
+    pub process: Arc<Mutex<Option<CommandChild>>>,
 
     /// 生成されたHTTPSトンネルURL
     pub url: String,
@@ -71,7 +72,7 @@ impl TunnelInfo {
      */
     pub fn new(process: CommandChild, url: String) -> Self {
         Self {
-            process: Arc::new(Mutex::new(process)),
+            process: Arc::new(Mutex::new(Some(process))),
             url,
         }
     }
@@ -179,18 +180,32 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
 /**
  * Loopholeトンネルを停止する
  *
- * @param {&TunnelInfo} tunnel_info - 停止するトンネル情報
+ * この関数は実行中のLoopholeプロセスを終了させ、確立されたトンネルを閉じます。
+ * プロセスの終了に失敗した場合はエラーをログに記録しますが、関数自体は
+ * 常に正常に完了します。
+ *
+ * @param {&TunnelInfo} tunnel_info - 停止するトンネルの情報
  */
 pub async fn stop_tunnel(tunnel_info: &TunnelInfo) {
     info!("Stopping Loophole tunnel: {}", tunnel_info.url);
 
-    // 注: CommandChild の kill() メソッドを直接使用することはできないため、
-    // 代わりにプロセスが自動的に終了するようにする方法を採用
+    // Mutex から Option<CommandChild> をムーブアウト
+    let child_opt: Option<CommandChild> = {
+        let mut guard = match tunnel_info.process.lock() {
+            Ok(g) => g,
+            Err(e) => {
+                error!("Failed to lock tunnel process: {}", e);
+                return;
+            }
+        };
+        mem::take(&mut *guard) // guard を空の Some→None に置き換えつつ中身を move
+    };
 
-    info!("Tunnel process will be released and allowed to close");
-
-    // AppStateからLoopholeInfoを削除する必要がある場合、
-    // その処理は呼び出し元（server_manager.rs）で既に行われていて、
-    // AppState.loophole_info の中身は None に設定されている
-    // トンネルプロセスはTauri AppHandleが閉じられた時に自動的に終了する
+    match child_opt {
+        Some(child) => match child.kill() {
+            Ok(_) => info!("Loophole process terminated successfully"),
+            Err(e) => error!("Failed to kill Loophole process: {}", e),
+        },
+        None => warn!("Loophole process already stopped or was never started."),
+    }
 }
