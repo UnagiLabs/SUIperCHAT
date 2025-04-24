@@ -270,8 +270,8 @@ fn emit_server_status(
     // 外部IP取得の状態を取得
     let global_ip_fetch_failed = *app_state.global_ip_fetch_failed.lock().unwrap();
 
-    // CGNATフラグは未実装のため、現時点ではfalseを設定
-    let cgnat_detected = false;
+    // CGNAT検出フラグを取得
+    let cgnat_detected = *app_state.cgnat_detected.lock().unwrap();
 
     // Loopholeのトンネル情報も未実装のため、現時点ではNoneを設定
     let loophole_http_url = None;
@@ -289,8 +289,8 @@ fn emit_server_status(
         eprintln!("Failed to emit server_status_updated event: {}", e);
     } else {
         println!(
-            "Event 'server_status_updated' emitted with running state: {}",
-            is_running
+            "Event 'server_status_updated' emitted with running state: {}, CGNAT detected: {}",
+            is_running, cgnat_detected
         );
     }
 }
@@ -312,8 +312,8 @@ fn send_current_server_status(
     // 外部IP取得の状態を取得
     let global_ip_fetch_failed = *app_state.global_ip_fetch_failed.lock().unwrap();
 
-    // CGNATフラグは未実装のため、現時点ではfalseを設定
-    let cgnat_detected = false;
+    // CGNAT検出フラグを取得
+    let cgnat_detected = *app_state.cgnat_detected.lock().unwrap();
 
     // Loopholeのトンネル情報も未実装のため、現時点ではNoneを設定
     let loophole_http_url = None;
@@ -358,12 +358,6 @@ fn send_current_server_status(
             return Err(format!("Failed to emit server status: {}", e));
         }
     }
-
-    // 新しいクローンを作成
-    let app_handle_for_status = app_handle.clone();
-    send_current_server_status(app_state, app_handle_for_status).unwrap_or_else(|e| {
-        eprintln!("IP取得後のステータス送信に失敗: {}", e);
-    });
 
     Ok(())
 }
@@ -447,7 +441,7 @@ async fn run_servers(
     println!("Starting OBS server at http://{}:{}/obs/", host, obs_port);
     println!("Note: Client connections MUST include the '/ws' path");
 
-    // 外部IP取得処理を非同期で実行
+    // 外部IP取得とCGNAT判定処理を非同期で実行
     let app_handle_clone = app_handle.clone();
     tokio::spawn(async move {
         // AppStateを取得
@@ -458,25 +452,59 @@ async fn run_servers(
             Ok(ip) => {
                 // 成功した場合、IPをAppStateに保存
                 println!("外部IPアドレスの取得に成功: {}", ip);
-                let mut external_ip_guard = app_state.external_ip.lock().unwrap();
-                *external_ip_guard = Some(ip);
+                {
+                    let mut external_ip_guard = app_state.external_ip.lock().unwrap();
+                    *external_ip_guard = Some(ip);
+                }
 
                 // 失敗フラグをfalseに設定
-                let mut failed_guard = app_state.global_ip_fetch_failed.lock().unwrap();
-                *failed_guard = false;
+                {
+                    let mut failed_guard = app_state.global_ip_fetch_failed.lock().unwrap();
+                    *failed_guard = false;
+                }
+
+                // CGNAT判定を実行
+                match crate::ws_server::ip_utils::check_cgnat(ip).await {
+                    Ok(is_cgnat) => {
+                        // CGNAT判定結果をAppStateに保存
+                        let mut cgnat_guard = app_state.cgnat_detected.lock().unwrap();
+                        *cgnat_guard = is_cgnat;
+
+                        if is_cgnat {
+                            println!("警告: CGNAT環境が検出されました。WebSocketサーバーへの外部アクセスが制限される可能性があります。");
+                        } else {
+                            println!("CGNAT環境は検出されませんでした。WebSocketサーバーへの外部アクセスは正常に行える可能性が高いです。");
+                        }
+                    }
+                    Err(e) => {
+                        // CGNAT判定に失敗した場合、警告としてtrueを設定
+                        println!("CGNAT判定に失敗しました: {}。安全のため、CGNATが存在する可能性があると仮定します。", e);
+                        let mut cgnat_guard = app_state.cgnat_detected.lock().unwrap();
+                        *cgnat_guard = true; // 判定失敗時は安全側に倒してtrueに
+                    }
+                }
             }
             Err(e) => {
                 // 失敗した場合、エラーログを出力し失敗フラグを設定
                 eprintln!("外部IP取得エラー: {}", e);
-                let mut failed_guard = app_state.global_ip_fetch_failed.lock().unwrap();
-                *failed_guard = true;
+                {
+                    let mut failed_guard = app_state.global_ip_fetch_failed.lock().unwrap();
+                    *failed_guard = true;
+                }
+
+                // IP取得に失敗した場合もCGNAT判定は不明なため警告としてtrueを設定
+                {
+                    let mut cgnat_guard = app_state.cgnat_detected.lock().unwrap();
+                    *cgnat_guard = true;
+                }
+                println!("外部IP取得に失敗したため、CGNATの有無を判定できません。安全のため、CGNATが存在する可能性があると仮定します。");
             }
         }
 
         // 新しいクローンを作成
         let app_handle_for_status = app_handle_clone.clone();
         send_current_server_status(&app_state, app_handle_for_status).unwrap_or_else(|e| {
-            eprintln!("IP取得後のステータス送信に失敗: {}", e);
+            eprintln!("IP取得・CGNAT判定後のステータス送信に失敗: {}", e);
         });
     });
 

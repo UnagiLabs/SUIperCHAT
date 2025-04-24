@@ -11,9 +11,10 @@ use tauri::AppHandle;
  * - 複数の外部IP取得サービスをフォールバックとして使用
  * - タイムアウト付きの非同期HTTPリクエスト
  * - エラーハンドリングとログ記録
+ * - CGNAT (Carrier-grade NAT) 検出機能
  */
 use tauri_plugin_http::reqwest; // re-exported reqwest
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 /// 外部IPアドレスを取得する
 ///
@@ -95,4 +96,95 @@ pub async fn get_external_ip(_app: &AppHandle) -> Result<IpAddr, String> {
     let error_msg = "すべての外部IP取得エンドポイントが失敗しました".to_string();
     error!("{}", error_msg);
     Err(error_msg)
+}
+
+/// CGNAT (Carrier-grade NAT) または二重NATを検出する
+///
+/// STUNサーバーに問い合わせを行い、取得した外部IPアドレスが渡されたものと一致するか検証します。
+/// 一致しない場合、CGNAT環境と判断されます。
+///
+/// # 引数
+/// * `public_ip` - 他の方法で取得した外部IPアドレス
+///
+/// # 戻り値
+/// * `Result<bool, String>` - 成功した場合、CGNATが検出されたかどうかを示すbool値
+///   - `Ok(true)` - CGNATが検出された
+///   - `Ok(false)` - CGNATは検出されなかった
+///   - `Err(message)` - STUNクエリが失敗した場合のエラーメッセージ
+pub async fn check_cgnat(public_ip: IpAddr) -> Result<bool, String> {
+    info!(
+        "CGNATの検出を開始します。API経由で取得したIP: {}",
+        public_ip
+    );
+
+    // Google STUNサーバーにクエリを送信
+    let stun_server = "stun.l.google.com:19302";
+    info!("STUNサーバーにクエリを送信します: {}", stun_server);
+
+    // STUNクライアントを作成 (任意のローカルIPにバインド)
+    let mut client = match stun_client::Client::new("0.0.0.0:0", None).await {
+        Ok(client) => client,
+        Err(e) => {
+            let error_msg = format!("STUNクライアントの作成に失敗しました: {}", e);
+            error!("{}", error_msg);
+            return Err(error_msg);
+        }
+    };
+
+    // STUNサーバーに問い合わせを送信
+    match client.binding_request(stun_server, None).await {
+        Ok(response) => {
+            if response.get_class() == stun_client::Class::SuccessResponse {
+                // XOR-MAPPED-ADDRESSを取得
+                match stun_client::Attribute::get_xor_mapped_address(&response) {
+                    Some(stun_addr) => {
+                        let stun_ip = stun_addr.ip();
+                        info!("STUN経由で取得したIP: {}", stun_ip);
+
+                        // IPアドレスが一致するか検証
+                        if stun_ip == public_ip {
+                            info!("CGNAT検出: 両方のIPが一致しています。CGNATは検出されませんでした。");
+                            Ok(false) // CGNATなし
+                        } else {
+                            warn!("CGNAT検出: IPアドレスの不一致。CGNAT環境と判断します。API: {}, STUN: {}", public_ip, stun_ip);
+                            Ok(true) // CGNAT検出
+                        }
+                    }
+                    None => {
+                        let error_msg =
+                            "STUNレスポンスにXOR-MAPPED-ADDRESSが含まれていません".to_string();
+                        error!("{}", error_msg);
+                        Err(error_msg)
+                    }
+                }
+            } else {
+                let error_msg = format!(
+                    "STUNレスポンスがエラーを返しました: {:?}",
+                    response.get_class()
+                );
+                error!("{}", error_msg);
+                Err(error_msg)
+            }
+        }
+        Err(e) => {
+            // STUNクエリ失敗
+            let error_msg = format!("STUNクエリに失敗しました: {}", e);
+            error!("{}", error_msg);
+            Err(error_msg)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ip_from_str() {
+        let valid_ip = "192.168.1.1";
+        assert!(IpAddr::from_str(valid_ip).is_ok());
+
+        let invalid_ip = "not an ip";
+        assert!(IpAddr::from_str(invalid_ip).is_err());
+    }
 }

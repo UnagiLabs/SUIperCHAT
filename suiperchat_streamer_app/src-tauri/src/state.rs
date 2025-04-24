@@ -45,6 +45,11 @@ pub struct AppState {
     ///
     /// 外部IP取得に失敗した場合は `true`、成功または未試行の場合は `false`
     pub global_ip_fetch_failed: Arc<Mutex<bool>>,
+    /// CGNAT（Carrier-grade NAT）または二重NATが検出されたかどうかのフラグ
+    ///
+    /// CGNATが検出された場合は `true`、検出されなかった場合は `false`
+    /// このフラグが `true` の場合、WebSocketサーバーへの外部からの接続が制限される可能性があります
+    pub cgnat_detected: Arc<Mutex<bool>>,
 }
 
 impl AppState {
@@ -64,6 +69,7 @@ impl AppState {
             current_session_id: Arc::new(Mutex::new(None)),
             external_ip: Arc::new(Mutex::new(None)),
             global_ip_fetch_failed: Arc::new(Mutex::new(false)),
+            cgnat_detected: Arc::new(Mutex::new(false)),
         }
     }
 }
