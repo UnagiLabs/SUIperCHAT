@@ -11,6 +11,7 @@ pub mod routes;
 pub mod server_manager;
 pub mod server_utils;
 pub mod session;
+pub mod tunnel;
 
 // 型の再エクスポート
 pub use client_info::ClientInfo;

@@ -380,6 +380,7 @@ dependencies = [
  "tauri-plugin-http",
  "tauri-plugin-log",
  "tauri-plugin-shell",
+ "thiserror 2.0.12",
  "tokio",
  "tokio-tungstenite",
  "tracing",
