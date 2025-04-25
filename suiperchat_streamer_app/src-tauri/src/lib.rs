@@ -6,6 +6,8 @@
 use sqlx::sqlite::SqliteConnectOptions;
 use std::str::FromStr;
 use tauri::Manager;
+// --- プラグインの use 文を追加 ---
+use tauri_plugin_log::{Target, TargetKind};
 
 // --- モジュール宣言 ---
 pub mod commands; // コマンドモジュール
@@ -64,6 +66,17 @@ CREATE TABLE IF NOT EXISTS messages (
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // --- プラグインの登録 ---
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir { file_name: None }),
+                ])
+                .build(),
+        )
         // --- AppState を Tauri で管理 ---
         .manage(AppState::new())
         // --- セットアップフックを登録 ---
