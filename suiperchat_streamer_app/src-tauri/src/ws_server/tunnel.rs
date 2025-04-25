@@ -10,25 +10,26 @@ use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 use tracing::{error, info, warn};
 
-/// Loopholeが出力するURLを検出するための正規表現
+/// Cloudflaredが出力するURLを検出するための正規表現
 static URL_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"https://[a-zA-Z0-9-]+\.loophole\.cloud").unwrap());
+    Lazy::new(|| Regex::new(r"https?://[a-z0-9-]+\.trycloudflare\.com").unwrap());
 
 /// タイムアウト時間（秒）
-const TUNNEL_START_TIMEOUT_SECS: u64 = 30;
+const TUNNEL_START_TIMEOUT_SECS: u64 = 15;
 
 /**
  * トンネル情報を保持する構造体
  *
- * @property {Arc<Mutex<Option<CommandChild>>>} process - LoopholeのCLIプロセスへの参照 (Option<CommandChild>型)
- * @property {String} url - 生成されたHTTPSトンネルURL
+ * cloudflaredプロセスと生成されたトンネルURLを管理します。
  */
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct TunnelInfo {
-    /// LoopholeのCLIプロセスへの参照 (Option<CommandChild>型)
+    /// cloudflaredプロセスへの参照（Option<CommandChild>型）
+    /// Option型でラップすることでtake()メソッドを使用可能に
     pub process: Arc<Mutex<Option<CommandChild>>>,
 
-    /// 生成されたHTTPSトンネルURL
+    /// 生成されたCloudflare Tunnelの一時URL
+    /// 例: https://xxxx-xxxx-xxxx-xxxx.trycloudflare.com
     pub url: String,
 }
 
@@ -37,37 +38,37 @@ pub struct TunnelInfo {
  */
 #[derive(Error, Debug)]
 pub enum TunnelError {
+    /// このプラットフォーム用のcloudflaredバイナリ選択に失敗
+    #[error("Failed to select cloudflared binary for this platform")]
+    BinarySelectionFailed,
+
     /// プロセスの起動に失敗
-    #[error("Failed to spawn Loophole process: {0}")]
-    SpawnFailed(String),
+    #[error("Failed to spawn cloudflared process: {0}")]
+    SpawnFailed(#[from] tauri_plugin_shell::Error),
 
     /// 標準入出力の操作中にエラー発生
-    #[error("Stdio error: {0}")]
-    StdioError(String),
+    #[error("Failed to read cloudflared stdout")]
+    StdioError,
 
     /// トンネルURLが見つからなかった
-    #[error("Tunnel URL not found in output")]
+    #[error("Cloudflare URL not found in output within timeout")]
     UrlNotFound,
 
     /// タイムアウト発生
-    #[error("Timeout waiting for tunnel URL")]
+    #[error("Timed out waiting for cloudflared URL")]
     Timeout,
 
     /// サポートされていないプラットフォーム
     #[error("Unsupported platform")]
     UnsupportedPlatform,
-
-    /// その他のエラー
-    #[error("Other error: {0}")]
-    Other(String),
 }
 
 impl TunnelInfo {
     /**
      * 新しいTunnelInfoインスタンスを作成
      *
-     * @param {CommandChild} process - Loopholeプロセス (CommandChild型)
-     * @param {String} url - トンネルURL
+     * @param {CommandChild} process - cloudflaredプロセス
+     * @param {String} url - Cloudflare Tunnelの一時URL
      * @returns {TunnelInfo} 作成されたTunnelInfoインスタンス
      */
     pub fn new(process: CommandChild, url: String) -> Self {
@@ -79,11 +80,10 @@ impl TunnelInfo {
 }
 
 /**
- * Loopholeトンネルを起動し、WebSocketサーバーをインターネットに公開する
+ * トンネルを起動し、WebSocketサーバーをインターネットに公開する
  *
- * この関数はLoophole CLIをサイドカーとして起動し、指定されたWebSocketポートを
- * インターネットに公開するトンネルを確立します。成功時は生成されたHTTPSのURLを含む
- * TunnelInfoを返します。
+ * 注意: この実装は次のステップ6.5で完全に書き換えられます。
+ * 現在はLoophole用の実装ですが、cloudflared用に更新されます。
  *
  * @param {&AppHandle} app - Tauriアプリハンドル
  * @param {u16} ws_port - WebSocketサーバーのポート番号
@@ -92,21 +92,19 @@ impl TunnelInfo {
 pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, TunnelError> {
     info!("Starting Loophole tunnel for WebSocket port {}", ws_port);
 
-    // Tauriがtauri.conf.jsonのexternalBinとcapabilities/shell.jsonの設定に基づいて
-    // 適切なバイナリを自動的に選択するため、プラットフォーム分岐は不要。
-    // sidecar()にはバイナリ名（パス区切りなし）を渡す。
+    // 注意: このコードは次のステップでcloudflared用に置き換えられます
     info!("Attempting to start Loophole sidecar with name: loophole");
 
     // sidecar() メソッドを使用してLoophole CLIプロセスを起動
     let command = app
         .shell()
         .sidecar("loophole") // バイナリ名を指定
-        .map_err(|e| TunnelError::SpawnFailed(e.to_string()))?;
+        .map_err(TunnelError::SpawnFailed)?;
 
     let (mut rx, child) = command
         .args(["http", &ws_port.to_string()])
         .spawn()
-        .map_err(|e| TunnelError::SpawnFailed(e.to_string()))?;
+        .map_err(TunnelError::SpawnFailed)?;
 
     info!("Loophole process spawned, waiting for URL...");
 
@@ -178,11 +176,10 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
 }
 
 /**
- * Loopholeトンネルを停止する
+ * トンネルを停止する
  *
- * この関数は実行中のLoopholeプロセスを終了させ、確立されたトンネルを閉じます。
- * プロセスの終了に失敗した場合はエラーをログに記録しますが、関数自体は
- * 常に正常に完了します。
+ * 注意: この実装は次のステップ6.6で完全に書き換えられます。
+ * 現在はLoophole用の実装ですが、cloudflared用に更新されます。
  *
  * @param {&TunnelInfo} tunnel_info - 停止するトンネルの情報
  */
