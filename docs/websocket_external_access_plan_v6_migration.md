@@ -145,7 +145,7 @@ graph TD
 *   **実施内容:**
     *   既存の `src-tauri/binaries/loophole-*` と `LICENSE` (Loophole用) を削除します。
     *   Cloudflare の GitHub Releases ([https://github.com/cloudflare/cloudflared/releases](https://github.com/cloudflare/cloudflared/releases)) から、ターゲットプラットフォーム (例: `windows-amd64.exe`, `darwin-amd64`, `darwin-arm64`) 用の `cloudflared` バイナリをダウンロードします。
-    *   ダウンロードしたバイナリを `src-tauri/binaries/` に配置します。**バンドル内でのファイル名はプラットフォーム間で統一**します。最も簡単な方法は、macOS/Linux 用は `cloudflared`、Windows 用は `cloudflared.exe` という名前にリネームして配置することです。これにより、Sidecar 呼び出し時のファイル名を固定できます。
+    *   ダウンロードしたバイナリを `src-tauri/binaries/` に配置します。**ファイル名は Tauri の命名規則 `{externalBin}-{target}` に従う必要があります** (例: `cloudflared-aarch64-apple-darwin`, `cloudflared-x86_64-pc-windows-msvc.exe`)。Tauri はビルド時にターゲットに応じたファイルを自動で選択します。
     *   `cloudflared` のリポジトリから `LICENSE` ファイル (Apache-2.0) を取得し、`src-tauri/binaries/LICENSE` として配置します。
     *   macOS/Linux 用バイナリには実行権限を付与します (`chmod +x`)。CI/CD で `strip` コマンドによるバイナリサイズ削減も検討します。
 *   **検証:** `cargo tauri build` 後、アプリバンドル内に `cloudflared` バイナリと Apache-2.0 ライセンスが含まれていることを確認。
@@ -154,12 +154,12 @@ graph TD
 ### **ステップ 6.2: Tauri 設定更新 (`tauri.conf.json`, Capabilities)**
 
 *   **実施内容:**
-    *   `tauri.conf.json` を開き、`bundle.externalBin` を、バンドル内に配置する**統一されたバイナリ名** (`cloudflared`) を指すように変更します。（Windows の `.exe` は Tauri が自動で解決する場合が多いですが、明示的に `build.rs` でリネーム/コピーするか、`.cargo/config.toml` でターゲット毎に設定する方が確実です。最もシンプルなのは `binaries/cloudflared` を指定することです。)
+    *   `tauri.conf.json` を開き、`bundle.externalBin` に**バイナリのベース名** (`"cloudflared"`) を指定します。Tauri はビルド時にこのベース名とターゲット情報から、対応するバイナリファイル (`binaries/cloudflared-{target}`) を自動的に探し、バンドルに含めます。
         ```jsonc
         // tauri.conf.json (修正例)
         "bundle": {
           // "identifier": "...",
-          "externalBin": ["binaries/cloudflared"] // 実行ファイル名を指定
+          "externalBin": ["cloudflared"] // ベース名を指定
         },
         "plugins": { "shell": {}, "http": {} } // 変更なし
         ```
@@ -231,8 +231,8 @@ graph TD
 
 *   **実施内容:**
     *   `tunnel.rs` の `start_tunnel` 関数を `cloudflared` を起動するように全面的に書き換えます。
-    *   プラットフォームに応じて適切な `cloudflared` バイナリパスを選択するヘルパー関数 `select_cloudflared_binary()` は、**バンドル内の統一された相対パス** (`binaries/cloudflared` または `binaries/cloudflared.exe`) を返すように簡略化します。`std::env::consts::OS` で分岐し、Windows のみ `.exe` を付与します。
-    *   `app.shell().sidecar()` には**バンドル相対パス** (`binaries/cloudflared`) を渡して `cloudflared` を起動します。引数には `tunnel`, `--url`, `http://127.0.0.1:{ws_port}`, `--no-autoupdate` を含めます。環境変数 `CLOUDFLARED_EXTRA_ARGS` の内容も追加します。
+    *   プラットフォーム固有のバイナリ選択ロジック (`select_cloudflared_binary` 関数のようなもの) は**不要**です。
+    *   `app.shell().sidecar()` には**バイナリのベース名** (`"cloudflared"`) を渡して `cloudflared` を起動します。Tauri は実行時に現在のプラットフォームに適したバイナリ (`binaries/cloudflared-{target}`) を自動的に解決し、実行します (Windows では `.exe` も自動で考慮されます)。引数には `tunnel`, `--url`, `http://127.0.0.1:{ws_port}`, `--no-autoupdate` を含めます。環境変数 `CLOUDFLARED_EXTRA_ARGS` の内容も追加します。
     *   `cloudflared` の**標準出力 (stdout) および標準エラー出力 (stderr) の両方**を非同期に監視し、`https?://[a-z0-9-]+.trycloudflare.com` の形式の URL を正規表現 (`regex`, `once_cell`) で抽出します (URL は stderr にも出力される場合があるため)。
     *   URL が見つかったら、`child` プロセスハンドルと共に `TunnelInfo` を生成して `Ok` で返します。
     *   一定時間内に URL が見つからなければタイムアウトエラー (`TunnelError::Timeout` または `TunnelError::UrlNotFound`) を返します。
@@ -252,22 +252,8 @@ graph TD
         const STARTUP_TIMEOUT: Duration = Duration::from_secs(15); // タイムアウト設定
 
         // バイナリ選択ロジック (例)
-        // バイナリ選択ロジック (レビュー反映版：バンドル内の統一された名前を使用)
-        fn select_cloudflared_binary() -> Result<String, TunnelError> {
-           let binary_path = if cfg!(windows) {
-               "binaries/cloudflared.exe"
-           } else {
-               "binaries/cloudflared"
-           };
-           // TODO: (堅牢性向上) ここで `std::path::Path::exists()` を使ってバイナリの存在確認を行い、
-           // 見つからない場合は TunnelError::BinarySelectionFailed を返すようにする。
-           // 必要であれば `tauri::api::path::resolve_path` 等でパス解決を試みる。
-           Ok(binary_path.to_string())
-        }
-
-
         pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, TunnelError> {
-            let binary_path = select_cloudflared_binary()?; // まずバイナリパスを取得
+            // Tauri がターゲットバイナリを解決するため、OS判定やパス選択は不要
 
             let mut args = vec![
                 "tunnel".to_string(),
@@ -290,8 +276,8 @@ graph TD
             }
 
 
-            // .sidecar() にはバンドル相対パスを渡す
-            let (mut rx, child) = app.shell().sidecar(&binary_path)?.args(&args).spawn()?;
+            // .sidecar() にはベース名を渡す
+            let (mut rx, child) = app.shell().sidecar("cloudflared")?.args(&args).spawn()?;
 
             let child_arc = Arc::new(Mutex::new(Some(child))); // 先に Arc<Mutex> を作成
 
@@ -480,4 +466,4 @@ graph TD
 *   **再起動戦略:** トンネルプロセスが予期せず終了した場合に、自動で再起動 (例: 1回だけ、指数バックオフ付きで) するロジックを `server_manager` に追加すると、より安定性が向上します (オプション)。
 *   **ログレベル管理:** `CLOUDFLARED_LOG_LEVEL` 環境変数と Tauri アプリ自体のログレベル (`RUST_LOG` など) の管理方法を一元化 (例: `.env` ファイル利用) すると、利用者が設定しやすくなります (オプション)。
 *   **`config.yaml` 競合:** 前述の通り、グローバルな `config.yaml` が Quick Tunnel を妨げる可能性があるため、`--config ""` 引数の利用を検討します。
-*   **バイナリの選択と配布:** プラットフォーム毎の `cloudflared` バイナリを確実にバンドルし、実行時に正しいバイナリを選択するロジック (`select_cloudflared_binary`) が重要です。
+*   **バイナリの配布:** 各ターゲットプラットフォームに対応する `{externalBin}-{target}` 形式の `cloudflared` バイナリを `binaries/` ディレクトリに正確に配置し、`tauri.conf.json` の `externalBin` にベース名 `"cloudflared"` を指定することが重要です。実行時のバイナリ解決は Tauri が行います。
