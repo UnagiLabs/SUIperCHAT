@@ -100,12 +100,12 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
     }
 
     // Loopholeトンネルを停止
-    let loophole_info_result = {
-        let mut loophole_guard = app_state
-            .loophole_info
+    let tunnel_info_result = {
+        let mut tunnel_guard = app_state
+            .tunnel_info
             .lock()
-            .map_err(|_| "Failed to lock loophole info mutex".to_string())?;
-        loophole_guard.take()
+            .map_err(|_| "Failed to lock tunnel info mutex".to_string())?;
+        tunnel_guard.take()
     };
 
     // 現在のセッションIDを取得
@@ -170,14 +170,14 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
             clear_server_info(app_state);
 
             // Loopholeトンネルを停止
-            if let Some(Ok(tunnel_info)) = loophole_info_result {
+            if let Some(Ok(tunnel_info)) = tunnel_info_result {
                 println!("Stopping Loophole tunnel...");
                 let tunnel_info_clone = tunnel_info.clone(); // クローンする
                 runtime_handle.spawn(async move {
                     tunnel::stop_tunnel(&tunnel_info_clone).await;
                     println!("Loophole tunnel stopped successfully.");
                 });
-            } else if let Some(Err(e)) = loophole_info_result {
+            } else if let Some(Err(e)) = tunnel_info_result {
                 println!("No active Loophole tunnel to stop (previous error: {})", e);
             } else {
                 println!("No active Loophole tunnel to stop.");
@@ -314,8 +314,8 @@ fn send_current_server_status(
         .map_err(|_| "Failed to lock global_ip_fetch_failed mutex".to_string())?;
 
     // Loopholeトンネル情報を取得
-    let loophole_http_url = if let Ok(loophole_guard) = app_state.loophole_info.lock() {
-        if let Some(Ok(ref tunnel_info)) = *loophole_guard {
+    let tunnel_http_url = if let Ok(tunnel_guard) = app_state.tunnel_info.lock() {
+        if let Some(Ok(ref tunnel_info)) = *tunnel_guard {
             Some(tunnel_info.url.clone())
         } else {
             None
@@ -340,7 +340,7 @@ fn send_current_server_status(
             .unwrap_or(8082);
 
         // LoopholeのURLがあればそれを優先
-        if let Some(url) = &loophole_http_url {
+        if let Some(url) = &tunnel_http_url {
             url.replace("https://", "wss://") + "/ws"
         } else {
             format!("ws://{}:{}/ws", host, port)
@@ -375,7 +375,17 @@ fn send_current_server_status(
         obs_url,
         global_ip_fetch_failed,
         cgnat_detected,
-        loophole_http_url,
+        cloudflare_http_url: tunnel_http_url.clone(),
+        tunnel_status: tunnel_http_url.clone().map_or_else(
+            || {
+                if is_running {
+                    "Starting".to_string()
+                } else {
+                    "Stopped".to_string()
+                }
+            },
+            |_| "Running".to_string(),
+        ),
     };
 
     // イベント発行
@@ -579,12 +589,10 @@ async fn run_servers(
                 );
 
                 // トンネル情報をAppStateに保存
-                if let Ok(mut loophole_guard) = app_handle_for_tunnel
-                    .state::<AppState>()
-                    .loophole_info
-                    .lock()
+                if let Ok(mut tunnel_guard) =
+                    app_handle_for_tunnel.state::<AppState>().tunnel_info.lock()
                 {
-                    *loophole_guard = Some(Ok(tunnel_info));
+                    *tunnel_guard = Some(Ok(tunnel_info));
                 }
 
                 // サーバー状態変更イベントを発行
@@ -594,12 +602,10 @@ async fn run_servers(
                 eprintln!("Failed to start Loophole tunnel: {}", e);
 
                 // エラー情報をAppStateに保存
-                if let Ok(mut loophole_guard) = app_handle_for_tunnel
-                    .state::<AppState>()
-                    .loophole_info
-                    .lock()
+                if let Ok(mut tunnel_guard) =
+                    app_handle_for_tunnel.state::<AppState>().tunnel_info.lock()
                 {
-                    *loophole_guard = Some(Err(e));
+                    *tunnel_guard = Some(Err(e));
                 }
 
                 // サーバー状態変更イベントを発行
@@ -934,8 +940,8 @@ fn emit_server_status_with_tunnel(app_handle: &tauri::AppHandle) {
             let port = (*app_state.port.lock().unwrap()).unwrap_or(8082);
 
             // LoopholeのURLがあればそれを優先
-            if let Ok(loophole_guard) = app_state.loophole_info.lock() {
-                if let Some(Ok(ref tunnel_info)) = *loophole_guard {
+            if let Ok(tunnel_guard) = app_state.tunnel_info.lock() {
+                if let Some(Ok(ref tunnel_info)) = *tunnel_guard {
                     // HTTPSからWSSへ変換
                     Some(tunnel_info.url.replace("https://", "wss://") + "/ws")
                 } else {
@@ -967,10 +973,10 @@ fn emit_server_status_with_tunnel(app_handle: &tauri::AppHandle) {
     };
 
     // Loophole HTTP URL
-    let loophole_http_url = {
+    let tunnel_http_url = {
         if is_running {
-            if let Ok(loophole_guard) = app_state.loophole_info.lock() {
-                if let Some(Ok(ref tunnel_info)) = *loophole_guard {
+            if let Ok(tunnel_guard) = app_state.tunnel_info.lock() {
+                if let Some(Ok(ref tunnel_info)) = *tunnel_guard {
                     Some(tunnel_info.url.clone())
                 } else {
                     None
@@ -994,7 +1000,17 @@ fn emit_server_status_with_tunnel(app_handle: &tauri::AppHandle) {
         obs_url,
         global_ip_fetch_failed,
         cgnat_detected,
-        loophole_http_url,
+        cloudflare_http_url: tunnel_http_url.clone(),
+        tunnel_status: tunnel_http_url.map_or_else(
+            || {
+                if is_running {
+                    "Starting".to_string()
+                } else {
+                    "Stopped".to_string()
+                }
+            },
+            |_| "Running".to_string(),
+        ),
     };
 
     // イベント発行

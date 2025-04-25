@@ -51,10 +51,10 @@ pub struct AppState {
     /// CGNATが検出された場合は `true`、検出されなかった場合は `false`
     /// このフラグが `true` の場合、WebSocketサーバーへの外部からの接続が制限される可能性があります
     pub cgnat_detected: Arc<Mutex<bool>>,
-    /// Loopholeトンネル情報
+    /// Cloudflaredトンネル情報
     ///
     /// トンネルが起動している場合は `Some(Ok(info))`、失敗した場合は `Some(Err(error))`、未起動の場合は `None`
-    pub loophole_info: Arc<Mutex<Option<Result<TunnelInfo, TunnelError>>>>,
+    pub tunnel_info: Arc<Mutex<Option<Result<TunnelInfo, TunnelError>>>>,
 }
 
 impl AppState {
@@ -75,7 +75,7 @@ impl AppState {
             external_ip: Arc::new(Mutex::new(None)),
             global_ip_fetch_failed: Arc::new(Mutex::new(false)),
             cgnat_detected: Arc::new(Mutex::new(false)),
-            loophole_info: Arc::new(Mutex::new(None)),
+            tunnel_info: Arc::new(Mutex::new(None)),
         }
     }
 }

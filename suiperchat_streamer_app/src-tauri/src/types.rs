@@ -332,7 +332,7 @@ mod tests {
 pub struct ServerStatus {
     /// サーバーが実行中かどうか
     pub is_running: bool,
-    /// WebSocket用URL (例: "ws://127.0.0.1:8082/ws" または "wss://xxxx.loophole.cloud/ws")
+    /// WebSocket用URL (例: "ws://127.0.0.1:8082/ws" または "wss://*.trycloudflare.com/ws")
     pub ws_url: String,
     /// OBS用URL (例: "http://127.0.0.1:8081")
     pub obs_url: String,
@@ -342,7 +342,9 @@ pub struct ServerStatus {
     /// CGNATが検出されたかどうかのフラグ
     #[serde(default)]
     pub cgnat_detected: bool,
-    /// Loophole HTTPS URL (例: "https://xxxx.loophole.cloud")
+    /// Cloudflare HTTPS URL (例: "https://*.trycloudflare.com")
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub loophole_http_url: Option<String>,
+    pub cloudflare_http_url: Option<String>,
+    /// トンネルの状態 ("Starting", "Running", "Error: <message>", "Stopped" など)
+    pub tunnel_status: String,
 }
