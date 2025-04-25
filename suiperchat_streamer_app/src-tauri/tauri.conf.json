@@ -33,7 +33,7 @@
 			"icons/icon.icns",
 			"icons/icon.ico"
 		],
-		"externalBin": ["binaries/loophole"]
+		"externalBin": ["binaries/cloudflared"]
 	},
 	"plugins": {
 		"shell": null,

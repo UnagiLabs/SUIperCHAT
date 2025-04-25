@@ -5,7 +5,7 @@
     {
       "identifier": "shell:allow-spawn",
       "allow": [
-        { "name": "loophole", "sidecar": true }
+        { "name": "cloudflared", "sidecar": true }
       ]
     }
   ]
