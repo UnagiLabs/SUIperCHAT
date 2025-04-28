@@ -325,17 +325,26 @@ mod tests {
 // Tauri イベント関連の型定義
 //=============================================================================
 
-/// ## サーバー状態通知イベントのペイロード
+/// ## サーバーステータス構造体
 ///
-/// `server_status_updated` イベントでフロントエンドに送信されるデータ構造です。
+/// サーバーの実行状態と接続情報を格納します。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerStatus {
     /// サーバーが実行中かどうか
     pub is_running: bool,
-    /// OBS用URL (例: "http://127.0.0.1:8081/obs/")
+    /// WebSocket用URL (例: "ws://127.0.0.1:8082/ws" または "wss://*.trycloudflare.com/ws")
+    pub ws_url: String,
+    /// OBS用URL (例: "http://127.0.0.1:8081")
+    pub obs_url: String,
+    /// 外部IP取得に失敗したかどうかのフラグ
+    #[serde(default)]
+    pub global_ip_fetch_failed: bool,
+    /// CGNATが検出されたかどうかのフラグ
+    #[serde(default)]
+    pub cgnat_detected: bool,
+    /// Cloudflare HTTPS URL (例: "https://*.trycloudflare.com")
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub obs_url: Option<String>,
-    /// WebSocket用URL (例: "ws://127.0.0.1:8080/ws")
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ws_url: Option<String>,
+    pub cloudflare_http_url: Option<String>,
+    /// トンネルの状態 ("Starting", "Running", "Error: <message>", "Stopped" など)
+    pub tunnel_status: String,
 }
