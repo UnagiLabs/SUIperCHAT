@@ -1,6 +1,5 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::mem;
 use std::sync::{Arc, Mutex};
 use tauri::AppHandle;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
@@ -235,31 +234,26 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
 /**
  * トンネルを停止する
  *
- * 注意: この実装は次のステップ6.6で完全に書き換えられます。
- * 現在はLoophole用の実装ですが、cloudflared用に更新されます。
+ * 作成されたCloudflare Quick Tunnelを停止します。
+ * TunnelInfo内のプロセスハンドルを使用してcloudflaredプロセスを終了させます。
  *
- * @param {&TunnelInfo} tunnel_info - 停止するトンネルの情報
+ * # Arguments
+ * * `tunnel_info` - 停止するトンネルの情報
  */
 pub async fn stop_tunnel(tunnel_info: &TunnelInfo) {
-    info!("Stopping Loophole tunnel: {}", tunnel_info.url);
+    // Mutexからプロセスのオプションを取り出す
+    let maybe_child = tunnel_info.process.lock().unwrap().take();
 
-    // Mutex から Option<CommandChild> をムーブアウト
-    let child_opt: Option<CommandChild> = {
-        let mut guard = match tunnel_info.process.lock() {
-            Ok(g) => g,
-            Err(e) => {
-                error!("Failed to lock tunnel process: {}", e);
-                return;
-            }
-        };
-        mem::take(&mut *guard) // guard を空の Some→None に置き換えつつ中身を move
-    };
-
-    match child_opt {
-        Some(child) => match child.kill() {
-            Ok(_) => info!("Loophole process terminated successfully"),
-            Err(e) => error!("Failed to kill Loophole process: {}", e),
-        },
-        None => warn!("Loophole process already stopped or was never started."),
+    if let Some(child) = maybe_child {
+        info!(
+            "Stopping cloudflared tunnel process for URL: {}",
+            tunnel_info.url
+        );
+        match child.kill() {
+            Ok(_) => info!("Cloudflared tunnel process stopped successfully."),
+            Err(e) => error!("Failed to stop cloudflared tunnel process: {}", e),
+        }
+    } else {
+        info!("Tunnel process already taken or stopped.");
     }
 }
