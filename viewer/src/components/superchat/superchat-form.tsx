@@ -187,6 +187,44 @@ export function SuperchatForm({
 			return;
 		}
 
+		// チップ金額が0の場合、WebSocketでチャットメッセージとして直接送信
+		if (values.amount === 0) {
+			console.log("Sending as normal chat message (no tip)");
+
+			try {
+				// チャットメッセージとして送信
+				actions.sendChatMessage(values.display_name, values.message || "");
+
+				toast.success("Message sent successfully!");
+
+				// コールバック関数があれば実行
+				on_send_success?.(
+					values.amount,
+					values.display_name,
+					values.message || "",
+				);
+
+				// フォームをリセット
+				form.reset({
+					...default_values,
+					recipient_address: values.recipient_address,
+				});
+
+				// 確認モードをリセット
+				set_confirm_mode(false);
+
+				return;
+			} catch (error) {
+				console.error("Failed to send chat message:", error);
+				toast.error("Failed to send message", {
+					description: error instanceof Error ? error.message : String(error),
+				});
+				// 確認モードをリセット
+				set_confirm_mode(false);
+				return;
+			}
+		}
+
 		// === ステップ3: PTB構築 ===
 		try {
 			// 1. 金額をMISTに変換
@@ -248,75 +286,70 @@ export function SuperchatForm({
 						console.log("Transaction successful:", result);
 						const digest = result.digest;
 
-						toast.success("Super Chat sent successfully!", {
-							description: `${values.amount} SUI sent. Digest: ${digest.substring(0, 8)}...`,
-							// Explorerリンクは不要なため削除
-						});
-
-						// WebSocketでスーパーチャット情報を送信
-						const superchat_data = {
-							amount: values.amount,
-							tx_hash: digest,
-							wallet_address: currentAccount.address,
-						};
+						// WebSocketを使ってスーパーチャットメッセージを送信
 						actions.sendSuperchatMessage(
 							values.display_name,
 							values.message || "",
-							superchat_data,
+							{
+								amount: values.amount,
+								tx_hash: digest,
+								wallet_address: currentAccount.address,
+							},
 						);
 
-						if (on_send_success) {
-							on_send_success(
-								values.amount,
-								values.display_name,
-								values.message || "",
-								digest,
-							);
-						}
+						toast.success("Super Chat sent successfully!", {
+							description: `Transaction digest: ${digest.substring(0, 8)}...`,
+						});
 
+						// コールバック関数があれば実行
+						on_send_success?.(
+							values.amount,
+							values.display_name,
+							values.message || "",
+							digest,
+						);
+
+						// フォームをリセット
 						form.reset({
 							...default_values,
-							recipient_address: initial_recipient_address,
+							recipient_address: values.recipient_address,
 						});
+
+						// 確認モードをリセット
 						set_confirm_mode(false);
 					},
-					onError: (error: WalletError) => {
+					onError: (error) => {
 						console.error("Transaction failed:", error);
-						let description = "An unknown error occurred.";
+						const wallet_error = error as WalletError;
 
-						// エラーオブジェクトのプロパティを安全にチェック
-						if (error.code === -32000 || error.message.includes("Rejected")) {
-							description = "Transaction rejected in wallet.";
-						} else if (error.name === "WalletNotConnectedError") {
-							description = "Wallet not connected. Please reconnect.";
-						} else if (error.message.includes("InsufficientGas")) {
-							// ガス不足 (エラーメッセージはRPCにより異なる可能性)
-							description = "Insufficient gas budget or SUI balance for gas.";
-						} else if (error.message.includes("Failure")) {
-							// Move実行エラーなど
-							description = "Transaction failed on the network.";
-							// TODO: エラーの詳細をパースして表示 (result.effects?.status?.error)
-						} else {
-							description = error.message || "Transaction failed.";
+						let error_message = "Unknown error occurred.";
+						if (wallet_error.code === 4001) {
+							// MetaMaskのユーザーキャンセルエラーコード
+							error_message = "Transaction was rejected by the user.";
+						} else if (wallet_error.message) {
+							error_message = wallet_error.message;
 						}
 
-						toast.error("Failed to send Super Chat", { description });
-						set_confirm_mode(false); // エラー時も確認モード解除
+						toast.error("Super Chat failed", {
+							description: error_message,
+						});
+
+						// 確認モードをリセット
+						set_confirm_mode(false);
 					},
 				},
 			);
 		} catch (error) {
-			console.error("Error during PTB construction or coin fetching:", error);
-			toast.error("Failed to prepare transaction", {
+			console.error("Payment preparation failed:", error);
+			toast.error("Payment preparation failed", {
 				description: error instanceof Error ? error.message : String(error),
 			});
+			// 確認モードをリセット
 			set_confirm_mode(false);
 		}
 	}
 
-	/**
-	 * キャンセルハンドラー
-	 */
+	// 確認モードキャンセル処理
 	function handle_cancel() {
 		set_confirm_mode(false);
 	}
