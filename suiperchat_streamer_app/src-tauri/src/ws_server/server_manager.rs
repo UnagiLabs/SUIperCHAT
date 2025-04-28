@@ -169,18 +169,21 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
             // ホストとポートをクリア
             clear_server_info(app_state);
 
-            // Loopholeトンネルを停止
+            // Cloudflaredトンネルを停止
             if let Some(Ok(tunnel_info)) = tunnel_info_result {
-                println!("Stopping Loophole tunnel...");
+                println!("Stopping Cloudflared tunnel...");
                 let tunnel_info_clone = tunnel_info.clone(); // クローンする
                 runtime_handle.spawn(async move {
                     tunnel::stop_tunnel(&tunnel_info_clone).await;
-                    println!("Loophole tunnel stopped successfully.");
+                    println!("Cloudflared tunnel stopped successfully.");
                 });
             } else if let Some(Err(e)) = tunnel_info_result {
-                println!("No active Loophole tunnel to stop (previous error: {})", e);
+                println!(
+                    "No active Cloudflared tunnel to stop (previous error: {})",
+                    e
+                );
             } else {
-                println!("No active Loophole tunnel to stop.");
+                println!("No active Cloudflared tunnel to stop.");
             }
 
             // セッション終了処理
@@ -339,7 +342,7 @@ fn send_current_server_status(
             .map_err(|_| "Failed to lock port mutex".to_string())?
             .unwrap_or(8082);
 
-        // LoopholeのURLがあればそれを優先
+        // CloudflaredのURLがあればそれを優先
         if let Some(url) = &tunnel_http_url {
             url.replace("https://", "wss://") + "/ws"
         } else {
@@ -575,8 +578,11 @@ async fn run_servers(
         });
     });
 
-    // Loopholeトンネルを必ず起動（WebSocketサーバー起動前）
-    println!("Starting Loophole tunnel for WebSocket port {}...", ws_port);
+    // Cloudflaredトンネルを必ず起動（WebSocketサーバー起動前）
+    println!(
+        "Starting Cloudflared tunnel for WebSocket port {}...",
+        ws_port
+    );
     let app_handle_for_tunnel = app_handle.clone();
 
     // トンネル起動処理を非同期で実行
@@ -584,7 +590,7 @@ async fn run_servers(
         match tunnel::start_tunnel(&app_handle_for_tunnel, ws_port).await {
             Ok(tunnel_info) => {
                 println!(
-                    "Loophole tunnel started successfully at: {}",
+                    "Cloudflared tunnel started successfully at: {}",
                     tunnel_info.url
                 );
 
@@ -599,7 +605,7 @@ async fn run_servers(
                 emit_server_status_with_tunnel(&app_handle_for_tunnel);
             }
             Err(e) => {
-                eprintln!("Failed to start Loophole tunnel: {}", e);
+                eprintln!("Failed to start Cloudflared tunnel: {}", e);
 
                 // エラー情報をAppStateに保存
                 if let Ok(mut tunnel_guard) =
@@ -939,7 +945,7 @@ fn emit_server_status_with_tunnel(app_handle: &tauri::AppHandle) {
                 .unwrap_or_else(|| "127.0.0.1".to_string());
             let port = (*app_state.port.lock().unwrap()).unwrap_or(8082);
 
-            // LoopholeのURLがあればそれを優先
+            // CloudflaredのURLがあればそれを優先
             if let Ok(tunnel_guard) = app_state.tunnel_info.lock() {
                 if let Some(Ok(ref tunnel_info)) = *tunnel_guard {
                     // HTTPSからWSSへ変換
