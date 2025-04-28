@@ -316,7 +316,7 @@ fn send_current_server_status(
         .lock()
         .map_err(|_| "Failed to lock global_ip_fetch_failed mutex".to_string())?;
 
-    // Loopholeトンネル情報を取得
+    // Cloudflaredトンネル情報を取得
     let tunnel_http_url = if let Ok(tunnel_guard) = app_state.tunnel_info.lock() {
         if let Some(Ok(ref tunnel_info)) = *tunnel_guard {
             Some(tunnel_info.url.clone())
@@ -978,7 +978,7 @@ fn emit_server_status_with_tunnel(app_handle: &tauri::AppHandle) {
         }
     };
 
-    // Loophole HTTP URL
+    // Cloudflared HTTP URL
     let tunnel_http_url = {
         if is_running {
             if let Ok(tunnel_guard) = app_state.tunnel_info.lock() {
