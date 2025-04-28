@@ -6,7 +6,6 @@ use tauri::AppHandle;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use thiserror::Error;
-use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 use tracing::{error, info, warn};
 
@@ -79,100 +78,158 @@ impl TunnelInfo {
     }
 }
 
-/**
- * トンネルを起動し、WebSocketサーバーをインターネットに公開する
- *
- * 注意: この実装は次のステップ6.5で完全に書き換えられます。
- * 現在はLoophole用の実装ですが、cloudflared用に更新されます。
- *
- * @param {&AppHandle} app - Tauriアプリハンドル
- * @param {u16} ws_port - WebSocketサーバーのポート番号
- * @returns {Result<TunnelInfo, TunnelError>} 成功時はTunnelInfo、失敗時はエラー
- */
+/// トンネルを起動し、WebSocketサーバーをインターネットに公開する
+///
+/// Cloudflare Quick Tunnelを使用して、ローカルで実行されているWebSocketサーバーを
+/// インターネットに安全に公開します。cloudflaredプロセスをサイドカーとして実行し、
+/// 生成された一時的なURL（https://*.trycloudflare.com）を取得します。
+///
+/// # Arguments
+/// * `app` - Tauriアプリハンドル
+/// * `ws_port` - WebSocketサーバーのポート番号
+///
+/// # Returns
+/// * `Result<TunnelInfo, TunnelError>` - 成功時はTunnelInfo、失敗時はエラー
 pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, TunnelError> {
-    info!("Starting Loophole tunnel for WebSocket port {}", ws_port);
+    info!("Starting Cloudflare Tunnel for WebSocket port {}", ws_port);
 
-    // 注意: このコードは次のステップでcloudflared用に置き換えられます
-    info!("Attempting to start Loophole sidecar with name: loophole");
+    // cloudflaredコマンドの引数を構築
+    let mut args = vec![
+        "tunnel".to_string(),
+        "--url".to_string(),
+        format!("http://127.0.0.1:{}", ws_port),
+        "--no-autoupdate".to_string(),
+    ];
 
-    // sidecar() メソッドを使用してLoophole CLIプロセスを起動
-    let command = app
+    // 環境変数から追加引数を取得して追加
+    if let Ok(extra_args_str) = std::env::var("CLOUDFLARED_EXTRA_ARGS") {
+        if !extra_args_str.is_empty() {
+            args.extend(extra_args_str.split_whitespace().map(String::from));
+        }
+    }
+
+    // 環境変数からログレベルを取得して追加（存在する場合）
+    if let Ok(log_level) = std::env::var("CLOUDFLARED_LOG_LEVEL") {
+        if !log_level.is_empty() {
+            args.push("--loglevel".to_string());
+            args.push(log_level);
+        }
+    }
+
+    info!(
+        "Attempting to start cloudflared with args: {:?}",
+        args.join(" ")
+    );
+
+    // Tauriのsidecar機能を使用してcloudflaredプロセスを起動
+    // sidecar()にはベース名のみを渡す（Tauriがプラットフォームに応じたバイナリを選択）
+    let (mut rx, child) = app
         .shell()
-        .sidecar("loophole") // バイナリ名を指定
-        .map_err(TunnelError::SpawnFailed)?;
+        .sidecar("cloudflared")
+        .map_err(TunnelError::SpawnFailed)?
+        .args(&args)
+        .spawn()?;
 
-    let (mut rx, child) = command
-        .args(["http", &ws_port.to_string()])
-        .spawn()
-        .map_err(TunnelError::SpawnFailed)?;
+    // プロセスのためのArc<Mutex<Option<CommandChild>>>を作成
+    let child_arc = Arc::new(Mutex::new(Some(child)));
 
-    info!("Loophole process spawned, waiting for URL...");
-
-    // URLを受け取るためのチャネルを作成
-    let (url_tx, mut url_rx) = mpsc::channel::<String>(1);
-
-    // 非同期タスクでLoopholeプロセスの標準出力を監視
-    let _monitor_task = tokio::spawn(async move {
+    // URL抽出ロジック（タイムアウト付き）
+    let url_extraction = async {
         while let Some(event) = rx.recv().await {
             match event {
                 CommandEvent::Stdout(line) => {
                     let line_str = String::from_utf8_lossy(&line);
-                    info!("Loophole stdout: {}", line_str);
+                    info!("cloudflared stdout: {}", line_str);
 
-                    if let Some(captures) = URL_REGEX.find(&line_str) {
-                        let url = captures.as_str().to_string();
-                        info!("Found Loophole URL: {}", url);
-
-                        if url_tx.send(url).await.is_err() {
-                            error!("Failed to send URL through channel");
-                            break;
-                        }
+                    // 標準出力からTunnelのURLを検索
+                    if let Some(mat) = URL_REGEX.find(&line_str) {
+                        let url = mat.as_str().to_string();
+                        info!("Cloudflare Tunnel URL found: {}", url);
+                        return Ok(url); // URLが見つかったら返す
                     }
                 }
                 CommandEvent::Stderr(line) => {
                     let line_str = String::from_utf8_lossy(&line);
-                    warn!("Loophole stderr: {}", line_str);
+                    warn!("cloudflared stderr: {}", line_str);
+
+                    // 標準エラー出力からもURLを検索（エラーメッセージにURLが含まれる場合がある）
+                    if let Some(mat) = URL_REGEX.find(&line_str) {
+                        let url = mat.as_str().to_string();
+                        info!("Cloudflare Tunnel URL found in stderr: {}", url);
+                        return Ok(url);
+                    }
                 }
                 CommandEvent::Error(err) => {
-                    error!("Loophole process error: {}", err);
-                    break;
+                    error!("cloudflared process error: {}", err);
+                    return Err(TunnelError::StdioError);
                 }
                 CommandEvent::Terminated(status) => {
                     if let Some(code) = status.code {
-                        warn!("Loophole process terminated with code: {}", code);
+                        warn!(
+                            "cloudflared process terminated unexpectedly with code: {}",
+                            code
+                        );
                     } else {
-                        warn!("Loophole process terminated without exit code");
+                        warn!("cloudflared process terminated unexpectedly without exit code");
                     }
-                    break;
+                    return Err(TunnelError::UrlNotFound);
                 }
-                _ => {}
+                _ => {} // 他のイベント（Runningなど）は無視
             }
         }
-    });
 
-    // タイムアウト付きでURLを待機
-    let url = match timeout(
+        // ループを抜けた場合はURLが見つからなかった
+        Err(TunnelError::UrlNotFound)
+    };
+
+    // タイムアウト付きでURL抽出処理を実行
+    match timeout(
         Duration::from_secs(TUNNEL_START_TIMEOUT_SECS),
-        url_rx.recv(),
+        url_extraction,
     )
     .await
     {
-        Ok(Some(url)) => url,
-        Ok(None) => {
-            error!("URL channel closed without receiving URL");
-            return Err(TunnelError::UrlNotFound);
+        Ok(Ok(url)) => {
+            // 成功: URLとプロセスハンドルを含むTunnelInfoを返す
+            info!("Cloudflare tunnel established with URL: {}", url);
+            Ok(TunnelInfo {
+                process: child_arc,
+                url,
+            })
+        }
+        Ok(Err(e)) => {
+            // URL抽出中のエラー: プロセスは起動しているので終了処理
+            error!("Error while extracting URL: {}", e);
+            let mut child_guard = child_arc.lock().unwrap();
+            if let Some(child_to_kill) = child_guard.take() {
+                if let Err(kill_err) = child_to_kill.kill() {
+                    error!(
+                        "Failed to kill cloudflared process after URL extraction error: {}",
+                        kill_err
+                    );
+                } else {
+                    info!("Killed cloudflared process after URL extraction error");
+                }
+            }
+            Err(e)
         }
         Err(_) => {
-            error!("Timeout waiting for Loophole URL");
-            return Err(TunnelError::Timeout);
+            // タイムアウト: プロセスは起動しているので終了処理
+            error!(
+                "Timed out waiting for cloudflared URL (timeout: {}s)",
+                TUNNEL_START_TIMEOUT_SECS
+            );
+            let mut child_guard = child_arc.lock().unwrap();
+            if let Some(child_to_kill) = child_guard.take() {
+                if let Err(kill_err) = child_to_kill.kill() {
+                    error!("Failed to kill timed out cloudflared process: {}", kill_err);
+                } else {
+                    info!("Killed cloudflared process due to timeout");
+                }
+            }
+            Err(TunnelError::Timeout)
         }
-    };
-
-    // 監視タスクは実行を続行（バックグラウンドでURLや終了などのイベントを監視）
-
-    // 成功: TunnelInfo を返す
-    info!("Loophole tunnel established with URL: {}", url);
-    Ok(TunnelInfo::new(child, url))
+    }
 }
 
 /**
