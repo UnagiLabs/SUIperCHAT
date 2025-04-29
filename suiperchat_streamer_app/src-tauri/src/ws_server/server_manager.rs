@@ -6,7 +6,9 @@ use crate::database;
 use crate::state::AppState;
 use crate::types::ServerStatus;
 use crate::ws_server::connection_manager::global::set_app_handle;
-use crate::ws_server::routes::{status_page, websocket_route};
+use crate::ws_server::routes::{
+    obs_index_page, obs_script, obs_styles, status_page, websocket_route,
+};
 use crate::ws_server::server_utils::{format_socket_addr, resolve_static_file_path};
 use crate::ws_server::tunnel;
 use actix_files as fs;
@@ -654,6 +656,10 @@ async fn run_servers(
         App::new()
             // ステータスページ
             .service(status_page)
+            // 追加したOBS用ルートハンドラーを登録
+            .service(obs_index_page)
+            .service(obs_styles)
+            .service(obs_script)
             // OBS用静的ファイル配信
             .service(
                 fs::Files::new("/obs", obs_path_clone.clone())

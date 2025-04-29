@@ -122,7 +122,12 @@ export default function UrlDisplay() {
 				if (is_running) {
 					toast.info("Server has started. Refreshing URL information.");
 					// バックエンドから直接URLを設定
-					if (obs_url) setObsUrl(obs_url);
+					if (obs_url) {
+						const correctedObsUrl = obs_url.endsWith("/obs")
+							? obs_url
+							: `${obs_url}/obs`;
+						setObsUrl(correctedObsUrl);
+					}
 					if (ws_url) setWsUrl(ws_url);
 				} else {
 					toast.info("Server has stopped. Clearing URL information.");

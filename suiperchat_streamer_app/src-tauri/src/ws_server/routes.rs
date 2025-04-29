@@ -40,3 +40,42 @@ pub async fn status_page() -> HttpResponse {
         .content_type("text/html; charset=utf-8")
         .body(include_str!("../../src/static/obs/status.html"))
 }
+
+/// ## OBSインデックスページハンドラー
+///
+/// OBS用のメインHTMLページを提供するハンドラー
+///
+/// ### Returns
+/// - `HttpResponse`: HTML形式のインデックスページ
+#[get("/obs")]
+pub async fn obs_index_page() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(include_str!("../../src/static/obs/index.html"))
+}
+
+/// ## OBSスタイルシートハンドラー
+///
+/// OBS用のCSSファイルを提供するハンドラー
+///
+/// ### Returns
+/// - `HttpResponse`: CSS形式のスタイルシート
+#[get("/obs/styles.css")]
+pub async fn obs_styles() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type("text/css; charset=utf-8")
+        .body(include_str!("../../src/static/obs/styles.css"))
+}
+
+/// ## OBSスクリプトハンドラー
+///
+/// OBS用のJavaScriptファイルを提供するハンドラー
+///
+/// ### Returns
+/// - `HttpResponse`: JavaScript形式のスクリプト
+#[get("/obs/script.js")]
+pub async fn obs_script() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type("application/javascript; charset=utf-8")
+        .body(include_str!("../../src/static/obs/script.js"))
+}

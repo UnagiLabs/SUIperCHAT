@@ -39,8 +39,12 @@ interface ServerStatusPayload {
 export default function ServerControl() {
 	const [is_loading, set_is_loading] = useState(false);
 	const [is_server_running, set_is_server_running] = useState(false);
-	const [ws_server_address, set_ws_server_address] = useState<string | null>(null);
-	const [obs_server_address, set_obs_server_address] = useState<string | null>(null);
+	const [ws_server_address, set_ws_server_address] = useState<string | null>(
+		null,
+	);
+	const [obs_server_address, set_obs_server_address] = useState<string | null>(
+		null,
+	);
 	// TODO: アプリ起動時にサーバーの実際の状態を確認するコマンドを実装・呼び出す
 	// useEffect(() => {
 	//   const check_initial_status = async () => {
@@ -67,7 +71,10 @@ export default function ServerControl() {
 		} catch (error) {
 			const error_message =
 				error instanceof Error ? error.message : String(error);
-			console.error("サーバーの起動コマンド呼び出しに失敗しました:", error_message);
+			console.error(
+				"サーバーの起動コマンド呼び出しに失敗しました:",
+				error_message,
+			);
 			// 状態はイベント経由で更新されるはずだが、念のためローディング解除
 			// toast通知もイベントリスナー側（またはエラーケースのイベント）で行う
 			toast.error("Server Start Command Error", {
@@ -92,7 +99,10 @@ export default function ServerControl() {
 		} catch (error) {
 			const error_message =
 				error instanceof Error ? error.message : String(error);
-			console.error("サーバーの停止コマンド呼び出しに失敗しました:", error_message);
+			console.error(
+				"サーバーの停止コマンド呼び出しに失敗しました:",
+				error_message,
+			);
 			// 状態はイベント経由で更新されるはずだが、念のためローディング解除
 			// toast通知もイベントリスナー側で行う
 			toast.error("Server Stop Command Error", {
@@ -106,26 +116,29 @@ export default function ServerControl() {
 	/**
 	 * バックエンドからのサーバーステータス更新イベントを処理する関数
 	 */
-	const handle_server_status_event = useCallback((event: {
-		payload: ServerStatusPayload;
-	}) => {
-		console.log("Received server_status_updated event:", event.payload);
-		const { is_running, obs_url, ws_url } = event.payload;
+	const handle_server_status_event = useCallback(
+		(event: {
+			payload: ServerStatusPayload;
+		}) => {
+			console.log("Received server_status_updated event:", event.payload);
+			const { is_running, obs_url, ws_url } = event.payload;
 
-		set_is_server_running(is_running);
-		set_obs_server_address(obs_url ?? null); // nullish coalescing で null にする
-		set_ws_server_address(ws_url ?? null); // nullish coalescing で null にする
+			set_is_server_running(is_running);
+			set_obs_server_address(obs_url ?? null); // nullish coalescing で null にする
+			set_ws_server_address(ws_url ?? null); // nullish coalescing で null にする
 
-		if (is_running) {
-			toast.success("Server Status: Running", {
-				description: `OBS: ${obs_url || "N/A"}, WS: ${ws_url || "N/A"}`,
-			});
-		} else {
-			toast.info("Server Status: Stopped", {
-				description: "WebSocket and OBS servers have stopped.",
-			});
-		}
-	}, []);
+			if (is_running) {
+				toast.success("Server Status: Running", {
+					description: `OBS: ${obs_url || "N/A"}, WS: ${ws_url || "N/A"}`,
+				});
+			} else {
+				toast.info("Server Status: Stopped", {
+					description: "WebSocket and OBS servers have stopped.",
+				});
+			}
+		},
+		[],
+	);
 
 	/**
 	 * コンポーネントマウント時にイベントリスナーを登録

@@ -18,7 +18,7 @@ pub use client_info::ClientInfo;
 pub use connection_manager::global::{
     disconnect_client, get_connections_info, get_manager, set_app_handle, set_max_connections,
 };
-pub use routes::{status_page, websocket_route};
+pub use routes::{obs_index_page, obs_script, obs_styles, status_page, websocket_route};
 pub use server_manager::{start_server, stop_server};
 pub use server_utils::{format_socket_addr, resolve_static_file_path};
 pub use session::create_ws_session;
