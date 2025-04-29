@@ -84,7 +84,7 @@ function setupWebSocketEventHandlers() {
             blinkConnectionIndicator();
             
             // メッセージの種類に応じた処理
-            if (data.message_type === 'superchat') {
+            if (data.type === 'superchat') {
                 // スーパーチャットメッセージを表示
                 displaySuperchatMessage(data);
             } else if (data.type === 'chat') {
@@ -195,7 +195,7 @@ function displaySuperchatMessage(data) {
             <span class="display-name">${escapeHtml(data.display_name)}</span>
             <span class="amount">${data.superchat.amount} SUI</span>
         </div>
-        <div class="message-content">${escapeHtml(data.content)}</div>
+        <div class="message-content">${escapeHtml(data.message)}</div>
     `;
     
     // 要素を追加
