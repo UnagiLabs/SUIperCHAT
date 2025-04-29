@@ -227,14 +227,14 @@ export function SuperchatForm({
 
 		// === ステップ3: PTB構築 ===
 		try {
-			// 1. 金額を MIST に変換
+			// 1. SUI → MIST 換算
 			const suiAmountMist = suiToMist(values.amount);
+			const GAS_BUDGET = BigInt(DEFAULT_GAS_BUDGET);
 
-			// 2. 支払いに使える SUI コインを「全ページ走査」で取得
+			// 2. すべての SUI コインを取得（ページング対応）
 			let nextCursor: string | null | undefined = null;
 			const allCoins: Awaited<ReturnType<typeof suiClient.getCoins>>["data"] =
 				[];
-
 			do {
 				const page = await suiClient.getCoins({
 					owner: currentAccount.address,
@@ -247,40 +247,68 @@ export function SuperchatForm({
 			} while (nextCursor);
 
 			// 2-1. 合計残高チェック
-			const totalBalance = allCoins.reduce(
-				(acc, c) => acc + BigInt(c.balance),
-				BigInt(0),
-			);
-			if (totalBalance < suiAmountMist) {
+			const totalBalance = allCoins.reduce((a, c) => a + BigInt(c.balance), BigInt(0));
+			if (totalBalance < suiAmountMist + GAS_BUDGET) {
 				toast.error("Insufficient SUI balance", {
-					description: `Total balance (${mistToSui(totalBalance)} SUI) is below ${values.amount} SUI.`,
+					description: `Need at least ${mistToSui(
+						suiAmountMist + GAS_BUDGET,
+					)} SUI including gas.`,
 				});
 				set_confirm_mode(false);
 				return;
 			}
 
-			// 2-2. 残高が最大のコインを primary に、残りは merge 対象
+			// 2-2. ガス用コインを選定（ガス予算をまかなえる最小のコイン）
 			allCoins.sort((a, b) => {
 				const balanceA = BigInt(a.balance);
 				const balanceB = BigInt(b.balance);
 				return balanceB > balanceA ? 1 : balanceB < balanceA ? -1 : 0;
 			});
-			const primary = allCoins[0];
-			const coinsToMerge = allCoins.slice(1);
+			const gasCoin =
+				allCoins.find((c) => BigInt(c.balance) >= GAS_BUDGET) || allCoins[0];
 
-			// 3. トランザクションブロック作成
+			// ガスコインを除いた残りを支払い用候補に
+			const coinsForPayment = allCoins.filter(
+				(c) => c.coinObjectId !== gasCoin.coinObjectId,
+			);
+
+			// primary＝支払い元コイン
+			const primary = coinsForPayment[0] ?? gasCoin; // 1 枚しか無ければ同一
+
+			// 3. Transaction Block 構築
 			const tx = new Transaction();
 
-			// 3-1. すべてのコインを primary にマージ
-			if (coinsToMerge.length > 0) {
+			// 3-1. ガスコイン固定（digest / version は getCoins のレスポンスに含まれる）
+			tx.setGasPayment([
+				{
+					objectId: gasCoin.coinObjectId,
+					digest: gasCoin.digest,
+					version: gasCoin.version,
+				},
+			]);
+			tx.setGasBudget(DEFAULT_GAS_BUDGET);
+
+			// 3-2. ガスコインと別オブジェクトなら merge で残高集約
+			const coinsToMerge = coinsForPayment.filter(
+				(c) => c.coinObjectId !== primary.coinObjectId,
+			);
+			if (
+				primary.coinObjectId !== gasCoin.coinObjectId &&
+				coinsToMerge.length
+			) {
 				tx.mergeCoins(
 					tx.object(primary.coinObjectId),
 					coinsToMerge.map((c) => tx.object(c.coinObjectId)),
 				);
 			}
 
-			// 4. 支払い用コインを分割
-			const [paymentCoin] = tx.splitCoins(tx.object(primary.coinObjectId), [
+			// 4. 支払い額を split
+			const sourceForSplit =
+				primary.coinObjectId === gasCoin.coinObjectId
+					? tx.gas // 1 枚しかないケース
+					: tx.object(primary.coinObjectId);
+
+			const [paymentCoin] = tx.splitCoins(sourceForSplit, [
 				tx.pure.u64(suiAmountMist),
 			]);
 
@@ -295,10 +323,6 @@ export function SuperchatForm({
 				],
 				typeArguments: [SUI_TYPE_ARG],
 			});
-
-			// 6. ガス予算設定
-			tx.setGasBudget(DEFAULT_GAS_BUDGET);
-
 			// === ステップ4: トランザクション実行 ===
 			signAndExecuteTransaction(
 				{
