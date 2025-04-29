@@ -47,7 +47,7 @@ import {
 	PAYMENT_CONFIG_ID,
 	SUI_TYPE_ARG,
 } from "@/lib/constants"; // 定数をインポート
-import { suiToMist } from "@/lib/utils"; // ユーティリティをインポート
+import { mistToSui, suiToMist } from "@/lib/utils"; // ユーティリティをインポート
 // Sui SDK インポート
 import {
 	useCurrentAccount,
@@ -227,47 +227,70 @@ export function SuperchatForm({
 
 		// === ステップ3: PTB構築 ===
 		try {
-			// 1. 金額をMISTに変換
+			// 1. 金額を MIST に変換
 			const suiAmountMist = suiToMist(values.amount);
 
-			// 2. 支払い可能なSUIコインを取得
-			const coins = await suiClient.getCoins({
-				owner: currentAccount.address, // ! を削除 (nullチェック済みのため)
-				coinType: SUI_TYPE_ARG,
-			});
+			// 2. 支払いに使える SUI コインを「全ページ走査」で取得
+			let nextCursor: string | null | undefined = null;
+			const allCoins: Awaited<ReturnType<typeof suiClient.getCoins>>["data"] =
+				[];
 
-			// 十分な残高を持つコインを1つ見つける (ページングは考慮しない簡易版)
-			// TODO: #Issue番号 - 複数Coinのmergeやページング対応
-			const paymentCoinObject = coins.data.find(
-				(coin) => BigInt(coin.balance) >= suiAmountMist,
+			do {
+				const page = await suiClient.getCoins({
+					owner: currentAccount.address,
+					coinType: SUI_TYPE_ARG,
+					limit: 50,
+					cursor: nextCursor,
+				});
+				allCoins.push(...page.data);
+				nextCursor = page.nextCursor;
+			} while (nextCursor);
+
+			// 2-1. 合計残高チェック
+			const totalBalance = allCoins.reduce(
+				(acc, c) => acc + BigInt(c.balance),
+				BigInt(0),
 			);
-
-			if (!paymentCoinObject) {
+			if (totalBalance < suiAmountMist) {
 				toast.error("Insufficient SUI balance", {
-					description: `Cannot find a SUI coin with at least ${values.amount} SUI.`,
+					description: `Total balance (${mistToSui(totalBalance)} SUI) is below ${values.amount} SUI.`,
 				});
 				set_confirm_mode(false);
 				return;
 			}
 
+			// 2-2. 残高が最大のコインを primary に、残りは merge 対象
+			allCoins.sort((a, b) => {
+				const balanceA = BigInt(a.balance);
+				const balanceB = BigInt(b.balance);
+				return balanceB > balanceA ? 1 : balanceB < balanceA ? -1 : 0;
+			});
+			const primary = allCoins[0];
+			const coinsToMerge = allCoins.slice(1);
+
 			// 3. トランザクションブロック作成
 			const tx = new Transaction();
 
-			// 4. 支払い用コインを分割
-			const [paymentCoin] = tx.splitCoins(
-				tx.object(paymentCoinObject.coinObjectId),
-				[
-					tx.pure.u64(suiAmountMist), // BigIntをtx.pure.u64でラップ
-				],
-			);
+			// 3-1. すべてのコインを primary にマージ
+			if (coinsToMerge.length > 0) {
+				tx.mergeCoins(
+					tx.object(primary.coinObjectId),
+					coinsToMerge.map((c) => tx.object(c.coinObjectId)),
+				);
+			}
 
-			// 5. Moveコントラクト呼び出し
+			// 4. 支払い用コインを分割
+			const [paymentCoin] = tx.splitCoins(tx.object(primary.coinObjectId), [
+				tx.pure.u64(suiAmountMist),
+			]);
+
+			// 5. Move コントラクト呼び出し
 			tx.moveCall({
 				target: `${PACKAGE_ID}::payment::process_superchat_payment`,
 				arguments: [
 					tx.object(PAYMENT_CONFIG_ID),
 					paymentCoin,
-					tx.pure.u64(suiAmountMist), // BigIntをtx.pure.u64でラップ
+					tx.pure.u64(suiAmountMist),
 					tx.pure.address(values.recipient_address),
 				],
 				typeArguments: [SUI_TYPE_ARG],

@@ -40,7 +40,7 @@ interface ServerStatusPayload {
 // --- 定数 ---
 // 環境変数から視聴者アプリのベースURLを取得、なければ本番URLをフォールバック
 const VIEWER_APP_BASE_URL =
-	process.env.NEXT_PUBLIC_VIEWER_APP_BASE_URL || "http://localhost:3001"; // ローカル開発用に一時変更
+	process.env.NEXT_PUBLIC_VIEWER_APP_BASE_URL || "https://suiperchat-neon.vercel.app"; // 本番URLをデフォルトに変更
 // OBSオーバーレイURLはwebsocketサーバーのURLから動的に生成するようになりました
 // const OBS_OVERLAY_BASE_URL = "http://localhost:3001/overlay";
 const WALLET_NOT_SET_ERROR =
