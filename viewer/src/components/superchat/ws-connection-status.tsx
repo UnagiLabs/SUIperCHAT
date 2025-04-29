@@ -33,14 +33,17 @@ export function WebSocketConnectionStatus(): React.ReactElement {
 		[ConnectionStatus.ERROR]: "bg-red-500",
 	};
 
-	// 接続状態に応じたテキストを設定
-	const status_text = {
-		[ConnectionStatus.CONNECTED]: "接続済み",
-		[ConnectionStatus.CONNECTING]: "接続中",
-		[ConnectionStatus.RECONNECTING]: "再接続中",
-		[ConnectionStatus.DISCONNECTED]: "未接続",
-		[ConnectionStatus.DISCONNECTING]: "切断中",
-		[ConnectionStatus.ERROR]: "エラー",
+	/**
+	 * テキストを接続状態に応じて設定します。
+	 * Sets the text based on the connection status.
+	 */
+	const status_text: { [key in ConnectionStatus]: string } = {
+		[ConnectionStatus.CONNECTED]: "Connected",
+		[ConnectionStatus.CONNECTING]: "Connecting",
+		[ConnectionStatus.RECONNECTING]: "Reconnecting",
+		[ConnectionStatus.DISCONNECTED]: "Disconnected",
+		[ConnectionStatus.DISCONNECTING]: "Disconnecting",
+		[ConnectionStatus.ERROR]: "Error",
 	};
 
 	return (

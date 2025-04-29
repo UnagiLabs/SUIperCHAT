@@ -44,7 +44,7 @@ function initializeWebSocket() {
     console.log(`Connecting to WebSocket server: ${wsUrl}`);
     
     // 接続ステータスを更新
-    updateConnectionStatus('接続中...', 'connecting');
+    updateConnectionStatus('Connecting...', 'connecting');
     
     // 既存のWebSocket接続をクリーンアップ
     if (socket) {
@@ -66,7 +66,7 @@ function setupWebSocketEventHandlers() {
     socket.addEventListener('open', () => {
         console.log('WebSocket connection established');
         // WebSocket接続状態を更新
-        updateConnectionStatus('接続済み', 'connected');
+        updateConnectionStatus('Connected', 'connected');
         // 再接続タイマーがある場合はクリア
         if (reconnectTimeout) {
             clearTimeout(reconnectTimeout);
@@ -110,14 +110,14 @@ function setupWebSocketEventHandlers() {
     socket.addEventListener('close', (event) => {
         console.log(`WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}`);
         // WebSocket接続状態を更新
-        updateConnectionStatus('切断', 'error');
+        updateConnectionStatus('Disconnected', 'error');
         
         // 自動再接続
         if (!reconnectTimeout) {
             reconnectTimeout = setTimeout(() => {
                 console.log('Attempting to reconnect...');
                 // WebSocket接続状態を更新
-                updateConnectionStatus('再接続試行中...', 'connecting');
+                updateConnectionStatus('Reconnecting...', 'connecting');
                 initializeWebSocket();
             }, reconnectInterval);
         }
