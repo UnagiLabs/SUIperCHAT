@@ -30,6 +30,11 @@ interface ServerStatusPayload {
 	is_running: boolean;
 	obs_url?: string | null;
 	ws_url?: string | null;
+	cloudflare_http_url?: string | null;
+	tunnel_status: string;
+	tunnel_error?: string | null;
+	global_ip_fetch_failed?: boolean;
+	cgnat_detected?: boolean;
 }
 
 // --- 定数 ---
@@ -55,6 +60,9 @@ export default function UrlDisplay() {
 	// OBS URLとWS URLを状態として追加
 	const [obsUrl, setObsUrl] = useState("");
 	const [wsUrl, setWsUrl] = useState("");
+	// トンネル状態とエラーメッセージを追加
+	const [tunnelStatus, setTunnelStatus] = useState<string>("Stopped");
+	const [tunnelError, setTunnelError] = useState<string | null>(null);
 
 	/**
 	 * バックエンドから配信者情報を取得する関数
@@ -117,26 +125,29 @@ export default function UrlDisplay() {
 			"server_status_updated",
 			(event) => {
 				console.log("Received server_status_updated event:", event);
-				const { is_running, obs_url, ws_url } = event.payload;
+				const { is_running, obs_url, ws_url, tunnel_status, tunnel_error } =
+					event.payload;
 
-				if (is_running) {
-					toast.info("Server has started. Refreshing URL information.");
-					// バックエンドから直接URLを設定
-					if (obs_url) {
-						const correctedObsUrl = obs_url.endsWith("/obs")
-							? obs_url
-							: `${obs_url}/obs`;
-						setObsUrl(correctedObsUrl);
-					}
-					if (ws_url) setWsUrl(ws_url);
+				// URLと状態の更新
+				setObsUrl(obs_url || "");
+				setWsUrl(ws_url || "");
+				setTunnelStatus(tunnel_status || (is_running ? "Starting" : "Stopped"));
+				setTunnelError(tunnel_error || null);
+
+				// 適切なトースト通知
+				if (is_running && tunnel_status === "Running") {
+					toast.info("Server and Tunnel are running.");
+				} else if (!is_running) {
+					toast.info("Server has stopped.");
+				} else if (tunnel_status === "Failed") {
+					toast.error("Tunnel connection failed.", {
+						description: tunnel_error || "Unknown error",
+					});
 				} else {
-					toast.info("Server has stopped. Clearing URL information.");
-					// サーバー停止時はURLをクリア
-					setObsUrl("");
-					setWsUrl("");
+					toast.info(`Server status: ${tunnel_status}...`);
 				}
 
-				// サーバー状態に関わらず情報を更新（起動中なら新情報取得、停止中ならクリア）
+				// サーバー状態に関わらず情報を更新
 				fetch_streamer_info();
 			},
 		);
@@ -245,63 +256,81 @@ export default function UrlDisplay() {
 						</p>
 					</div>
 				)}
-				{!isLoading && !error && !needsConfiguration && !streamerInfo && (
-					<div className="flex items-center text-amber-600 bg-amber-50 p-3 rounded-md">
-						<Info className="h-5 w-5 mr-2" />
-						<p className="text-sm font-medium">
-							Server is not running. Please start it from the server control
-							above.
-						</p>
-					</div>
-				)}
-				{!isLoading && !error && !needsConfiguration && streamerInfo && (
-					<>
-						<div className="space-y-2">
-							<Label htmlFor="obs-url">OBS Browser Source URL</Label>
-							<div className="flex space-x-2">
-								<Input id="obs-url" value={obs_url} readOnly />
-								<Button
-									variant="outline"
-									size="icon"
-									onClick={() =>
-										copy_to_clipboard(obs_url, () => setObsCopied(true))
-									}
-									disabled={!streamerInfo}
-								>
-									{obsCopied ? (
-										<Check className="h-4 w-4" />
-									) : (
-										<ClipboardCopy className="h-4 w-4" />
-									)}
-								</Button>
-							</div>
+				{/* トンネル接続中などのステータス表示 */}
+				{!isLoading &&
+					!error &&
+					!needsConfiguration &&
+					tunnelStatus !== "Running" && (
+						<div className="flex items-center text-blue-600 bg-blue-100 p-3 rounded-md">
+							{tunnelStatus === "Starting" && (
+								<Loader2 className="h-5 w-5 mr-2 animate-spin" />
+							)}
+							{tunnelStatus === "Failed" && (
+								<AlertTriangle className="h-5 w-5 mr-2" />
+							)}
+							{tunnelStatus === "Stopped" && <Info className="h-5 w-5 mr-2" />}
+							<p className="text-sm font-medium">
+								{tunnelStatus === "Starting" && "Connecting tunnel..."}
+								{tunnelStatus === "Failed" &&
+									`Tunnel connection failed: ${tunnelError || "Unknown error"}`}
+								{tunnelStatus === "Stopped" && "Server is stopped."}
+							</p>
 						</div>
-						<div className="space-y-2">
-							<Label htmlFor="viewer-url">Viewer Share Link</Label>
-							<div className="flex space-x-2">
-								<Input id="viewer-url" value={viewer_url} readOnly />
-								<Button
-									variant="outline"
-									size="icon"
-									onClick={() =>
-										copy_to_clipboard(viewer_url, () => setViewerCopied(true))
-									}
-									disabled={!streamerInfo}
-								>
-									{viewerCopied ? (
-										<Check className="h-4 w-4" />
-									) : (
-										<ClipboardCopy className="h-4 w-4" />
-									)}
-								</Button>
+					)}
+				{/* URL表示部分 (トンネルがRunningの場合のみ表示) */}
+				{!isLoading &&
+					!error &&
+					!needsConfiguration &&
+					tunnelStatus === "Running" &&
+					obsUrl &&
+					streamerInfo && (
+						<>
+							<div className="space-y-2">
+								<Label htmlFor="obs-url">OBS Browser Source URL</Label>
+								<div className="flex space-x-2">
+									<Input id="obs-url" value={obsUrl} readOnly />
+									<Button
+										variant="outline"
+										size="icon"
+										onClick={() =>
+											copy_to_clipboard(obsUrl, () => setObsCopied(true))
+										}
+										disabled={tunnelStatus !== "Running" || !obsUrl}
+									>
+										{obsCopied ? (
+											<Check className="h-4 w-4" />
+										) : (
+											<ClipboardCopy className="h-4 w-4" />
+										)}
+									</Button>
+								</div>
 							</div>
-						</div>
-						<p className="text-sm text-muted-foreground">
-							Note: You can use these URLs to set up superchat display in OBS
-							and share links with viewers.
-						</p>
-					</>
-				)}
+							<div className="space-y-2">
+								<Label htmlFor="viewer-url">Viewer Share Link</Label>
+								<div className="flex space-x-2">
+									<Input id="viewer-url" value={viewer_url} readOnly />
+									<Button
+										variant="outline"
+										size="icon"
+										onClick={() =>
+											copy_to_clipboard(viewer_url, () => setViewerCopied(true))
+										}
+										disabled={tunnelStatus !== "Running" || !viewer_url}
+									>
+										{viewerCopied ? (
+											<Check className="h-4 w-4" />
+										) : (
+											<ClipboardCopy className="h-4 w-4" />
+										)}
+									</Button>
+								</div>
+							</div>
+							<p className="text-sm text-muted-foreground">
+								Note: You can use these URLs to set up superchat display in OBS
+								and share links with viewers.
+							</p>
+						</>
+					)}
 			</CardContent>
 		</Card>
 	);

@@ -49,7 +49,7 @@ pub fn start_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Resul
 
         if handle_guard.is_some() {
             // サーバーが既に起動している場合は、現在の状態を再送する
-            send_current_server_status(app_state, app_handle_clone.clone())?;
+            send_current_server_status(app_handle_clone.clone())?;
             return Err("WebSocket server is already running.".to_string());
         }
     }
@@ -267,23 +267,46 @@ pub fn stop_server(app_state: &AppState, app_handle: tauri::AppHandle) -> Result
     }
 }
 
-/// ## サーバーステータスイベントを発行する
+/// ## サーバー状態通知イベント発行
 ///
 /// サーバーの状態を通知するイベントを発行します。
 ///
 /// ### Arguments
 /// - `app_handle`: Tauriアプリケーションハンドル
-/// - `is_running`: サーバーが実行中かどうか
-/// - `ws_url`: WebSocket URL (オプション)
-/// - `obs_url`: OBS URL (オプション)
+/// - `is_running`: サーバー実行状態
+/// - `ws_url`: WebSocket URL (Option<String>)
+/// - `obs_url`: OBS URL (Option<String>)
 fn emit_server_status(
     app_handle: &tauri::AppHandle,
-    _is_running: bool,
-    _ws_url: Option<String>,
-    _obs_url: Option<String>,
+    is_running: bool,
+    ws_url: Option<String>,
+    obs_url: Option<String>,
 ) {
-    // 新しい関数に処理を委譲
-    emit_server_status_with_tunnel(app_handle);
+    // CGNAT検出とIP取得失敗フラグ
+    let app_state = app_handle.state::<AppState>();
+    let cgnat_detected = *app_state.cgnat_detected.lock().unwrap();
+    let global_ip_fetch_failed = *app_state.global_ip_fetch_failed.lock().unwrap();
+
+    // ServerStatusを構築
+    let status = ServerStatus {
+        is_running,
+        ws_url,
+        obs_url,
+        global_ip_fetch_failed,
+        cgnat_detected,
+        cloudflare_http_url: None,
+        tunnel_status: if is_running {
+            "Starting".to_string()
+        } else {
+            "Stopped".to_string()
+        },
+        tunnel_error: None,
+    };
+
+    // イベント発行
+    if let Err(e) = app_handle.emit("server_status_updated", status) {
+        eprintln!("Failed to emit server status event: {}", e);
+    }
 }
 
 /// ## 現在のサーバーステータスを送信する
@@ -297,107 +320,10 @@ fn emit_server_status(
 /// ### Returns
 /// - `Result<(), String>`: 成功時はOk、失敗時はエラーメッセージ
 fn send_current_server_status(
-    app_state: &AppState,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    // 現在のサーバー状態を取得
-    let is_running = app_state
-        .server_handle
-        .lock()
-        .map_err(|_| "Failed to lock server handle mutex".to_string())?
-        .is_some();
-
-    // CGNAT検出とIP取得失敗フラグを取得
-    let cgnat_detected = *app_state
-        .cgnat_detected
-        .lock()
-        .map_err(|_| "Failed to lock cgnat_detected mutex".to_string())?;
-
-    let global_ip_fetch_failed = *app_state
-        .global_ip_fetch_failed
-        .lock()
-        .map_err(|_| "Failed to lock global_ip_fetch_failed mutex".to_string())?;
-
-    // Cloudflaredトンネル情報を取得
-    let tunnel_http_url = if let Ok(tunnel_guard) = app_state.tunnel_info.lock() {
-        if let Some(Ok(ref tunnel_info)) = *tunnel_guard {
-            Some(tunnel_info.url.clone())
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    // URLを構築
-    let ws_url = if is_running {
-        let host = app_state
-            .host
-            .lock()
-            .map_err(|_| "Failed to lock host mutex".to_string())?
-            .clone()
-            .unwrap_or_else(|| "127.0.0.1".to_string());
-
-        let port = app_state
-            .port
-            .lock()
-            .map_err(|_| "Failed to lock port mutex".to_string())?
-            .unwrap_or(8082);
-
-        // CloudflaredのURLがあればそれを優先
-        if let Some(url) = &tunnel_http_url {
-            url.replace("https://", "wss://") + "/ws"
-        } else {
-            format!("ws://{}:{}/ws", host, port)
-        }
-    } else {
-        String::new()
-    };
-
-    let obs_url = if is_running {
-        let host = app_state
-            .host
-            .lock()
-            .map_err(|_| "Failed to lock host mutex".to_string())?
-            .clone()
-            .unwrap_or_else(|| "127.0.0.1".to_string());
-
-        let obs_port = app_state
-            .obs_port
-            .lock()
-            .map_err(|_| "Failed to lock obs_port mutex".to_string())?
-            .unwrap_or(8081);
-
-        format!("http://{}:{}/obs/", host, obs_port)
-    } else {
-        String::new()
-    };
-
-    // ServerStatusを構築
-    let status = ServerStatus {
-        is_running,
-        ws_url,
-        obs_url,
-        global_ip_fetch_failed,
-        cgnat_detected,
-        cloudflare_http_url: tunnel_http_url.clone(),
-        tunnel_status: tunnel_http_url.clone().map_or_else(
-            || {
-                if is_running {
-                    "Starting".to_string()
-                } else {
-                    "Stopped".to_string()
-                }
-            },
-            |_| "Running".to_string(),
-        ),
-    };
-
-    // イベント発行
-    app_handle
-        .emit("server_status_updated", status)
-        .map_err(|e| format!("Failed to emit server status event: {}", e))?;
-
+    // すでに更新済みのemit_server_status_with_tunnel関数を呼び出す
+    emit_server_status_with_tunnel(&app_handle);
     Ok(())
 }
 
@@ -481,8 +407,7 @@ async fn run_servers(
     println!("Note: Client connections MUST include the '/ws' path");
 
     // フロントエンドにトンネル起動中のステータスを通知
-    let app_state = app_handle.state::<AppState>();
-    let _ = send_current_server_status(&app_state, app_handle.clone());
+    let _ = send_current_server_status(app_handle.clone());
     println!("Tunnel startup in progress notification sent to frontend.");
 
     // 外部IP取得とCGNAT判定処理を非同期で実行
@@ -575,7 +500,7 @@ async fn run_servers(
 
         // 新しいクローンを作成
         let app_handle_for_status = app_handle_clone.clone();
-        send_current_server_status(&app_state, app_handle_for_status).unwrap_or_else(|e| {
+        send_current_server_status(app_handle_for_status).unwrap_or_else(|e| {
             eprintln!("IP取得・CGNAT判定後のステータス送信に失敗: {}", e);
         });
     });
@@ -940,9 +865,46 @@ fn emit_server_status_with_tunnel(app_handle: &tauri::AppHandle) {
     // 必要な情報を取得
     let is_running = app_state.server_handle.lock().unwrap().is_some();
 
-    let ws_url = {
+    // Cloudflared Tunnel関連の情報を取得
+    let (tunnel_http_url, tunnel_status, tunnel_error) = {
         if is_running {
-            // ローカルWSアドレスを取得
+            if let Ok(tunnel_guard) = app_state.tunnel_info.lock() {
+                match &*tunnel_guard {
+                    Some(Ok(tunnel_info)) => {
+                        // トンネル接続成功
+                        (Some(tunnel_info.url.clone()), "Running".to_string(), None)
+                    }
+                    Some(Err(e)) => {
+                        // トンネル接続失敗
+                        (None, "Failed".to_string(), Some(e.to_string()))
+                    }
+                    None => {
+                        // トンネル情報がまだ設定されていない
+                        (None, "Starting".to_string(), None)
+                    }
+                }
+            } else {
+                // トンネル情報ミューテックスのロックに失敗
+                (None, "Starting".to_string(), None)
+            }
+        } else {
+            // サーバーが停止している
+            (None, "Stopped".to_string(), None)
+        }
+    };
+
+    // WebSocketのURL
+    let ws_url = if is_running {
+        if tunnel_status == "Running" && tunnel_http_url.is_some() {
+            // トンネル接続成功時はCloudflaredのURLを使用
+            let wss_url = tunnel_http_url
+                .as_ref()
+                .unwrap()
+                .replace("https://", "wss://")
+                + "/ws";
+            Some(wss_url)
+        } else {
+            // それ以外の場合はローカルURLを使用
             let host = app_state
                 .host
                 .lock()
@@ -950,55 +912,25 @@ fn emit_server_status_with_tunnel(app_handle: &tauri::AppHandle) {
                 .clone()
                 .unwrap_or_else(|| "127.0.0.1".to_string());
             let port = (*app_state.port.lock().unwrap()).unwrap_or(8082);
-
-            // CloudflaredのURLがあればそれを優先
-            if let Ok(tunnel_guard) = app_state.tunnel_info.lock() {
-                if let Some(Ok(ref tunnel_info)) = *tunnel_guard {
-                    // HTTPSからWSSへ変換
-                    Some(tunnel_info.url.replace("https://", "wss://") + "/ws")
-                } else {
-                    // ローカルWSアドレスをフォールバックとして使用
-                    Some(format!("ws://{}:{}/ws", host, port))
-                }
-            } else {
-                Some(format!("ws://{}:{}/ws", host, port))
-            }
-        } else {
-            None // Noneを返す（以前は空文字列を返していた）
+            Some(format!("ws://{}:{}/ws", host, port))
         }
-    }
-    .unwrap_or_default(); // Optionを解決して文字列に変換
-
-    let obs_url = {
-        if is_running {
-            let host = app_state
-                .host
-                .lock()
-                .unwrap()
-                .clone()
-                .unwrap_or_else(|| "127.0.0.1".to_string());
-            let obs_port = (*app_state.obs_port.lock().unwrap()).unwrap_or(8081);
-            format!("http://{}:{}", host, obs_port)
-        } else {
-            String::new() // 空文字を返す
-        }
+    } else {
+        None
     };
 
-    // Cloudflared HTTP URL
-    let tunnel_http_url = {
-        if is_running {
-            if let Ok(tunnel_guard) = app_state.tunnel_info.lock() {
-                if let Some(Ok(ref tunnel_info)) = *tunnel_guard {
-                    Some(tunnel_info.url.clone())
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        }
+    // OBSのURL
+    let obs_url = if is_running {
+        let host = app_state
+            .host
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(|| "127.0.0.1".to_string());
+        let obs_port = (*app_state.obs_port.lock().unwrap()).unwrap_or(8081);
+        // 必ず/obsパスを含める
+        Some(format!("http://{}:{}/obs/", host, obs_port))
+    } else {
+        None
     };
 
     // CGNAT検出とIP取得失敗フラグ
@@ -1012,17 +944,9 @@ fn emit_server_status_with_tunnel(app_handle: &tauri::AppHandle) {
         obs_url,
         global_ip_fetch_failed,
         cgnat_detected,
-        cloudflare_http_url: tunnel_http_url.clone(),
-        tunnel_status: tunnel_http_url.map_or_else(
-            || {
-                if is_running {
-                    "Starting".to_string()
-                } else {
-                    "Stopped".to_string()
-                }
-            },
-            |_| "Running".to_string(),
-        ),
+        cloudflare_http_url: tunnel_http_url,
+        tunnel_status,
+        tunnel_error,
     };
 
     // イベント発行

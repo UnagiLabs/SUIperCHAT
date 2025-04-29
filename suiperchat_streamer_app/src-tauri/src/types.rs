@@ -325,17 +325,17 @@ mod tests {
 // Tauri イベント関連の型定義
 //=============================================================================
 
-/// ## サーバーステータス構造体
+/// ## サーバー状態
 ///
-/// サーバーの実行状態と接続情報を格納します。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// サーバーの実行状態やURLなどの情報を保持します。
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ServerStatus {
     /// サーバーが実行中かどうか
     pub is_running: bool,
     /// WebSocket用URL (例: "ws://127.0.0.1:8082/ws" または "wss://*.trycloudflare.com/ws")
-    pub ws_url: String,
-    /// OBS用URL (例: "http://127.0.0.1:8081")
-    pub obs_url: String,
+    pub ws_url: Option<String>,
+    /// OBS用URL (例: "http://127.0.0.1:8081/obs")
+    pub obs_url: Option<String>,
     /// 外部IP取得に失敗したかどうかのフラグ
     #[serde(default)]
     pub global_ip_fetch_failed: bool,
@@ -343,8 +343,9 @@ pub struct ServerStatus {
     #[serde(default)]
     pub cgnat_detected: bool,
     /// Cloudflare HTTPS URL (例: "https://*.trycloudflare.com")
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub cloudflare_http_url: Option<String>,
-    /// トンネルの状態 ("Starting", "Running", "Error: <message>", "Stopped" など)
+    /// トンネルの状態 ("Stopped", "Starting", "Running", "Failed" など)
     pub tunnel_status: String,
+    /// トンネル接続失敗時のエラーメッセージ
+    pub tunnel_error: Option<String>,
 }
