@@ -35,6 +35,27 @@ jobs:
       - name: Install frontend deps
         run: npm ci --prefix suiperchat_streamer_app
 
+      - name: Install Npcap SDK (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # 1. SDK のバージョンと URL を設定
+          $npcap_sdk_version = "1.15"
+          $npcap_sdk_url     = "https://npcap.com/dist/npcap-sdk-$($npcap_sdk_version).zip"
+          
+          # 2. ダウンロード
+          Write-Host "Downloading Npcap SDK version $npcap_sdk_version from $npcap_sdk_url"
+          curl -L -o npcap-sdk.zip $npcap_sdk_url
+          
+          # 3. 展開
+          Write-Host "Extracting Npcap SDK"
+          Expand-Archive npcap-sdk.zip -DestinationPath .
+          
+          # 4. Lib/x64 フォルダへのパスを環境変数に追加
+          $npcap_sdk_path = "$(pwd)/npcap-sdk-$($npcap_sdk_version)/Lib/x64"
+          Write-Host "Adding Npcap SDK Lib path to LIB environment variable: $npcap_sdk_path"
+          echo "LIB=$env:LIB;$npcap_sdk_path" >> $env:GITHUB_ENV
+
       # ★ tauri-action ★
       - uses: tauri-apps/tauri-action@v0        # ← v0 系を指定
         with:
