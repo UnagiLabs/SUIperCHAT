@@ -50,6 +50,7 @@ jobs:
           projectPath: suiperchat_streamer_app  # ← Tauri プロジェクトの場所
           tagName: ${{ github.ref_name }}       # 例: v1.0.0
           releaseDraft: false                   # 直接公開
+          releaseName: ${{ github.ref_name }}   # リリース名を明示的に設定
           includeUpdaterJson: true              # latest.json を自動生成
           args: ${{ matrix.args }}
         env:
