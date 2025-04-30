@@ -47,6 +47,7 @@ export const viewport: Viewport = {
  * ルートレイアウトコンポーネント
  *
  * アプリケーション全体のレイアウトを定義し、クライアントプロバイダーを適用します。
+ * 画面左下にアプリケーションのバージョン情報を表示します。
  *
  * @param {Object} props - コンポーネントプロパティ
  * @param {React.ReactNode} props.children - 子コンポーネント
@@ -56,12 +57,18 @@ export default function RootLayout({
 }: Readonly<{
 	children: React.ReactNode;
 }>): React.ReactElement {
+	const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || "不明"; // 環境変数からバージョンを取得
+
 	return (
 		<html lang="ja" className="dark">
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen`}
 			>
 				<ClientProviders>{children}</ClientProviders>
+				{/* バージョン情報を画面左下に表示 */}
+				<div className="fixed bottom-2 left-2 z-50">
+					<p className="text-xs text-muted-foreground">v{appVersion}</p>
+				</div>
 			</body>
 		</html>
 	);

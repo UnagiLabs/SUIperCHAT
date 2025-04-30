@@ -29,6 +29,10 @@ export default function RootLayout({
 				className={`${geistSans.variable} ${geistMono.variable} antialiased`}
 			>
 				{children}
+				{/* バージョン情報を左下に表示 */}
+				<div className="fixed bottom-2 left-2 z-50 text-xs text-gray-500">
+					v{process.env.NEXT_PUBLIC_APP_VERSION}
+				</div>
 			</body>
 		</html>
 	);
