@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'        # v1.0.0 などタグを押したら実行
+      - 'v*'        # v1.0.0 などタグ Push 時に実行
 
 jobs:
   build-and-publish:
@@ -11,33 +11,38 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            args: ''                       # Windows x64
-          - os: macos-latest
-            args: ''                       # macOS (Intel/Apple 両対応は自動検出)
+          - os: windows-latest    # Windows x64
+            args: ''
+          - os: macos-latest      # macOS (Apple/Intel 両対応)
+            args: ''
 
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: write                      # Release 作成権限
+      contents: write             # Release 作成権限
 
     steps:
-      - uses: actions/checkout@v3
+      # 1. コードをチェックアウト
+      - name: Checkout
+        uses: actions/checkout@v3
 
-      - uses: actions/setup-node@v3
+      # 2. Node.js セットアップ
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
         with:
           node-version: '20'
 
-      - uses: actions-rs/toolchain@v1
+      # 3. Rust ツールチェインセットアップ
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
 
-      # フロントエンド依存をサブフォルダでインストール
+      # 4. フロントエンド依存インストール
       - name: Install frontend deps
         run: npm ci --prefix suiperchat_streamer_app
 
-      # Npcap SDK インストールステップに ID を追加し、出力変数を設定
+      # 5. Npcap SDK インストール (Windows のみ)
       - name: Install Npcap SDK (Windows)
-        id: install_npcap # ★ ID を追加
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -51,44 +56,29 @@ jobs:
           Write-Host "Extracting Npcap SDK..."
           Expand-Archive $zip -DestinationPath $PWD
 
-          # 64-bit 用ライブラリフォルダ
           $sdkLib = Join-Path $PWD "npcap-sdk-$version\Lib\x64"
           Write-Host "Npcap SDK Lib path: $sdkLib"
 
-          # GITHUB_ENV に追記（Add-Content でクォート不要）
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$env:LIB;$sdkLib"
-          Add-Content -Path $env:GITHUB_ENV -Value "PATH=$env:PATH;$sdkLib"
+          # CI 全体で使う環境変数にセット
+          Add-Content -Path $env:GITHUB_ENV -Value "NPCAP_LIB_PATH=$sdkLib"
 
-      - name: Debug LIB (Windows)
+      # 6. デバッグ: NPCAP_LIB_PATH の確認 (Windows のみ)
+      - name: Debug NPCAP_LIB_PATH (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          Write-Host "===== LIB variable dump ====="
-          $env:LIB -split ';' | ForEach-Object { Write-Host $_ }
+        run: Write-Host "NPCAP_LIB_PATH = $env:NPCAP_LIB_PATH"
 
-      - name: Cargo verbose build (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        env:
-          RUSTFLAGS: "-C link-arg=/VERBOSE"
-        run: |
-          cd suiperchat_streamer_app/src-tauri
-          cargo build --release --verbose || true
-
-      # ★ tauri-action ★
-      # tauri-action ステップで LIB 環境変数を設定
-      - uses: tauri-apps/tauri-action@v0
-        id: tauri_build # 必要であれば ID を追加
+      # 7. Tauri ビルド & GitHub Release
+      - name: Build & Release (Tauri)
+        uses: tauri-apps/tauri-action@v0
         with:
-          projectPath: suiperchat_streamer_app  # ← Tauri プロジェクトの場所
-          tagName: ${{ github.ref_name }}       # 例: v1.0.0
-          releaseDraft: false                   # 直接公開
-          releaseName: ${{ github.ref_name }}   # リリース名を明示的に設定
-          includeUpdaterJson: true              # latest.json を自動生成
-          args: ${{ matrix.args }}
+          projectPath:        suiperchat_streamer_app
+          tagName:            ${{ github.ref_name }}
+          releaseName:        ${{ github.ref_name }}
+          releaseDraft:       false
+          includeUpdaterJson: true
+          args:               ${{ matrix.args }}
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          GITHUB_TOKEN:                       ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LIB:  ${{ env.LIB }}
-          PATH: ${{ env.PATH }}
