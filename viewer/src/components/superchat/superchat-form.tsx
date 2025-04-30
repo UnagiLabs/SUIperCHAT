@@ -247,7 +247,10 @@ export function SuperchatForm({
 			} while (nextCursor);
 
 			// 2-1. 合計残高チェック
-			const totalBalance = allCoins.reduce((a, c) => a + BigInt(c.balance), BigInt(0));
+			const totalBalance = allCoins.reduce(
+				(a, c) => a + BigInt(c.balance),
+				BigInt(0),
+			);
 			if (totalBalance < suiAmountMist + GAS_BUDGET) {
 				toast.error("Insufficient SUI balance", {
 					description: `Need at least ${mistToSui(

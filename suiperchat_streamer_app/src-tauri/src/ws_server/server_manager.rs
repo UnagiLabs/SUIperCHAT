@@ -319,9 +319,7 @@ fn emit_server_status(
 ///
 /// ### Returns
 /// - `Result<(), String>`: 成功時はOk、失敗時はエラーメッセージ
-fn send_current_server_status(
-    app_handle: tauri::AppHandle,
-) -> Result<(), String> {
+fn send_current_server_status(app_handle: tauri::AppHandle) -> Result<(), String> {
     // すでに更新済みのemit_server_status_with_tunnel関数を呼び出す
     emit_server_status_with_tunnel(&app_handle);
     Ok(())
