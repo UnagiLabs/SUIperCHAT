@@ -11,8 +11,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
-            args: ''                       # Linux x64
           - os: windows-latest
             args: ''                       # Windows x64
           - os: macos-latest
@@ -37,12 +35,11 @@ jobs:
       - name: Install frontend deps
         run: npm ci --prefix suiperchat_streamer_app
 
-      # Linux だけ追加ライブラリを入れる
-      - name: Linux deps
-        if: matrix.os == 'ubuntu-22.04'
+      # Windowsビルド用にWinPcap/NPcapをインストール
+      - name: Install WinPcap/NPcap
+        if: matrix.os == 'windows-latest'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev patchelf
+          choco install npcap -y
 
       # ★ tauri-action ★
       - uses: tauri-apps/tauri-action@v0        # ← v0 系を指定
