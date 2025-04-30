@@ -35,6 +35,59 @@ jobs:
       - name: Install frontend deps
         run: npm ci --prefix suiperchat_streamer_app
 
+      - name: Verify Admin Rights
+        if: matrix.os == 'windows-latest'
+        run: |
+          if (-not ([bool](New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))) {
+            Write-Host "Admin rights are required for this step."
+            exit 1
+          }
+        shell: pwsh
+
+      - name: Check for Pending Reboot
+        if: matrix.os == 'windows-latest'
+        run: |
+          $pendingReboot = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired' -ErrorAction SilentlyContinue
+          if ($pendingReboot) {
+            Write-Host "Pending reboot detected. Please reboot the runner."
+            exit 1
+          }
+        shell: pwsh
+
+      - name: Uninstall Existing StrawberryPerl
+        if: matrix.os == 'windows-latest'
+        run: |
+          if (Test-Path "C:\ProgramData\chocolatey\lib\StrawberryPerl") {
+            Remove-Item -Recurse -Force "C:\ProgramData\chocolatey\lib\StrawberryPerl"
+          }
+          if (Test-Path "C:\Program Files\Strawberry") {
+            Remove-Item -Recurse -Force "C:\Program Files\Strawberry"
+          }
+        shell: pwsh
+
+      - name: Retry Installation of StrawberryPerl
+        if: matrix.os == 'windows-latest'
+        run: |
+          for ($i = 1; $i -le 3; $i++) {
+            choco install strawberryperl --yes
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "StrawberryPerl installation succeeded."
+              break
+            }
+            Write-Host "Retrying installation... Attempt $i"
+            Start-Sleep -Seconds 10
+          }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Failed to install StrawberryPerl after 3 attempts."
+            exit 1
+          }
+        shell: pwsh
+
+      - name: Enable Chocolatey Debug Logs
+        if: matrix.os == 'windows-latest'
+        run: choco feature enable -n=logEnvironmentValues || echo "Failed to enable logs"
+        shell: bash
+
       - name: Update Chocolatey
         if: matrix.os == 'windows-latest'
         run: |
