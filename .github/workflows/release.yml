@@ -54,11 +54,11 @@ jobs:
           Expand-Archive npcap-sdk.zip -DestinationPath .
           
           # 4. Lib/x64 フォルダへのパスを取得 (Join-Path を使用)
-          $npcap_sdk_path = Join-Path (Get-Location).Path "npcap-sdk-$npcap_sdk_version\Lib\x64" # ★ Join-Path と \ を使用
+          $npcap_sdk_path = Join-Path (Get-Location).Path "npcap-sdk-$npcap_sdk_version\Lib\x64"
           Write-Host "Npcap SDK Lib path: $npcap_sdk_path"
           
-          # 5. パスを出力変数に設定
-          echo "NPCAP_LIB_PATH=$npcap_sdk_path" >> $env:GITHUB_OUTPUT # ★ GITHUB_OUTPUT に変更
+          # 現在の LIB に SDK パスを追加
+          echo "LIB=$env:LIB;$npcap_sdk_path" >> $env:GITHUB_ENV
 
       # ★ tauri-action ★
       # tauri-action ステップで LIB 環境変数を設定
@@ -75,5 +75,3 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # ★ LIB 環境変数をここで設定 (Windows の場合のみ Npcap パスを追加) ★
-          LIB: ${{ env.LIB }}${{ runner.os == 'Windows' && format(';{0}', steps.install_npcap.outputs.NPCAP_LIB_PATH) || '' }}
