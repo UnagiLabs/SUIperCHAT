@@ -27,22 +27,21 @@ SUIperCHATは、SUIブロックチェーンを活用した配信者向けスー�
 
 ```mermaid
 graph TD
-    A[視聴者 (Viewer)] -- HTTPS --> B(Viewer Frontend);
-    B -- SUI Wallet --> C(SUI Blockchain);
-    B -- WebSocket --> D{Streamer App};
-    E[配信者 (Streamer)] -- 操作 --> D;
-    D -- Localhost HTTP --> F(OBS Browser Source);
-    D -- SQLite --> G[(Local Database)];
-    D -- SUI Wallet --> C;
+    A[視聴者] --> |HTTPS| B[Viewer Frontend]
+    B --> |SUI Wallet| C[SUI Blockchain]
+    B --> |WebSocket| D[Streamer App]
+    E[配信者] --> |操作| D
+    D --> |HTTP| F[OBS Source]
+    D --> |SQLite| G[(Database)]
+    D --> |SUI Wallet| C
 
-    subgraph Streamer App (Tauri)
-
-        D --- D_Rust[Rust Backend];
-        D --- D_Web[WebView Frontend];
-        D_Rust -- WebSocket Server --> B;
-        D_Rust -- HTTP Server --> F;
-        D_Rust -- DB Access --> G;
-        D_Rust -- SUI SDK --> C;
+    subgraph Streamer App
+        D --> D_Rust[Backend]
+        D --> D_Web[Frontend]
+        D_Rust --> |WebSocket| B
+        D_Rust --> |HTTP| F
+        D_Rust --> |DB| G
+        D_Rust --> |SUI SDK| C
     end
 ```
 
@@ -138,22 +137,21 @@ SUIperCHAT is a Super Chat system for streamers utilizing the SUI blockchain. It
 
 ```mermaid
 graph TD
-    A[Viewer] -- HTTPS --> B(Viewer Frontend);
-    B -- SUI Wallet --> C(SUI Blockchain);
-    B -- WebSocket --> D{Streamer App};
-    E[Streamer] -- Operate --> D;
-    D -- Localhost HTTP --> F(OBS Browser Source);
-    D -- SQLite --> G[(Local Database)];
-    D -- SUI Wallet --> C;
+    A[視聴者] --> |HTTPS| B[Viewer Frontend]
+    B --> |SUI Wallet| C[SUI Blockchain]
+    B --> |WebSocket| D[Streamer App]
+    E[配信者] --> |操作| D
+    D --> |HTTP| F[OBS Source]
+    D --> |SQLite| G[(Database)]
+    D --> |SUI Wallet| C
 
-    subgraph Streamer App (Tauri)
-
-        D --- D_Rust[Rust Backend];
-        D --- D_Web[WebView Frontend];
-        D_Rust -- WebSocket Server --> B;
-        D_Rust -- HTTP Server --> F;
-        D_Rust -- DB Access --> G;
-        D_Rust -- SUI SDK --> C;
+    subgraph Streamer App
+        D --> D_Rust[Backend]
+        D --> D_Web[Frontend]
+        D_Rust --> |WebSocket| B
+        D_Rust --> |HTTP| F
+        D_Rust --> |DB| G
+        D_Rust --> |SUI SDK| C
     end
 ```
 
