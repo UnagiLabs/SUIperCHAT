@@ -8,6 +8,7 @@ use std::str::FromStr;
 use tauri::Manager;
 // --- プラグインの use 文を追加 ---
 use tauri_plugin_log::{Target, TargetKind};
+use tauri_plugin_updater::Builder as UpdaterBuilder; // updater プラグインを追加
 
 // --- モジュール宣言 ---
 pub mod commands; // コマンドモジュール
@@ -81,6 +82,14 @@ pub fn run() {
         .manage(AppState::new())
         // --- セットアップフックを登録 ---
         .setup(|app| {
+            // --- updater プラグインの初期化コード ---
+            #[cfg(desktop)]
+            app.handle().plugin(
+                // デフォルト設定でビルド
+                UpdaterBuilder::new().build()
+            )?;
+            // ------------------------------------
+
             // アプリケーションハンドルのクローンを取得
             let app_handle = app.handle().clone();
 
