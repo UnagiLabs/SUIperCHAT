@@ -35,11 +35,24 @@ jobs:
       - name: Install frontend deps
         run: npm ci --prefix suiperchat_streamer_app
 
-      # Windowsビルド用にWinPcap/NPcapをインストール
+      - name: Update Chocolatey
+        if: matrix.os == 'windows-latest'
+        run: |
+          choco upgrade chocolatey -y
+          choco upgrade all -y
+
       - name: Install WinPcap/NPcap
         if: matrix.os == 'windows-latest'
         run: |
-          choco install npcap -y
+          choco install npcap -y --ignore-checksums || (
+            echo "NPCAP installation failed. Check logs at C:\\ProgramData\\chocolatey\\logs\\chocolatey.log" &&
+            exit 1
+          )
+
+      - name: Debug Chocolatey Logs
+        if: matrix.os == 'windows-latest' && failure()
+        run: |
+          type C:\\ProgramData\\chocolatey\\logs\\chocolatey.log
 
       # ★ tauri-action ★
       - uses: tauri-apps/tauri-action@v0        # ← v0 系を指定
