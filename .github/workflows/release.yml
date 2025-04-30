@@ -60,6 +60,17 @@ jobs:
           # 現在の LIB に SDK パスを追加
           echo "LIB=$env:LIB;$npcap_sdk_path" >> $env:GITHUB_ENV
 
+      - name: Cargo verbose build (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # 1) Tauri/Cargo プロジェクトルートへ移動
+          cd suiperchat_streamer_app/src-tauri
+
+          # 2) RUSTFLAGS を設定してビルド（--verbose でリンク引数を全部表示）
+          echo ">>> Running cargo build with link verbosity"
+          RUSTFLAGS="-C link-arg=/VERBOSE" cargo build --release --verbose || true
+
       # ★ tauri-action ★
       # tauri-action ステップで LIB 環境変数を設定
       - uses: tauri-apps/tauri-action@v0
