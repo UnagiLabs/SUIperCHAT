@@ -1,7 +1,11 @@
 # SUIperCHAT
 
+# SUIperCHAT (日本語)
+
 [English description follows below.](#suiperchat-english)
+
 **⚠️ 開発中のプロジェクト ⚠️**
+
 本プロジェクトは現在開発中であり、仕様や機能は変更される可能性があります。
 
 ## 概要
