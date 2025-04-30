@@ -2,29 +2,30 @@ name: Release
 
 on:
   push:
-    # バージョンタグ (例: v0.1.0, v1.2.3 など) を検知
     tags:
-      - 'v*'           # :contentReference[oaicite:0]{index=0}
+      - 'v*'  # v1.0.0 などのタグをトリガーに
 
 jobs:
   build-and-publish:
-    # マトリクス戦略で複数 OS を同時に指定
+    # (1) run: ステップをサブフォルダ内で動かす
+    defaults:
+      run:
+        working-directory: suiperchat_streamer_app
+
     strategy:
       fail-fast: false
       matrix:
-        # ビルド対象の OS
         include:
-          - os: ubuntu-22.04
-            args: ''               # Linux x86_64 :contentReference[oaicite:1]{index=1}
-          - os: windows-latest
-            args: ''               # Windows x86_64 :contentReference[oaicite:2]{index=2}
-          - os: macos-latest
-            args: ''               # macOS Intel／Silicon は tauri-action が自動で判定 :contentReference[oaicite:3]{index=3}
+          - os: ubuntu-22.04   # Linux ビルド
+            args: ''
+          - os: windows-latest # Windows ビルド
+            args: ''
+          - os: macos-latest   # macOS ビルド
+            args: ''
 
     runs-on: ${{ matrix.os }}
-
     permissions:
-      contents: write            # Release の作成／更新に必要 :contentReference[oaicite:4]{index=4}
+      contents: write      # Release 作成に必要
 
     steps:
       - name: Checkout repository
@@ -35,7 +36,7 @@ jobs:
         with:
           node-version: '16'
 
-      - name: Setup Rust toolchain
+      - name: Setup Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -43,7 +44,7 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Install Linux build deps
+      - name: Install Linux build dependencies
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
@@ -52,21 +53,17 @@ jobs:
       - name: Build & publish with Tauri Action
         uses: tauri-apps/tauri-action@v2
         with:
-          # Git タグ名をバージョンに利用
+          # (2) Tauri のルートをカレントディレクトリとする
+          projectPath: '.'
           tagName: ${{ github.ref_name }}
-          # Draft ではなく正式リリースに
-          releaseDraft: false      # デフォルト false :contentReference[oaicite:5]{index=5}
-          # 自動で latest.json を生成・アップロードする
-          includeUpdaterJson: true # デフォルト true :contentReference[oaicite:6]{index=6}
-          # Windows 用インストーラ種別を NSIS (setup.exe) に固定
+          releaseDraft: false
+          includeUpdaterJson: true
           updaterJsonPreferNsis: false
-          # macOS ユニバーサルビルド情報は含めず aarch64/x86_64 のみ
           updaterJsonKeepUniversal: false
           args: ${{ matrix.args }}
         env:
-          # Secrets に登録した署名用秘密鍵
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Verify release assets
-        run: echo "Release completed for ${{ matrix.os }}"
+        run: echo "Release completed on ${{ matrix.os }}"
