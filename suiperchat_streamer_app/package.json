@@ -6,7 +6,8 @@
 		"dev": "next dev",
 		"build": "next build",
 		"start": "next start",
-		"tauri": "tauri"
+		"tauri": "tauri",
+		"check": "biome check src --write"
 	},
 	"dependencies": {
 		"@radix-ui/react-icons": "^1.3.2",
