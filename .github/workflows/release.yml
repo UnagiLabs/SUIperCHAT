@@ -35,7 +35,9 @@ jobs:
       - name: Install frontend deps
         run: npm ci --prefix suiperchat_streamer_app
 
+      # Npcap SDK インストールステップに ID を追加し、出力変数を設定
       - name: Install Npcap SDK (Windows)
+        id: install_npcap # ★ ID を追加
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -51,13 +53,17 @@ jobs:
           Write-Host "Extracting Npcap SDK"
           Expand-Archive npcap-sdk.zip -DestinationPath .
           
-          # 4. Lib/x64 フォルダへのパスを環境変数に追加
-          $npcap_sdk_path = "$(pwd)/npcap-sdk-$($npcap_sdk_version)/Lib/x64"
-          Write-Host "Adding Npcap SDK Lib path to LIB environment variable: $npcap_sdk_path"
-          echo "LIB=$env:LIB;$npcap_sdk_path" >> $env:GITHUB_ENV
+          # 4. Lib/x64 フォルダへのパスを取得 (Join-Path を使用)
+          $npcap_sdk_path = Join-Path (Get-Location).Path "npcap-sdk-$npcap_sdk_version\Lib\x64" # ★ Join-Path と \ を使用
+          Write-Host "Npcap SDK Lib path: $npcap_sdk_path"
+          
+          # 5. パスを出力変数に設定
+          echo "NPCAP_LIB_PATH=$npcap_sdk_path" >> $env:GITHUB_OUTPUT # ★ GITHUB_OUTPUT に変更
 
       # ★ tauri-action ★
-      - uses: tauri-apps/tauri-action@v0        # ← v0 系を指定
+      # tauri-action ステップで LIB 環境変数を設定
+      - uses: tauri-apps/tauri-action@v0
+        id: tauri_build # 必要であれば ID を追加
         with:
           projectPath: suiperchat_streamer_app  # ← Tauri プロジェクトの場所
           tagName: ${{ github.ref_name }}       # 例: v1.0.0
@@ -69,3 +75,5 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ★ LIB 環境変数をここで設定 (Windows の場合のみ Npcap パスを追加) ★
+          LIB: ${{ env.LIB }}${{ runner.os == 'Windows' && format(';{0}', steps.install_npcap.outputs.NPCAP_LIB_PATH) || '' }}
