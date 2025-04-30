@@ -36,6 +36,7 @@ graph TD
     D -- SUI Wallet --> C;
 
     subgraph Streamer App (Tauri)
+
         D --- D_Rust[Rust Backend];
         D --- D_Web[WebView Frontend];
         D_Rust -- WebSocket Server --> B;
@@ -146,6 +147,7 @@ graph TD
     D -- SUI Wallet --> C;
 
     subgraph Streamer App (Tauri)
+
         D --- D_Rust[Rust Backend];
         D --- D_Web[WebView Frontend];
         D_Rust -- WebSocket Server --> B;
