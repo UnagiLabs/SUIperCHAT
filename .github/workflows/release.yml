@@ -41,24 +41,23 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # 1. SDK のバージョンと URL を設定
-          $npcap_sdk_version = "1.15"
-          $npcap_sdk_url     = "https://npcap.com/dist/npcap-sdk-$($npcap_sdk_version).zip"
-          
-          # 2. ダウンロード
-          Write-Host "Downloading Npcap SDK version $npcap_sdk_version from $npcap_sdk_url"
-          curl -L -o npcap-sdk.zip $npcap_sdk_url
-          
-          # 3. 展開
-          Write-Host "Extracting Npcap SDK"
-          Expand-Archive npcap-sdk.zip -DestinationPath .
-          
-          # 4. Lib/x64 フォルダへのパスを取得 (Join-Path を使用)
-          $npcap_sdk_path = Join-Path (Get-Location).Path "npcap-sdk-$npcap_sdk_version\Lib\x64"
-          Write-Host "Npcap SDK Lib path: $npcap_sdk_path"
-          
-          # 現在の LIB に SDK パスを追加
-          echo "LIB=$env:LIB;$npcap_sdk_path" >> $env:GITHUB_ENV
+          $version = '1.15'
+          $zip     = "npcap-sdk-$version.zip"
+          $url     = "https://npcap.com/dist/$zip"
+
+          Write-Host "Downloading Npcap SDK $version from $url"
+          Invoke-WebRequest $url -OutFile $zip
+
+          Write-Host "Extracting Npcap SDK..."
+          Expand-Archive $zip -DestinationPath $PWD
+
+          # 64-bit 用ライブラリフォルダ
+          $sdkLib = Join-Path $PWD "npcap-sdk-$version\Lib\x64"
+          Write-Host "Npcap SDK Lib path: $sdkLib"
+
+          # GITHUB_ENV に追記（Add-Content でクォート不要）
+          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$env:LIB;$sdkLib"
+          Add-Content -Path $env:GITHUB_ENV -Value "PATH=$env:PATH;$sdkLib"
 
       - name: Debug LIB (Windows)
         if: runner.os == 'Windows'
@@ -70,13 +69,11 @@ jobs:
       - name: Cargo verbose build (Windows)
         if: runner.os == 'Windows'
         shell: bash
+        env:
+          RUSTFLAGS: "-C link-arg=/VERBOSE"
         run: |
-          # 1) Tauri/Cargo プロジェクトルートへ移動
           cd suiperchat_streamer_app/src-tauri
-
-          # 2) RUSTFLAGS を設定してビルド（--verbose でリンク引数を全部表示）
-          echo ">>> Running cargo build with link verbosity"
-          RUSTFLAGS="-C link-arg=/VERBOSE" cargo build --release --verbose || true
+          cargo build --release --verbose || true
 
       # ★ tauri-action ★
       # tauri-action ステップで LIB 環境変数を設定
@@ -93,3 +90,5 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LIB:  ${{ env.LIB }}
+          PATH: ${{ env.PATH }}
