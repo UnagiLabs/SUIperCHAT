@@ -3,67 +3,55 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'  # v1.0.0 などのタグをトリガーに
+      - 'v*'        # v1.0.0 などタグを押したら実行
 
 jobs:
   build-and-publish:
-    # (1) run: ステップをサブフォルダ内で動かす
-    defaults:
-      run:
-        working-directory: suiperchat_streamer_app
-
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04   # Linux ビルド
-            args: ''
-          - os: windows-latest # Windows ビルド
-            args: ''
-          - os: macos-latest   # macOS ビルド
-            args: ''
+          - os: ubuntu-22.04
+            args: ''                       # Linux x64
+          - os: windows-latest
+            args: ''                       # Windows x64
+          - os: macos-latest
+            args: ''                       # macOS (Intel/Apple 両対応は自動検出)
 
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: write      # Release 作成に必要
+      contents: write                      # Release 作成権限
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: '16'
 
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+      - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
 
-      - name: Install frontend dependencies
-        run: npm ci
+      # フロントエンド依存をサブフォルダでインストール
+      - name: Install frontend deps
+        run: npm ci --prefix suiperchat_streamer_app
 
-      - name: Install Linux build dependencies
+      # Linux だけ追加ライブラリを入れる
+      - name: Linux deps
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev patchelf
 
-      - name: Build & publish with Tauri Action
-        uses: tauri-apps/tauri-action@v2
+      # ★ tauri-action ★
+      - uses: tauri-apps/tauri-action@v0        # ← v0 系を指定
         with:
-          # (2) Tauri のルートをカレントディレクトリとする
-          projectPath: '.'
-          tagName: ${{ github.ref_name }}
-          releaseDraft: false
-          includeUpdaterJson: true
-          updaterJsonPreferNsis: false
-          updaterJsonKeepUniversal: false
+          projectPath: suiperchat_streamer_app  # ← Tauri プロジェクトの場所
+          tagName: ${{ github.ref_name }}       # 例: v1.0.0
+          releaseDraft: false                   # 直接公開
+          includeUpdaterJson: true              # latest.json を自動生成
           args: ${{ matrix.args }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
-      - name: Verify release assets
-        run: echo "Release completed on ${{ matrix.os }}"
