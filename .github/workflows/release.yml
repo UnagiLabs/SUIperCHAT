@@ -60,6 +60,13 @@ jobs:
           # 現在の LIB に SDK パスを追加
           echo "LIB=$env:LIB;$npcap_sdk_path" >> $env:GITHUB_ENV
 
+      - name: Debug LIB (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "===== LIB variable dump ====="
+          $env:LIB -split ';' | ForEach-Object { Write-Host $_ }
+
       - name: Cargo verbose build (Windows)
         if: runner.os == 'Windows'
         shell: bash
