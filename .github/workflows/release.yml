@@ -84,7 +84,7 @@ jobs:
           releaseName:        ${{ github.ref_name }}
           releaseDraft:       false
           includeUpdaterJson: true
-          args: ${{ format('-- -Clink-args=/LIBPATH:{0}\\npcap-sdk-1.15\\Lib\\x64', github.workspace) }}
+          args: ${{ format('-Clink-args=/LIBPATH:{0}\\npcap-sdk-1.15\\Lib\\x64', github.workspace) }} # ★ Removed leading '-- '
         env:
           GITHUB_TOKEN:                       ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
