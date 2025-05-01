@@ -59,38 +59,33 @@ jobs:
           $sdkLib = Join-Path ${{ github.workspace }} "npcap-sdk-$version\Lib\x64" # ★パスもワークスペース基準に
           Write-Host "Npcap SDK Lib path: $sdkLib"
 
-          # CI 全体で使う環境変数にセット (★削除 - args で直接指定するため不要)
-          # Add-Content -Path $env:GITHUB_ENV -Value "NPCAP_LIB_PATH=$sdkLib"
-
-      # ★削除: 展開後のパス存在確認デバッグ (不要になった)
-      # - name: Verify Npcap SDK path (Windows)
-      #   if: runner.os == 'Windows'
-      #   shell: pwsh
-      #   run: |
-      #     $sdkLibPath = "${{ env.NPCAP_LIB_PATH }}" # GITHUB_ENVから取得
-      #     Write-Host "Verifying existence of: $sdkLibPath"
-      #     Test-Path $sdkLibPath # ディレクトリの存在確認
-      #     Test-Path (Join-Path $sdkLibPath "Packet.lib") # Packet.lib の存在確認
-
-      # ★削除: 6. デバッグ: NPCAP_LIB_PATH の確認 (Windows のみ)
-      # - name: Debug NPCAP_LIB_PATH (Windows)
-      #   if: runner.os == 'Windows'
-      #   shell: pwsh
-      #   run: Write-Host "NPCAP_LIB_PATH = $env:NPCAP_LIB_PATH"
-
       # 7. Tauri ビルド & GitHub Release
-      - name: Build & Release (Tauri)
+      - name: Build & Release (macOS)
+        if: runner.os == 'macos-latest'
         uses: tauri-apps/tauri-action@v0
         with:
           projectPath:        suiperchat_streamer_app
           tagName:            ${{ github.ref_name }}
           releaseName:        ${{ github.ref_name }}
           releaseDraft:       false
-          includeUpdaterJson: true # ★Windowsの場合のみビルド引数を追加
-          args:               ${{ runner.os == 'Windows' && format('-- -Clink-args=/LIBPATH:{0}\\npcap-sdk-1.15\\Lib\\x64', github.workspace) || matrix.args }}
+          includeUpdaterJson: true
         env:
-          # ★削除: NPCAP_LIB_PATH は build.rs ではなく args で直接渡すため削除
-          # NPCAP_LIB_PATH: ${{ env.NPCAP_LIB_PATH }}
+          GITHUB_TOKEN:                       ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+
+      - name: Build & Release (Windows)
+        if: runner.os == 'Windows'
+        uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath:        suiperchat_streamer_app
+          tagName:            ${{ github.ref_name }}
+          releaseName:        ${{ github.ref_name }}
+          releaseDraft:       false
+          includeUpdaterJson: true
+          args: ${{ format('-- -Clink-args=/LIBPATH:{0}\\npcap-sdk-1.15\\Lib\\x64', github.workspace) }}
+        env:
           GITHUB_TOKEN:                       ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
