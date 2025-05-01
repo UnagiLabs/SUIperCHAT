@@ -58,6 +58,8 @@ jobs:
 
           $sdkLib = Join-Path ${{ github.workspace }} "npcap-sdk-$version\Lib\x64" # ★パスもワークスペース基準に
           Write-Host "Npcap SDK Lib path: $sdkLib"
+          # ★ RUSTFLAGS 環境変数を設定して GITHUB_ENV に追加
+          Add-Content -Path $env:GITHUB_ENV -Value "RUSTFLAGS=-L native=$sdkLib"
 
       # 7. Tauri ビルド & GitHub Release
       - name: Build & Release (macOS)
@@ -84,8 +86,10 @@ jobs:
           releaseName:        ${{ github.ref_name }}
           releaseDraft:       false
           includeUpdaterJson: true
-          args: ${{ format('-Clink-args=/LIBPATH:{0}\\npcap-sdk-1.15\\Lib\\x64', github.workspace) }} # ★ Removed leading '-- '
+          # ★ args での指定は削除
+          # args: ${{ format('-Clink-args=/LIBPATH:{0}\\npcap-sdk-1.15\\Lib\\x64', github.workspace) }}
         env:
+          RUSTFLAGS: ${{ env.RUSTFLAGS }} # ★ RUSTFLAGS を tauri-action に渡す
           GITHUB_TOKEN:                       ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
