@@ -78,7 +78,8 @@ jobs:
           releaseDraft:       false
           includeUpdaterJson: true
           args:               ${{ matrix.args }}
-        env:
+        env: # 追加: NPCAP_LIB_PATH を tauri-action に明示的に渡す
+          NPCAP_LIB_PATH: ${{ env.NPCAP_LIB_PATH }} # Windows ビルドでのみ設定される (他のOSでは空になる)
           GITHUB_TOKEN:                       ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
