@@ -21,49 +21,28 @@ jobs:
       contents: write             # Release 作成権限
 
     steps:
-      # 1. コードをチェックアウト
+      # コードをチェックアウト
       - name: Checkout
         uses: actions/checkout@v3
 
-      # 2. Node.js セットアップ
+      # Node.js セットアップ
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20'
 
-      # 3. Rust ツールチェインセットアップ
+      # Rust ツールチェインセットアップ
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
 
-      # 4. フロントエンド依存インストール
+      # フロントエンド依存インストール
       - name: Install frontend deps
         run: npm ci --prefix suiperchat_streamer_app
 
-      # 5. Npcap SDK インストール (Windows のみ)
-      - name: Install Npcap SDK (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $version = '1.15'
-          $zip     = "npcap-sdk-$version.zip"
-          $url     = "https://npcap.com/dist/$zip"
-
-          Write-Host "Downloading Npcap SDK $version from $url"
-          Invoke-WebRequest $url -OutFile $zip
-
-          Write-Host "Extracting Npcap SDK..."
-          Expand-Archive $zip -DestinationPath ${{ github.workspace }} # ★展開先をワークスペースルートに変更
-
-          $sdkLib = Join-Path ${{ github.workspace }} "npcap-sdk-$version\Lib\x64" # ★パスもワークスペース基準に
-          Write-Host "Npcap SDK Lib path: $sdkLib"
-          # ★ RUSTFLAGS 環境変数を設定して GITHUB_ENV に追加
-          Add-Content -Path $env:GITHUB_ENV -Value "RUSTFLAGS=-L native=$sdkLib"
-
-      # 7. Tauri ビルド & GitHub Release
-      - name: Build & Release (macOS)
-        if: runner.os == 'macos-latest'
+      # Tauri ビルド & GitHub Release
+      - name: Build & Release
         uses: tauri-apps/tauri-action@v0
         with:
           projectPath:        suiperchat_streamer_app
@@ -75,21 +54,4 @@ jobs:
           GITHUB_TOKEN:                       ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
-
-      - name: Build & Release (Windows)
-        if: runner.os == 'Windows'
-        uses: tauri-apps/tauri-action@v0
-        with:
-          projectPath:        suiperchat_streamer_app
-          tagName:            ${{ github.ref_name }}
-          releaseName:        ${{ github.ref_name }}
-          releaseDraft:       false
-          includeUpdaterJson: true
-          # ★ args での指定は削除
-          # args: ${{ format('-Clink-args=/LIBPATH:{0}\\npcap-sdk-1.15\\Lib\\x64', github.workspace) }}
-        env:
-          RUSTFLAGS: ${{ env.RUSTFLAGS }} # ★ RUSTFLAGS を tauri-action に渡す
-          GITHUB_TOKEN:                       ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          NPCAP_LIB_PATH:                     ${{ github.workspace }}/suiperchat_streamer_app/src-tauri/npcap_sdk
