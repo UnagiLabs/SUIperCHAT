@@ -48,7 +48,7 @@ jobs:
           projectPath:        suiperchat_streamer_app
           tagName:            ${{ github.ref_name }}
           releaseName:        ${{ github.ref_name }}
-          releaseDraft:       false
+          releaseDraft:       true
           includeUpdaterJson: true
         env:
           GITHUB_TOKEN:                       ${{ secrets.GITHUB_TOKEN }}

@@ -26,6 +26,7 @@
 	"bundle": {
 		"active": true,
 		"targets": "all",
+        "createUpdaterArtifacts": true,
 		"icon": [
 			"icons/32x32.png",
 			"icons/128x128.png",
@@ -40,7 +41,7 @@
 		"http": null,
 		"updater": {
 			"endpoints": [
-				"https://raw.githubusercontent.com/bu-bu-BUTASAN/SUIperCHAT/main/latest.json"
+				"https://github.com/bu-bu-BUTASAN/SUIperCHAT/releases/download/{{current_version}}/latest.json"
 			],
 			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNEQ0JFMTdBOTM0RTk1QzMKUldURGxVNlRldUhMUFZIbk9VcFJWK00vTUh2MlhaUDJiZ2g5Q0xuMENhdnM2Z3hLdy9wendoQ2oK"
 		}
