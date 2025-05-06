@@ -68,7 +68,7 @@ export default function HomePage() {
 
 			<footer className="flex gap-[24px] flex-wrap items-center justify-center">
 				<div className="text-sm text-muted-foreground">
-					© 2023 SUIperCHAT. All rights reserved.
+					© 2025 Unagi Labs. All rights reserved.
 				</div>
 			</footer>
 
