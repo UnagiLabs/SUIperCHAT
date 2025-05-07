@@ -41,7 +41,7 @@
 		"http": null,
 		"updater": {
 			"endpoints": [
-				"https://github.com/bu-bu-BUTASAN/SUIperCHAT/releases/download/{{current_version}}/latest.json"
+				"https://github.com/UnagiLabs/SUIperCHAT/releases/download/{{current_version}}/latest.json"
 			],
 			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNEQ0JFMTdBOTM0RTk1QzMKUldURGxVNlRldUhMUFZIbk9VcFJWK00vTUh2MlhaUDJiZ2g5Q0xuMENhdnM2Z3hLdy9wendoQ2oK"
 		}
