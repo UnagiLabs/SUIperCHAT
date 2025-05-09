@@ -1,5 +1,8 @@
 {
     "rust-analyzer.linkedProjects": [
         "./suiperchat_streamer_app/src-tauri/Cargo.toml"
+    ],
+    "github.copilot.chat.commitMessageGeneration.instructions": [
+        { "file": ".github/commit-instructions.md" }
     ]
-} 
+}
