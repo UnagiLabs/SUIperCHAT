@@ -61,6 +61,17 @@ export default function ServerControl() {
 	 * サーバーを開始する関数
 	 */
 	const handle_start_server = async () => {
+		// ローカルストレージからウォレットアドレスを取得
+		const wallet_address = localStorage.getItem('suiperchat_wallet_address');
+
+		// ウォレットアドレスが存在しない場合
+		if (!wallet_address) {
+			toast.error("ウォレットアドレス未設定", {
+				description: "サーバーを起動するにはウォレットアドレスを設定してください。",
+			});
+			return; // サーバー起動処理を中断
+		}
+
 		set_is_loading(true);
 		try {
 			// Rust側のコマンド `start_websocket_server` を呼び出す
