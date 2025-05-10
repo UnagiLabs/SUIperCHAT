@@ -61,23 +61,14 @@ export default function ServerControl() {
 	 * サーバーを開始する関数
 	 */
 	const handle_start_server = async () => {
-		// ローカルストレージからウォレットアドレスを取得
-		const wallet_address = localStorage.getItem('suiperchat_wallet_address');
-
-		// ウォレットアドレスが存在しない場合
-		if (!wallet_address) {
-			toast.error("ウォレットアドレス未設定", {
-				description: "サーバーを起動するにはウォレットアドレスを設定してください。",
-			});
-			return; // サーバー起動処理を中断
-		}
-
 		set_is_loading(true);
 		try {
-			// Rust側のコマンド `start_websocket_server` を呼び出す
-			// 状態更新はイベントリスナーに任せる
+			// get_streamer_info を呼び出してウォレットアドレスの有無を確認
+			await invoke("get_streamer_info");
+
+			// ウォレットアドレスが存在する場合のみサーバー起動コマンドを呼び出す
 			await invoke("start_websocket_server");
-			// ここでの状態更新は削除
+			// 状態更新はイベントリスナーに任せる
 			// toast通知もイベントリスナー側で行う
 		} catch (error) {
 			const error_message =
@@ -86,11 +77,18 @@ export default function ServerControl() {
 				"サーバーの起動コマンド呼び出しに失敗しました:",
 				error_message,
 			);
-			// 状態はイベント経由で更新されるはずだが、念のためローディング解除
-			// toast通知もイベントリスナー側（またはエラーケースのイベント）で行う
-			toast.error("Server Start Command Error", {
-				description: `Failed to invoke start command: ${error_message}`,
-			});
+
+			// ウォレットアドレス未設定のエラーメッセージをチェック
+			if (error_message.includes("Wallet address is not set. Please configure it first.")) {
+				toast.error("Wallet Address Not Set", {
+					description: "Please set your wallet address in the settings to start the server.",
+				});
+			} else {
+				// その他のエラーの場合
+				toast.error("Server Start Command Error", {
+					description: `Failed to invoke start command: ${error_message}`,
+				});
+			}
 		} finally {
 			set_is_loading(false);
 		}
