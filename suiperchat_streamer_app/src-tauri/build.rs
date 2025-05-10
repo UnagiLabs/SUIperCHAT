@@ -12,9 +12,12 @@ fn main() {
                 // リンカーにライブラリ検索パスを指示
                 println!("cargo:rustc-link-search=native={}", npcap_path.display());
                 println!("cargo:rerun-if-env-changed=NPCAP_LIB_PATH"); // 環境変数が変わったら再実行
-                println!("cargo:rerun-if-changed=build.rs");          // このファイルが変わったら再実行
-                // デバッグメッセージ（GitHub Actionsのログで確認できる）
-                eprintln!("✅ Added Npcap SDK link search path: {}", npcap_path.display());
+                println!("cargo:rerun-if-changed=build.rs"); // このファイルが変わったら再実行
+                                                             // デバッグメッセージ（GitHub Actionsのログで確認できる）
+                eprintln!(
+                    "✅ Added Npcap SDK link search path: {}",
+                    npcap_path.display()
+                );
 
                 // Packet.lib と wpcap.lib をリンクするように指示
                 // (依存クレートが既に行っている可能性もあるが、念のため追加)
@@ -22,7 +25,6 @@ fn main() {
                 //   エラーが解消しない場合や別のリンカーエラーが出た場合はコメントアウトも検討。
                 // println!("cargo:rustc-link-lib=dylib=Packet");
                 // println!("cargo:rustc-link-lib=dylib=wpcap");
-
             } else {
                 // パスが存在しない場合のエラーメッセージ
                 panic!("❌ NPCAP_LIB_PATH environment variable points to a non-existent or non-directory path: {}. Please check the path in your workflow file.", npcap_path.display());
