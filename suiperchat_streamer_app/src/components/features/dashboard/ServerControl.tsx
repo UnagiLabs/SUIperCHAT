@@ -79,9 +79,14 @@ export default function ServerControl() {
 			);
 
 			// ウォレットアドレス未設定のエラーメッセージをチェック
-			if (error_message.includes("Wallet address is not set. Please configure it first.")) {
+			if (
+				error_message.includes(
+					"Wallet address is not set. Please configure it first.",
+				)
+			) {
 				toast.error("Wallet Address Not Set", {
-					description: "Please set your wallet address in the settings to start the server.",
+					description:
+						"Please set your wallet address in the settings to start the server.",
 				});
 			} else {
 				// その他のエラーの場合
