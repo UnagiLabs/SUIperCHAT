@@ -23,7 +23,7 @@ pub use state::AppState;
 
 // Tauri コマンド関数の再エクスポート
 pub use commands::server::{start_websocket_server, stop_websocket_server};
-pub use commands::wallet::{get_streamer_info, set_wallet_address};
+pub use commands::wallet::{get_streamer_info, get_wallet_address, set_wallet_address};
 // 接続管理コマンドの再エクスポート
 pub use commands::connection::{disconnect_client, get_connections_info, set_connection_limits};
 // 履歴関連コマンドの再エクスポート
@@ -238,6 +238,7 @@ pub fn run() {
             commands::server::stop_websocket_server,
             // ウォレット関連コマンド
             commands::wallet::set_wallet_address,
+            commands::wallet::get_wallet_address,
             commands::wallet::get_streamer_info,
             // 接続管理コマンド
             commands::connection::get_connections_info,
