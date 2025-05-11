@@ -332,41 +332,68 @@ export function SuperchatForm({
 					transaction: tx,
 				},
 				{
-					onSuccess: (result) => {
-						console.log("Transaction successful:", result);
+					onSuccess: async (result) => { // async を追加
+						console.log("Transaction broadcast successful:", result);
 						const digest = result.digest;
 
-						// WebSocketを使ってスーパーチャットメッセージを送信
-						actions.sendSuperchatMessage(
-							values.display_name,
-							values.message || "",
-							{
-								amount: values.amount,
-								tx_hash: digest,
-								wallet_address: currentAccount.address,
-							},
-						);
+						try {
+							// トランザクションの詳細と実行結果を取得
+							const txDetails = await suiClient.getTransactionBlock({
+								digest: digest,
+								options: { showEffects: true },
+							});
 
-						toast.success("Super Chat sent successfully!", {
-							description: `Transaction digest: ${digest.substring(0, 8)}...`,
-						});
+							// トランザクションが成功したか確認
+							if (txDetails.effects?.status.status === 'success') {
+								console.log("Transaction successfully executed on chain.");
+								// WebSocketを使ってスーパーチャットメッセージを送信
+								actions.sendSuperchatMessage(
+									values.display_name,
+									values.message || "",
+									{
+										amount: values.amount,
+										tx_hash: digest,
+										wallet_address: currentAccount.address,
+									},
+								);
 
-						// コールバック関数があれば実行
-						on_send_success?.(
-							values.amount,
-							values.display_name,
-							values.message || "",
-							digest,
-						);
+								toast.success("Super Chat sent successfully!", {
+									description: `Transaction digest: ${digest.substring(0, 8)}...`,
+								});
 
-						// フォームをリセット
-						form.reset({
-							...default_values,
-							recipient_address: values.recipient_address,
-						});
+								// コールバック関数があれば実行
+								on_send_success?.(
+									values.amount,
+									values.display_name,
+									values.message || "",
+									digest,
+								);
 
-						// 確認モードをリセット
-						set_confirm_mode(false);
+								// フォームをリセット
+								form.reset({
+									...default_values,
+									recipient_address: values.recipient_address,
+								});
+
+								// 確認モードをリセット
+								set_confirm_mode(false);
+							} else {
+								// トランザクション失敗時の処理 (ガス不足など)
+								console.warn("Transaction was not successful on chain:", txDetails.effects?.status.error);
+								toast.error("Super Chat failed", {
+									description: txDetails.effects?.status.error || "Transaction execution failed.",
+								});
+								// 確認モードをリセット
+								set_confirm_mode(false);
+							}
+						} catch (error) {
+							console.error("Failed to get transaction details or process success:", error);
+							toast.error("Super Chat processing failed", {
+								description: error instanceof Error ? error.message : String(error),
+							});
+							// 確認モードをリセット
+							set_confirm_mode(false);
+						}
 					},
 					onError: (error) => {
 						console.error("Transaction failed:", error);
