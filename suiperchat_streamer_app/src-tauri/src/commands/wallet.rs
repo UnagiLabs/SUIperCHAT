@@ -76,6 +76,38 @@ pub fn set_wallet_address(
     Ok(())
 }
 
+/// ## 単純にウォレットアドレスを取得する Tauri コマンド
+///
+/// 現在設定されているウォレットアドレスのみを返します。
+/// サーバーの状態に依存しないため、サーバー起動前にウォレットアドレスの
+/// 確認を行う場合に使用します。
+///
+/// ### Arguments
+/// - `app_state`: Tauri の管理するアプリケーション状態 (`State<AppState>`)
+///
+/// ### Returns
+/// - `Result<{ wallet_address: Option<String> }, String>`: 成功した場合はウォレットアドレスを含むオブジェクト
+#[command]
+pub fn get_wallet_address(app_state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    println!("Getting wallet address...");
+
+    // ウォレットアドレスを取得
+    let wallet_addr_guard = app_state
+        .wallet_address
+        .lock()
+        .map_err(|_| "Failed to lock wallet address mutex".to_string())?;
+
+    // JSONオブジェクトを作成
+    // wallet_addressが存在する場合はそれを、存在しない場合はnullを返す
+    let json_result = if let Some(addr) = wallet_addr_guard.as_ref() {
+        serde_json::json!({ "wallet_address": addr })
+    } else {
+        serde_json::json!({ "wallet_address": null })
+    };
+
+    Ok(json_result)
+}
+
 /// ## 配信者情報を取得する Tauri コマンド
 ///
 /// 現在設定されている配信者のウォレットアドレスと、
