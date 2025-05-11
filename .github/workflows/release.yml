@@ -13,7 +13,7 @@ jobs:
         include:
           - os: windows-latest    # Windows x64
             args: ''
-          - os: macos-latest      # macOS (Apple/Intel 両対応)
+          - os: macos-latest      # macOS (Apple Silicon)
             args: ''
 
     runs-on: ${{ matrix.os }}
