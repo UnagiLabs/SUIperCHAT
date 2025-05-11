@@ -63,8 +63,18 @@ export default function ServerControl() {
 	const handle_start_server = async () => {
 		set_is_loading(true);
 		try {
-			// get_streamer_info を呼び出してウォレットアドレスの有無を確認
-			await invoke("get_streamer_info");
+			// ウォレットアドレスの存在チェックのみを行う
+			// get_streamer_info を呼び出すとサーバーが起動していないことでエラーになるため、より単純なチェックを行う
+			const wallet_info = await invoke<{ wallet_address: string | null }>(
+				"get_wallet_address",
+			);
+
+			// ウォレットアドレスが設定されていない場合はエラー
+			if (!wallet_info.wallet_address) {
+				throw new Error(
+					"Wallet address is not set. Please configure it first.",
+				);
+			}
 
 			// ウォレットアドレスが存在する場合のみサーバー起動コマンドを呼び出す
 			await invoke("start_websocket_server");
