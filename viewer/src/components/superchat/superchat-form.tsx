@@ -14,9 +14,10 @@
  */
 "use client";
 
+import { useUser } from "@/context/UserContext";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Coins } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
@@ -145,6 +146,11 @@ export function SuperchatForm({
 	// WebSocketコンテキストを取得
 	const { actions } = useWebSocket();
 
+	// ユーザー名コンテキストを取得
+	const { username, setUsername } = useUser();
+	// 名前入力後の自動保存用タイマー参照
+	const debouncedNameUpdate = useRef<NodeJS.Timeout | null>(null);
+
 	// Suiクライアントとウォレット接続ステータスを取得
 	const suiClient = useSuiClient(); // suiClient を取得
 	const currentAccount = useCurrentAccount();
@@ -157,15 +163,23 @@ export function SuperchatForm({
 		defaultValues: {
 			...default_values,
 			recipient_address: initial_recipient_address,
+			display_name: username || default_values.display_name,
 		},
 	});
 
-	// 初期アドレスが変更された場合にフォームを更新
+	// 初期アドレスとユーザー名が変更された場合にフォームを更新
 	useEffect(() => {
 		if (initial_recipient_address) {
 			form.setValue("recipient_address", initial_recipient_address);
 		}
 	}, [initial_recipient_address, form]);
+
+	// ユーザー名が変更された場合にフォームを更新
+	useEffect(() => {
+		if (username) {
+			form.setValue("display_name", username);
+		}
+	}, [username, form]);
 
 	/**
 	 * フォーム送信ハンドラー
@@ -173,11 +187,39 @@ export function SuperchatForm({
 	 * @param values - フォームの入力値
 	 */
 	async function on_submit(values: SuperchatFormValues) {
-		// ウォレット接続チェック
-		if (!currentAccount) {
-			toast.error("Wallet not connected", {
-				description: "Please connect your wallet to send a Super Chat",
+		// チップ金額が0より大きい場合のみウォレット接続チェック
+		if (values.amount > 0 && !currentAccount) {
+			toast.error("Wallet Connection Required", {
+				description: (
+					<div className="mt-2 flex flex-col gap-2">
+						<p>Wallet connection is required to send SUI tips.</p>
+						<p>
+							Please connect your wallet using the "Connect Wallet" button at
+							the top.
+						</p>
+						<p>
+							Alternatively, you can change the amount to "No tips" to send a
+							message without wallet connection.
+						</p>
+						<Button
+							variant="outline"
+							size="sm"
+							className="mt-1"
+							onClick={() => {
+								form.setValue("amount", 0);
+								toast.success("Amount changed to No tips", {
+									description:
+										"You can now send your message without wallet connection",
+								});
+							}}
+						>
+							Change to No tips
+						</Button>
+					</div>
+				),
+				duration: 10000,
 			});
+			set_confirm_mode(false);
 			return;
 		}
 
@@ -227,6 +269,15 @@ export function SuperchatForm({
 
 		// === ステップ3: PTB構築 ===
 		try {
+			// ウォレット接続チェック (念のため)
+			if (!currentAccount) {
+				toast.error("Wallet Connection Required", {
+					description: "Please connect your wallet to send SUI tips.",
+				});
+				set_confirm_mode(false);
+				return;
+			}
+
 			// 1. SUI → MIST 換算
 			const suiAmountMist = suiToMist(values.amount);
 			const GAS_BUDGET = BigInt(DEFAULT_GAS_BUDGET);
@@ -332,7 +383,7 @@ export function SuperchatForm({
 					transaction: tx,
 				},
 				{
-					onSuccess: async (result) => { // async を追加
+					onSuccess: async (result) => {
 						console.log("Transaction broadcast successful:", result);
 						const digest = result.digest;
 
@@ -344,7 +395,7 @@ export function SuperchatForm({
 							});
 
 							// トランザクションが成功したか確認
-							if (txDetails.effects?.status.status === 'success') {
+							if (txDetails.effects?.status.status === "success") {
 								console.log("Transaction successfully executed on chain.");
 								// WebSocketを使ってスーパーチャットメッセージを送信
 								actions.sendSuperchatMessage(
@@ -379,17 +430,26 @@ export function SuperchatForm({
 								set_confirm_mode(false);
 							} else {
 								// トランザクション失敗時の処理 (ガス不足など)
-								console.warn("Transaction was not successful on chain:", txDetails.effects?.status.error);
+								console.warn(
+									"Transaction was not successful on chain:",
+									txDetails.effects?.status.error,
+								);
 								toast.error("Super Chat failed", {
-									description: txDetails.effects?.status.error || "Transaction execution failed.",
+									description:
+										txDetails.effects?.status.error ||
+										"Transaction execution failed.",
 								});
 								// 確認モードをリセット
 								set_confirm_mode(false);
 							}
 						} catch (error) {
-							console.error("Failed to get transaction details or process success:", error);
+							console.error(
+								"Failed to get transaction details or process success:",
+								error,
+							);
 							toast.error("Super Chat processing failed", {
-								description: error instanceof Error ? error.message : String(error),
+								description:
+									error instanceof Error ? error.message : String(error),
 							});
 							// 確認モードをリセット
 							set_confirm_mode(false);
@@ -494,7 +554,18 @@ export function SuperchatForm({
 																? `${option.color} text-white`
 																: ""
 														}
-														onClick={() => field.onChange(option.value)}
+														onClick={() => {
+															field.onChange(option.value);
+
+															// 金額変更時のガイダンス表示
+															if (option.value > 0 && !currentAccount) {
+																toast.info("Wallet Connection Required", {
+																	description:
+																		"Please connect your wallet using the 'Connect Wallet' button at the top to send SUI tips.",
+																	duration: 5000,
+																});
+															}
+														}}
 													>
 														<Coins className="mr-2 h-4 w-4" />
 														{option.label}
@@ -503,6 +574,21 @@ export function SuperchatForm({
 											</div>
 										</div>
 									</FormControl>
+									<FormDescription>
+										{form.watch("amount") > 0 ? (
+											<span
+												className={
+													!currentAccount ? "text-amber-500 font-medium" : ""
+												}
+											>
+												{!currentAccount
+													? "Wallet connection required for sending SUI"
+													: "SUI will be sent with your message"}
+											</span>
+										) : (
+											"Send message only (no wallet connection needed)"
+										)}
+									</FormDescription>
 									<FormMessage />
 								</FormItem>
 							)}
@@ -543,9 +629,30 @@ export function SuperchatForm({
 								<FormItem>
 									<FormLabel>Display Name</FormLabel>
 									<FormControl>
-										<Input placeholder="Your display name" {...field} />
+										<Input
+											placeholder="Your display name"
+											{...field}
+											onChange={(e) => {
+												field.onChange(e);
+												// ユーザー名の更新（debounce処理）
+												if (debouncedNameUpdate.current) {
+													clearTimeout(debouncedNameUpdate.current);
+												}
+												debouncedNameUpdate.current = setTimeout(() => {
+													setUsername(e.target.value);
+													toast.success("Display name saved", {
+														description:
+															"This name will be used for your future messages",
+														duration: 2000,
+													});
+												}, 1000);
+											}}
+										/>
 									</FormControl>
-									<FormDescription>Name shown on stream</FormDescription>
+									<FormDescription>
+										This name will be displayed with your message. Changes will
+										be automatically saved.
+									</FormDescription>
 									<FormMessage />
 								</FormItem>
 							)}

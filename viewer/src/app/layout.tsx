@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "@mysten/dapp-kit/dist/index.css";
 import { ClientProviders } from "@/components/providers/client-providers";
+import { UserProvider } from "@/context/UserContext";
 
 /**
  * Geistサンフォントの設定
@@ -64,7 +65,9 @@ export default function RootLayout({
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen`}
 			>
-				<ClientProviders>{children}</ClientProviders>
+				<ClientProviders>
+					<UserProvider>{children}</UserProvider>
+				</ClientProviders>
 				{/* バージョン情報を画面左下に表示 */}
 				<div className="fixed bottom-2 left-2 z-50">
 					<p className="text-xs text-muted-foreground">v{appVersion}</p>
