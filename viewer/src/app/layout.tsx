@@ -66,9 +66,7 @@ export default function RootLayout({
 				className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen`}
 			>
 				<ClientProviders>
-					<UserProvider>
-						{children}
-					</UserProvider>
+					<UserProvider>{children}</UserProvider>
 				</ClientProviders>
 				{/* バージョン情報を画面左下に表示 */}
 				<div className="fixed bottom-2 left-2 z-50">

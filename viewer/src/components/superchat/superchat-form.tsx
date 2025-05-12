@@ -269,6 +269,15 @@ export function SuperchatForm({
 
 		// === ステップ3: PTB構築 ===
 		try {
+			// ウォレット接続チェック (念のため)
+			if (!currentAccount) {
+				toast.error("Wallet Connection Required", {
+					description: "Please connect your wallet to send SUI tips.",
+				});
+				set_confirm_mode(false);
+				return;
+			}
+
 			// 1. SUI → MIST 換算
 			const suiAmountMist = suiToMist(values.amount);
 			const GAS_BUDGET = BigInt(DEFAULT_GAS_BUDGET);

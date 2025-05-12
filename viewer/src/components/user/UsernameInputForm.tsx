@@ -29,6 +29,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useUser } from "@/context/UserContext";
 import { zodResolver } from "@hookform/resolvers/zod";
+import type React from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -51,7 +52,7 @@ type FormValues = z.infer<typeof form_schema>;
  *
  * @returns ユーザー名入力フォームのJSXエレメント
  */
-export function UsernameInputForm(): JSX.Element {
+export function UsernameInputForm(): React.ReactElement {
 	const { setUsername } = useUser();
 
 	// フォームの設定
