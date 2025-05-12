@@ -31,13 +31,13 @@ export function HeaderWalletButton(): React.ReactElement {
 					<WalletConnectButton
 						buttonContent={
 							<>
-								Connect Wallet <span className="text-xs ml-1">(任意)</span>
+								Connect Wallet <span className="text-xs ml-1">(Optional)</span>
 							</>
 						}
 						className="text-sm border rounded-md px-4 py-2"
 					/>
 					<span className="text-xs text-muted-foreground mt-1">
-						SUI送信時のみ必要
+						Only required for sending SUI
 					</span>
 				</div>
 			)}

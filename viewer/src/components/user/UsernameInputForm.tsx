@@ -36,10 +36,10 @@ import { z } from "zod";
 const form_schema = z.object({
 	username: z
 		.string()
-		.min(1, "名前を入力してください")
-		.max(20, "名前は20文字以内にしてください")
+		.min(1, "Please enter your name")
+		.max(20, "Name must be within 20 characters")
 		.refine((name) => !/[<>]/.test(name), {
-			message: "無効な文字が含まれています",
+			message: "Contains invalid characters",
 		}),
 });
 
@@ -75,7 +75,7 @@ export function UsernameInputForm(): JSX.Element {
 		<Card className="w-full max-w-md mx-auto">
 			<CardHeader>
 				<CardTitle className="text-2xl text-center">
-					SUIperCHAT へようこそ
+					Welcome to SUIperCHAT
 				</CardTitle>
 			</CardHeader>
 			<CardContent>
@@ -86,28 +86,28 @@ export function UsernameInputForm(): JSX.Element {
 							name="username"
 							render={({ field }) => (
 								<FormItem>
-									<FormLabel>表示名</FormLabel>
+									<FormLabel>Display Name</FormLabel>
 									<FormControl>
-										<Input placeholder="あなたの名前" {...field} />
+										<Input placeholder="Your name" {...field} />
 									</FormControl>
 									<FormDescription>
-										この名前は配信中にメッセージと一緒に表示されます
+										This name will be displayed with your message in the stream
 									</FormDescription>
 									<FormMessage />
 								</FormItem>
 							)}
 						/>
 						<Button type="submit" className="w-full">
-							始める
+							Get Started
 						</Button>
 					</form>
 				</Form>
 			</CardContent>
 			<CardFooter className="text-sm text-center text-muted-foreground">
 				<p className="w-full">
-					ウォレット接続はSUIチップを送る場合のみ必要です。
+					Wallet connection is required only for sending SUI tips.
 					<br />
-					メッセージのみの送信は、ウォレット接続なしで可能です。
+					You can send messages without connecting your wallet.
 				</p>
 			</CardFooter>
 		</Card>

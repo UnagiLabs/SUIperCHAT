@@ -15,9 +15,6 @@ import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Toaster } from "sonner";
 
-import { WalletConnectButton } from "@/components/wallet/wallet-connect-button";
-import { useCurrentAccount } from "@mysten/dapp-kit";
-
 import { SuperchatComplete } from "./superchat-complete";
 import { SuperchatForm } from "./superchat-form";
 
@@ -74,9 +71,6 @@ export function Superchat({ className = "", on_send_success }: SuperchatProps) {
 		display_name: "",
 		message: "",
 	});
-
-	// 現在のウォレットアカウント
-	const account = useCurrentAccount();
 
 	/**
 	 * 送信成功時のハンドラー
