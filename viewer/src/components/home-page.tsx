@@ -3,7 +3,9 @@
 import { useWebSocket } from "@/components/providers/WebSocketProvider";
 import { Superchat } from "@/components/superchat/superchat";
 import { WebSocketConnectionStatus } from "@/components/superchat/ws-connection-status";
+import { UsernameInputForm } from "@/components/user/UsernameInputForm";
 import { HeaderWalletButton } from "@/components/wallet/header-wallet-button";
+import { useUser } from "@/context/UserContext";
 import { ConnectionStatus } from "@/lib/types/websocket";
 import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
@@ -11,6 +13,7 @@ import { useEffect } from "react";
 export default function HomePage() {
 	const search_params = useSearchParams();
 	const { state, actions } = useWebSocket();
+	const { isUsernameSet } = useUser();
 
 	useEffect(() => {
 		const ws_url_encoded = search_params.get("wsUrl");
@@ -63,7 +66,7 @@ export default function HomePage() {
 			</header>
 
 			<main className="flex flex-col gap-8 w-full">
-				<Superchat />
+				{!isUsernameSet ? <UsernameInputForm /> : <Superchat />}
 			</main>
 
 			<footer className="flex gap-[24px] flex-wrap items-center justify-center">

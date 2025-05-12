@@ -117,35 +117,24 @@ export function Superchat({ className = "", on_send_success }: SuperchatProps) {
 		<div className={`superchat ${className}`}>
 			<Toaster richColors position="top-center" />
 
-			{!account ? (
-				<div className="w-full max-w-md mx-auto p-6 text-center">
-					<h3 className="text-xl font-semibold mb-4">
-						Connect your wallet to send a Super Chat
-					</h3>
-					<div className="flex justify-center">
-						<WalletConnectButton className="mx-auto" />
-					</div>
-				</div>
-			) : (
-				<>
-					{send_state === "form" && (
-						<SuperchatForm
-							on_send_success={handle_send_success}
-							initial_recipient_address={streamer_address}
-						/>
-					)}
+			<>
+				{send_state === "form" && (
+					<SuperchatForm
+						on_send_success={handle_send_success}
+						initial_recipient_address={streamer_address}
+					/>
+				)}
 
-					{send_state === "complete" && (
-						<SuperchatComplete
-							amount={complete_info.amount}
-							display_name={complete_info.display_name}
-							message={complete_info.message}
-							transaction_id={complete_info.transaction_id}
-							on_close={handle_close_complete}
-						/>
-					)}
-				</>
-			)}
+				{send_state === "complete" && (
+					<SuperchatComplete
+						amount={complete_info.amount}
+						display_name={complete_info.display_name}
+						message={complete_info.message}
+						transaction_id={complete_info.transaction_id}
+						on_close={handle_close_complete}
+					/>
+				)}
+			</>
 		</div>
 	);
 }

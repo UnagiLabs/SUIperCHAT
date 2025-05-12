@@ -14,9 +14,10 @@
  */
 "use client";
 
+import { useUser } from "@/context/UserContext";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Coins } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
@@ -145,6 +146,11 @@ export function SuperchatForm({
 	// WebSocketコンテキストを取得
 	const { actions } = useWebSocket();
 
+	// ユーザー名コンテキストを取得
+	const { username, setUsername } = useUser();
+	// 名前入力後の自動保存用タイマー参照
+	const debouncedNameUpdate = useRef<NodeJS.Timeout | null>(null);
+
 	// Suiクライアントとウォレット接続ステータスを取得
 	const suiClient = useSuiClient(); // suiClient を取得
 	const currentAccount = useCurrentAccount();
@@ -157,15 +163,23 @@ export function SuperchatForm({
 		defaultValues: {
 			...default_values,
 			recipient_address: initial_recipient_address,
+			display_name: username || default_values.display_name,
 		},
 	});
 
-	// 初期アドレスが変更された場合にフォームを更新
+	// 初期アドレスとユーザー名が変更された場合にフォームを更新
 	useEffect(() => {
 		if (initial_recipient_address) {
 			form.setValue("recipient_address", initial_recipient_address);
 		}
 	}, [initial_recipient_address, form]);
+
+	// ユーザー名が変更された場合にフォームを更新
+	useEffect(() => {
+		if (username) {
+			form.setValue("display_name", username);
+		}
+	}, [username, form]);
 
 	/**
 	 * フォーム送信ハンドラー
@@ -173,11 +187,38 @@ export function SuperchatForm({
 	 * @param values - フォームの入力値
 	 */
 	async function on_submit(values: SuperchatFormValues) {
-		// ウォレット接続チェック
-		if (!currentAccount) {
-			toast.error("Wallet not connected", {
-				description: "Please connect your wallet to send a Super Chat",
+		// チップ金額が0より大きい場合のみウォレット接続チェック
+		if (values.amount > 0 && !currentAccount) {
+			toast.error("ウォレット接続が必要です", {
+				description: (
+					<div className="mt-2 flex flex-col gap-2">
+						<p>SUIチップを送るにはウォレット接続が必要です。</p>
+						<p>
+							画面上部の「Connect
+							Wallet」ボタンからウォレットを接続してください。
+						</p>
+						<p>
+							または、金額を「No
+							tips」に変更すると、ウォレット接続なしでメッセージを送信できます。
+						</p>
+						<Button
+							variant="outline"
+							size="sm"
+							className="mt-1"
+							onClick={() => {
+								form.setValue("amount", 0);
+								toast.success("金額を「No tips」に変更しました", {
+									description: "ウォレット接続なしでメッセージを送信できます",
+								});
+							}}
+						>
+							No tipsに変更する
+						</Button>
+					</div>
+				),
+				duration: 10000,
 			});
+			set_confirm_mode(false);
 			return;
 		}
 
@@ -332,7 +373,8 @@ export function SuperchatForm({
 					transaction: tx,
 				},
 				{
-					onSuccess: async (result) => { // async を追加
+					onSuccess: async (result) => {
+						// async を追加
 						console.log("Transaction broadcast successful:", result);
 						const digest = result.digest;
 
@@ -344,7 +386,7 @@ export function SuperchatForm({
 							});
 
 							// トランザクションが成功したか確認
-							if (txDetails.effects?.status.status === 'success') {
+							if (txDetails.effects?.status.status === "success") {
 								console.log("Transaction successfully executed on chain.");
 								// WebSocketを使ってスーパーチャットメッセージを送信
 								actions.sendSuperchatMessage(
@@ -379,17 +421,26 @@ export function SuperchatForm({
 								set_confirm_mode(false);
 							} else {
 								// トランザクション失敗時の処理 (ガス不足など)
-								console.warn("Transaction was not successful on chain:", txDetails.effects?.status.error);
+								console.warn(
+									"Transaction was not successful on chain:",
+									txDetails.effects?.status.error,
+								);
 								toast.error("Super Chat failed", {
-									description: txDetails.effects?.status.error || "Transaction execution failed.",
+									description:
+										txDetails.effects?.status.error ||
+										"Transaction execution failed.",
 								});
 								// 確認モードをリセット
 								set_confirm_mode(false);
 							}
 						} catch (error) {
-							console.error("Failed to get transaction details or process success:", error);
+							console.error(
+								"Failed to get transaction details or process success:",
+								error,
+							);
 							toast.error("Super Chat processing failed", {
-								description: error instanceof Error ? error.message : String(error),
+								description:
+									error instanceof Error ? error.message : String(error),
 							});
 							// 確認モードをリセット
 							set_confirm_mode(false);
@@ -494,7 +545,18 @@ export function SuperchatForm({
 																? `${option.color} text-white`
 																: ""
 														}
-														onClick={() => field.onChange(option.value)}
+														onClick={() => {
+															field.onChange(option.value);
+
+															// 金額変更時のガイダンス表示
+															if (option.value > 0 && !currentAccount) {
+																toast.info("ウォレット接続が必要です", {
+																	description:
+																		"SUIチップを送るには画面上部の「Connect Wallet」ボタンからウォレットを接続してください。",
+																	duration: 5000,
+																});
+															}
+														}}
 													>
 														<Coins className="mr-2 h-4 w-4" />
 														{option.label}
@@ -503,6 +565,21 @@ export function SuperchatForm({
 											</div>
 										</div>
 									</FormControl>
+									<FormDescription>
+										{form.watch("amount") > 0 ? (
+											<span
+												className={
+													!currentAccount ? "text-amber-500 font-medium" : ""
+												}
+											>
+												{!currentAccount
+													? "SUI送信にはウォレット接続が必要です"
+													: "SUIはメッセージと一緒に送信されます"}
+											</span>
+										) : (
+											"メッセージのみ送信（ウォレット接続不要）"
+										)}
+									</FormDescription>
 									<FormMessage />
 								</FormItem>
 							)}
@@ -543,9 +620,29 @@ export function SuperchatForm({
 								<FormItem>
 									<FormLabel>Display Name</FormLabel>
 									<FormControl>
-										<Input placeholder="Your display name" {...field} />
+										<Input
+											placeholder="Your display name"
+											{...field}
+											onChange={(e) => {
+												field.onChange(e);
+												// ユーザー名の更新（debounce処理）
+												if (debouncedNameUpdate.current) {
+													clearTimeout(debouncedNameUpdate.current);
+												}
+												debouncedNameUpdate.current = setTimeout(() => {
+													setUsername(e.target.value);
+													toast.success("表示名を保存しました", {
+														description:
+															"この名前は今後のメッセージにも使用されます",
+														duration: 2000,
+													});
+												}, 1000);
+											}}
+										/>
 									</FormControl>
-									<FormDescription>Name shown on stream</FormDescription>
+									<FormDescription>
+										配信に表示される名前です。変更内容は自動的に保存されます。
+									</FormDescription>
 									<FormMessage />
 								</FormItem>
 							)}

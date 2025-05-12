@@ -21,6 +21,16 @@ interface WalletConnectButtonProps {
 	 * コンポーネントのクラス名
 	 */
 	className?: string;
+
+	/**
+	 * ボタンの内容をカスタマイズするためのReactノード
+	 */
+	buttonContent?: React.ReactNode;
+
+	/**
+	 * ボタンのプロパティ
+	 */
+	buttonProps?: React.ComponentProps<typeof ConnectButton>;
 }
 
 /**
@@ -31,10 +41,17 @@ interface WalletConnectButtonProps {
  */
 export function WalletConnectButton({
 	className = "",
+	buttonContent,
+	buttonProps,
 }: WalletConnectButtonProps): React.ReactElement {
 	return (
 		<div className={`wallet-connect-wrapper ${className}`}>
-			<ConnectButton connectText="Connect Wallet" />
+			<ConnectButton
+				connectText={buttonContent ? undefined : "Connect Wallet"}
+				{...buttonProps}
+			>
+				{buttonContent}
+			</ConnectButton>
 		</div>
 	);
 }
