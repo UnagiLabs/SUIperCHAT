@@ -15,6 +15,7 @@ use sqlx::FromRow;
 /// * `display_name` - 送信者の表示名
 /// * `content` - メッセージの内容
 /// * `amount` - スーパーチャットの金額（通常のチャットはNone）
+/// * `coin` - 使用されたコインの通貨シンボル（"SUI", "USDC"など、通常のチャットはNone）
 /// * `tx_hash` - トランザクションハッシュ（スーパーチャット時）
 /// * `wallet_address` - 送信者のウォレットアドレス（スーパーチャット時）
 /// * `session_id` - 配信セッションの識別子
@@ -26,7 +27,8 @@ pub struct Message {
     #[sqlx(rename = "message")]
     pub content: String,
     // Prisma Float は f64 にマッピング
-    pub amount: Option<f64>, // スパチャでない場合は NULL
+    pub amount: Option<f64>,  // スパチャでない場合は NULL
+    pub coin: Option<String>, // 使用されたコインのシンボル
     pub tx_hash: Option<String>,
     pub wallet_address: Option<String>,
     pub session_id: Option<String>, // どの配信セッションのメッセージかを示すID

@@ -176,10 +176,11 @@ impl WsSession {
             }
             ClientMessage::Superchat(superchat_msg) => {
                 println!(
-                    "Super chat message from {}: {}, Amount: {}, TX: {}",
+                    "Super chat message from {}: {}, Amount: {} {}, TX: {}",
                     superchat_msg.display_name,
                     superchat_msg.content,
                     superchat_msg.superchat.amount,
+                    superchat_msg.superchat.coin,
                     superchat_msg.superchat.tx_hash
                 );
                 // スパチャの検証ロジックを将来的に実装
@@ -245,8 +246,8 @@ impl WsSession {
         let msg_type = match client_msg {
             ClientMessage::Chat(msg) => format!("通常チャット from {}", msg.display_name),
             ClientMessage::Superchat(msg) => format!(
-                "スーパーチャット from {}, 金額:{}",
-                msg.display_name, msg.superchat.amount
+                "スーパーチャット from {}, 金額:{} {}",
+                msg.display_name, msg.superchat.amount, msg.superchat.coin
             ),
         };
         println!("メッセージをデータベースに保存準備中: {}", msg_type);
@@ -259,6 +260,7 @@ impl WsSession {
                 display_name: chat_msg.display_name.clone(),
                 content: chat_msg.content.clone(),
                 amount: Some(0.0), // チャットの場合はデフォルト値 0.0 を設定
+                coin: None,        // 通常チャットの場合はNone
                 tx_hash: None,
                 wallet_address: None,
                 session_id,
@@ -269,6 +271,7 @@ impl WsSession {
                 display_name: superchat_msg.display_name.clone(),
                 content: superchat_msg.content.clone(),
                 amount: Some(superchat_msg.superchat.amount),
+                coin: Some(superchat_msg.superchat.coin.clone()),
                 tx_hash: Some(superchat_msg.superchat.tx_hash.clone()),
                 wallet_address: Some(superchat_msg.superchat.wallet_address.clone()),
                 session_id,

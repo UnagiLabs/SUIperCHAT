@@ -90,6 +90,8 @@ pub enum MessageType {
 pub struct SuperchatData {
     /// 送金額 (SUI単位)
     pub amount: f64,
+    /// 使用されたコインの通貨シンボル (例: "SUI", "USDC")
+    pub coin: String,
     /// トランザクションハッシュ
     pub tx_hash: String,
     /// 送金者のウォレットアドレス
@@ -220,6 +222,7 @@ mod tests {
         // テスト用のスーパーチャットデータを作成
         let superchat_data = SuperchatData {
             amount: 10.0,
+            coin: "SUI".to_string(),
             tx_hash: "0x1234567890abcdef".to_string(),
             wallet_address: "0xabcdef1234567890".to_string(),
         };
@@ -249,6 +252,7 @@ mod tests {
                 assert_eq!(parsed_superchat.display_name, "スパチャユーザー");
                 assert_eq!(parsed_superchat.content, "大応援してます！");
                 assert_eq!(parsed_superchat.superchat.amount, 10.0);
+                assert_eq!(parsed_superchat.superchat.coin, "SUI");
                 assert_eq!(parsed_superchat.superchat.tx_hash, "0x1234567890abcdef");
                 assert_eq!(
                     parsed_superchat.superchat.wallet_address,
@@ -280,6 +284,7 @@ mod tests {
             "message": "頑張ってください！",
             "superchat": {
                 "amount": 5.0,
+                "coin": "SUI",
                 "tx_hash": "0x9876543210fedcba",
                 "wallet_address": "0xfedcba9876543210"
             },
@@ -312,6 +317,7 @@ mod tests {
                 assert_eq!(superchat.display_name, "WebユーザーB");
                 assert_eq!(superchat.content, "頑張ってください！");
                 assert_eq!(superchat.superchat.amount, 5.0);
+                assert_eq!(superchat.superchat.coin, "SUI");
                 assert_eq!(superchat.superchat.tx_hash, "0x9876543210fedcba");
                 assert_eq!(superchat.superchat.wallet_address, "0xfedcba9876543210");
                 assert_eq!(superchat.timestamp, Some(1700000050000));

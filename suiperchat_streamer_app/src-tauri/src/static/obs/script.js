@@ -193,7 +193,10 @@ function displaySuperchatMessage(data) {
     superchatElement.innerHTML = `
         <div class="superchat-header">
             <span class="display-name">${escapeHtml(data.display_name)}</span>
-            <span class="amount">${data.superchat.amount} SUI</span>
+            <span class="amount">
+                ${data.superchat.amount} 
+                ${data.superchat.coin ?? '<Error: No currency information>'}
+            </span>
         </div>
         <div class="message-content">${escapeHtml(data.message)}</div>
     `;
