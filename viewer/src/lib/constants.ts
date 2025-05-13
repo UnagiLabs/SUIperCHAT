@@ -20,14 +20,35 @@ export const PAYMENT_CONFIG_ID =
 	"0x0ab53f74c6f40a6fe790689475c2546e549ffdcb7af77068ada4e459a1518599";
 
 /**
- * SUI通貨の型引数
+ * コイン情報のインターフェース
+ *
+ * @property symbol - コインのシンボル（例: "SUI", "USDC"）
+ * @property typeArg - コインの型引数
+ * @property decimals - コインの小数点以下の桁数（例: SUIは9桁、USDCは6桁）
  */
-export const SUI_TYPE_ARG = "0x2::sui::SUI";
+export interface CoinInfo {
+	symbol: string;
+	typeArg: string;
+	decimals: number;
+}
 
 /**
- * SUIからMISTへの変換係数 (1 SUI = 10^9 MIST)
+ * サポートされているコインのリスト
  */
-export const SUI_TO_MIST = BigInt(1_000_000_000);
+export const SUPPORTED_COINS: CoinInfo[] = [
+	{
+		symbol: "SUI",
+		typeArg: "0x2::sui::SUI",
+		decimals: 9,
+	},
+	{
+		symbol: "USDC",
+		typeArg:
+			"0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
+		decimals: 6,
+	},
+	// 今後、他のCoinもここに追加
+];
 
 /**
  * デフォルトのガス予算 (0.02 SUI = 20,000,000 MIST)

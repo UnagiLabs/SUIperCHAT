@@ -4,7 +4,7 @@
  * 視聴者が配信者にスーパーチャットを送信するためのフォームコンポーネント
  *
  * @remarks
- * - 金額選択UI（0/1/3/5/10 SUI）
+ * - 任意の金額と通貨タイプを選択可能
  * - 送付先アドレス入力フィールド
  * - メッセージ入力フィールド
  * - 表示名入力フィールド
@@ -16,7 +16,6 @@
 
 import { useUser } from "@/context/UserContext";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Coins } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -40,15 +39,22 @@ import {
 	FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 
 import {
 	DEFAULT_GAS_BUDGET,
 	PACKAGE_ID,
 	PAYMENT_CONFIG_ID,
-	SUI_TYPE_ARG,
+	SUPPORTED_COINS,
 } from "@/lib/constants"; // 定数をインポート
-import { mistToSui, suiToMist } from "@/lib/utils"; // ユーティリティをインポート
+import { fromContractValue, toContractValue } from "@/lib/utils"; // ユーティリティをインポート
 // Sui SDK インポート
 import {
 	useCurrentAccount,
@@ -59,7 +65,14 @@ import { Transaction } from "@mysten/sui/transactions"; // Transaction をイン
 
 // フォームのバリデーションスキーマ
 const superchat_form_schema = z.object({
-	amount: z.number().min(0).max(10),
+	amount: z
+		.number()
+		.nonnegative({ message: "Amount must be a non-negative number." }),
+	coinTypeArg: z
+		.string()
+		.refine((value) => SUPPORTED_COINS.some((coin) => coin.typeArg === value), {
+			message: "Please select a supported coin type.",
+		}),
 	recipient_address: z
 		.string()
 		.min(42, {
@@ -93,18 +106,10 @@ interface WalletError extends Error {
 	name: string;
 }
 
-// スーパーチャット金額のオプション
-const amount_options = [
-	{ value: 0, label: "No tips", color: "bg-yellow-500" },
-	{ value: 1, label: "1 SUI", color: "bg-yellow-500" },
-	{ value: 3, label: "3 SUI", color: "bg-yellow-500" },
-	{ value: 5, label: "5 SUI", color: "bg-yellow-500" },
-	{ value: 10, label: "10 SUI", color: "bg-yellow-500" },
-];
-
 // デフォルトのフォーム値
 const default_values: Partial<SuperchatFormValues> = {
 	amount: 0,
+	coinTypeArg: SUPPORTED_COINS[0].typeArg, // デフォルトはSUI
 	recipient_address: "",
 	display_name: "",
 	message: "",
@@ -142,6 +147,8 @@ export function SuperchatForm({
 }: SuperchatFormProps = {}) {
 	// 確認モード状態管理
 	const [confirm_mode, set_confirm_mode] = useState(false);
+	// Tipの有無を管理するステート
+	const [has_tip, set_has_tip] = useState(false);
 
 	// WebSocketコンテキストを取得
 	const { actions } = useWebSocket();
@@ -187,33 +194,37 @@ export function SuperchatForm({
 	 * @param values - フォームの入力値
 	 */
 	async function on_submit(values: SuperchatFormValues) {
-		// チップ金額が0より大きい場合のみウォレット接続チェック
-		if (values.amount > 0 && !currentAccount) {
+		// チップ金額が0または非Tip選択状態のチェック
+		const sendTip = has_tip && values.amount > 0;
+
+		// Tipありで金額が0より大きい場合のみウォレット接続チェック
+		if (sendTip && !currentAccount) {
 			toast.error("Wallet Connection Required", {
 				description: (
 					<div className="mt-2 flex flex-col gap-2">
-						<p>Wallet connection is required to send SUI tips.</p>
+						<p>Wallet connection is required to send tips.</p>
 						<p>
 							Please connect your wallet using the "Connect Wallet" button at
 							the top.
 						</p>
 						<p>
-							Alternatively, you can change the amount to "No tips" to send a
-							message without wallet connection.
+							Alternatively, you can disable tipping to send a message without
+							wallet connection.
 						</p>
 						<Button
 							variant="outline"
 							size="sm"
 							className="mt-1"
 							onClick={() => {
+								set_has_tip(false);
 								form.setValue("amount", 0);
-								toast.success("Amount changed to No tips", {
+								toast.success("Tip removed", {
 									description:
 										"You can now send your message without wallet connection",
 								});
 							}}
 						>
-							Change to No tips
+							Disable Tip
 						</Button>
 					</div>
 				),
@@ -229,8 +240,8 @@ export function SuperchatForm({
 			return;
 		}
 
-		// チップ金額が0の場合、WebSocketでチャットメッセージとして直接送信
-		if (values.amount === 0) {
+		// Tipなしの場合、WebSocketでチャットメッセージとして直接送信
+		if (!sendTip) {
 			console.log("Sending as normal chat message (no tip)");
 
 			try {
@@ -241,7 +252,7 @@ export function SuperchatForm({
 
 				// コールバック関数があれば実行
 				on_send_success?.(
-					values.amount,
+					0, // 金額は0
 					values.display_name,
 					values.message || "",
 				);
@@ -272,24 +283,38 @@ export function SuperchatForm({
 			// ウォレット接続チェック (念のため)
 			if (!currentAccount) {
 				toast.error("Wallet Connection Required", {
-					description: "Please connect your wallet to send SUI tips.",
+					description: "Please connect your wallet to send tips.",
 				});
 				set_confirm_mode(false);
 				return;
 			}
 
-			// 1. SUI → MIST 換算
-			const suiAmountMist = suiToMist(values.amount);
+			// 選択されたコインタイプの取得
+			const selectedCoinType = values.coinTypeArg;
+			const selectedCoin = SUPPORTED_COINS.find(
+				(c) => c.typeArg === selectedCoinType,
+			);
+
+			if (!selectedCoin) {
+				toast.error("Invalid Coin Type", {
+					description: "Please select a valid coin type.",
+				});
+				set_confirm_mode(false);
+				return;
+			}
+
+			// 1. 金額をコントラクト用の単位に変換
+			const contractAmount = toContractValue(values.amount, selectedCoinType);
 			const GAS_BUDGET = BigInt(DEFAULT_GAS_BUDGET);
 
-			// 2. すべての SUI コインを取得（ページング対応）
+			// 2. すべてのコインを取得（ページング対応）
 			let nextCursor: string | null | undefined = null;
 			const allCoins: Awaited<ReturnType<typeof suiClient.getCoins>>["data"] =
 				[];
 			do {
 				const page = await suiClient.getCoins({
 					owner: currentAccount.address,
-					coinType: SUI_TYPE_ARG,
+					coinType: selectedCoinType,
 					limit: 50,
 					cursor: nextCursor,
 				});
@@ -297,37 +322,87 @@ export function SuperchatForm({
 				nextCursor = page.nextCursor;
 			} while (nextCursor);
 
-			// 2-1. 合計残高チェック
+			// 2-1. 選択したコインの合計残高チェック
 			const totalBalance = allCoins.reduce(
 				(a, c) => a + BigInt(c.balance),
 				BigInt(0),
 			);
-			if (totalBalance < suiAmountMist + GAS_BUDGET) {
-				toast.error("Insufficient SUI balance", {
-					description: `Need at least ${mistToSui(
-						suiAmountMist + GAS_BUDGET,
-					)} SUI including gas.`,
+
+			if (totalBalance < contractAmount) {
+				toast.error(`Insufficient ${selectedCoin.symbol} balance`, {
+					description: `Need at least ${fromContractValue(
+						contractAmount,
+						selectedCoinType,
+					)} ${selectedCoin.symbol} for the payment.`,
 				});
 				set_confirm_mode(false);
 				return;
 			}
 
-			// 2-2. ガス用コインを選定（ガス予算をまかなえる最小のコイン）
-			allCoins.sort((a, b) => {
+			// 2-2. SUIコインの取得（ガス用）
+			let suiCoins: Awaited<ReturnType<typeof suiClient.getCoins>>["data"] = [];
+			const SUI_TYPE_ARG = SUPPORTED_COINS[0].typeArg; // SUPPORTEDCOINSの最初の要素がSUI
+
+			if (selectedCoinType !== SUI_TYPE_ARG) {
+				// 選択したコインがSUI以外の場合、ガス用のSUIコインを取得
+				let suiNextCursor: string | null | undefined = null;
+				do {
+					const page = await suiClient.getCoins({
+						owner: currentAccount.address,
+						coinType: SUI_TYPE_ARG,
+						limit: 50,
+						cursor: suiNextCursor,
+					});
+					suiCoins.push(...page.data);
+					suiNextCursor = page.nextCursor;
+				} while (suiNextCursor);
+
+				// SUIの残高チェック（ガス用）
+				const suiTotalBalance = suiCoins.reduce(
+					(a, c) => a + BigInt(c.balance),
+					BigInt(0),
+				);
+
+				if (suiTotalBalance < GAS_BUDGET) {
+					toast.error("Insufficient SUI balance for gas", {
+						description: `Need at least ${fromContractValue(GAS_BUDGET, SUI_TYPE_ARG)} SUI for gas.`,
+					});
+					set_confirm_mode(false);
+					return;
+				}
+			} else {
+				// 選択したコインがSUIの場合、allCoinsをsuiCoinsとして使用
+				suiCoins = allCoins;
+			}
+
+			// 2-3. ガス用コインを選定（ガス予算をまかなえる最小のコイン）
+			suiCoins.sort((a, b) => {
 				const balanceA = BigInt(a.balance);
 				const balanceB = BigInt(b.balance);
 				return balanceB > balanceA ? 1 : balanceB < balanceA ? -1 : 0;
 			});
-			const gasCoin =
-				allCoins.find((c) => BigInt(c.balance) >= GAS_BUDGET) || allCoins[0];
 
-			// ガスコインを除いた残りを支払い用候補に
-			const coinsForPayment = allCoins.filter(
-				(c) => c.coinObjectId !== gasCoin.coinObjectId,
-			);
+			const gasCoin =
+				suiCoins.find((c) => BigInt(c.balance) >= GAS_BUDGET) || suiCoins[0];
+
+			// 支払い用コインの選択
+			const coinsForPayment =
+				selectedCoinType === SUI_TYPE_ARG
+					? allCoins.filter((c) => c.coinObjectId !== gasCoin.coinObjectId)
+					: allCoins;
 
 			// primary＝支払い元コイン
-			const primary = coinsForPayment[0] ?? gasCoin; // 1 枚しか無ければ同一
+			const primary =
+				coinsForPayment[0] ??
+				(selectedCoinType === SUI_TYPE_ARG ? gasCoin : undefined);
+
+			if (!primary) {
+				toast.error(`No ${selectedCoin.symbol} coins available`, {
+					description: "Could not find coins for payment.",
+				});
+				set_confirm_mode(false);
+				return;
+			}
 
 			// 3. Transaction Block 構築
 			const tx = new Transaction();
@@ -342,14 +417,12 @@ export function SuperchatForm({
 			]);
 			tx.setGasBudget(DEFAULT_GAS_BUDGET);
 
-			// 3-2. ガスコインと別オブジェクトなら merge で残高集約
+			// 3-2. 同じコインタイプの場合、必要に応じてmergeで残高集約
 			const coinsToMerge = coinsForPayment.filter(
 				(c) => c.coinObjectId !== primary.coinObjectId,
 			);
-			if (
-				primary.coinObjectId !== gasCoin.coinObjectId &&
-				coinsToMerge.length
-			) {
+
+			if (coinsToMerge.length) {
 				tx.mergeCoins(
 					tx.object(primary.coinObjectId),
 					coinsToMerge.map((c) => tx.object(c.coinObjectId)),
@@ -358,12 +431,13 @@ export function SuperchatForm({
 
 			// 4. 支払い額を split
 			const sourceForSplit =
+				selectedCoinType === SUI_TYPE_ARG &&
 				primary.coinObjectId === gasCoin.coinObjectId
 					? tx.gas // 1 枚しかないケース
 					: tx.object(primary.coinObjectId);
 
 			const [paymentCoin] = tx.splitCoins(sourceForSplit, [
-				tx.pure.u64(suiAmountMist),
+				tx.pure.u64(contractAmount),
 			]);
 
 			// 5. Move コントラクト呼び出し
@@ -372,11 +446,12 @@ export function SuperchatForm({
 				arguments: [
 					tx.object(PAYMENT_CONFIG_ID),
 					paymentCoin,
-					tx.pure.u64(suiAmountMist),
+					tx.pure.u64(contractAmount),
 					tx.pure.address(values.recipient_address),
 				],
-				typeArguments: [SUI_TYPE_ARG],
+				typeArguments: [selectedCoinType],
 			});
+
 			// === ステップ4: トランザクション実行 ===
 			signAndExecuteTransaction(
 				{
@@ -403,6 +478,7 @@ export function SuperchatForm({
 									values.message || "",
 									{
 										amount: values.amount,
+										coin: selectedCoin.symbol,
 										tx_hash: digest,
 										wallet_address: currentAccount.address,
 									},
@@ -491,14 +567,6 @@ export function SuperchatForm({
 		set_confirm_mode(false);
 	}
 
-	// 現在選択されている金額
-	const selected_amount = form.watch("amount");
-
-	// 選択されている金額のオプションを取得
-	const selected_option = amount_options.find(
-		(option) => option.value === selected_amount,
-	);
-
 	return (
 		<Card className="w-full max-w-md mx-auto">
 			<CardHeader>
@@ -513,77 +581,113 @@ export function SuperchatForm({
 						<FormField
 							control={form.control}
 							name="amount"
-							render={({ field }) => (
+							render={({ field: { onChange, value, ...field } }) => (
 								<FormItem className="space-y-3">
-									<FormLabel>Amount</FormLabel>
-									<FormControl>
-										<div className="space-y-2">
-											{/* No tips ボタン */}
-											<Button
-												key={amount_options[0].value}
-												type="button"
-												variant={
-													amount_options[0].value === field.value
-														? "default"
-														: "outline"
+									<div className="flex justify-between items-center">
+										<FormLabel>Tip</FormLabel>
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											onClick={() => {
+												set_has_tip(!has_tip);
+												if (!has_tip) {
+													// Tipを有効にする時、デフォルト値を設定
+													onChange(0);
+												} else {
+													// Tipを無効にする時、金額を0にリセット
+													onChange(0);
 												}
-												className={`w-full ${
-													amount_options[0].value === field.value
-														? `${amount_options[0].color} text-white`
-														: ""
-												}`}
-												onClick={() => field.onChange(amount_options[0].value)}
-											>
-												<Coins className="mr-2 h-4 w-4" />
-												{amount_options[0].label}
-											</Button>
+											}}
+											className="text-xs h-6 px-2"
+										>
+											{has_tip ? "Remove Tip" : "Add Tip"}
+										</Button>
+									</div>
 
-											{/* SUI金額ボタン */}
-											<div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-												{amount_options.slice(1).map((option) => (
-													<Button
-														key={option.value}
-														type="button"
-														variant={
-															option.value === field.value
-																? "default"
-																: "outline"
-														}
-														className={
-															option.value === field.value
-																? `${option.color} text-white`
-																: ""
-														}
-														onClick={() => {
-															field.onChange(option.value);
+									{has_tip ? (
+										<FormControl>
+											<div className="space-y-4">
+												<div className="flex items-center gap-3">
+													<FormField
+														control={form.control}
+														name="coinTypeArg"
+														render={({ field: coinField }) => (
+															<FormItem className="flex-grow-0">
+																<Select
+																	value={coinField.value}
+																	onValueChange={coinField.onChange}
+																>
+																	<SelectTrigger className="w-24">
+																		<SelectValue placeholder="Coin" />
+																	</SelectTrigger>
+																	<SelectContent>
+																		{SUPPORTED_COINS.map((coin) => (
+																			<SelectItem
+																				key={coin.typeArg}
+																				value={coin.typeArg}
+																			>
+																				{coin.symbol}
+																			</SelectItem>
+																		))}
+																	</SelectContent>
+																</Select>
+																<FormMessage />
+															</FormItem>
+														)}
+													/>
 
-															// 金額変更時のガイダンス表示
-															if (option.value > 0 && !currentAccount) {
-																toast.info("Wallet Connection Required", {
-																	description:
-																		"Please connect your wallet using the 'Connect Wallet' button at the top to send SUI tips.",
-																	duration: 5000,
-																});
-															}
-														}}
-													>
-														<Coins className="mr-2 h-4 w-4" />
-														{option.label}
-													</Button>
-												))}
+													<FormItem className="flex-grow">
+														<Input
+															type="number"
+															placeholder="Amount"
+															step="any"
+															min="0"
+															{...field}
+															value={value === 0 ? "" : value}
+															onChange={(e) => {
+																const val =
+																	e.target.value === ""
+																		? 0
+																		: Number.parseFloat(e.target.value);
+																onChange(val);
+
+																// 金額変更時のガイダンス表示
+																if (val > 0 && !currentAccount) {
+																	toast.info("Wallet Connection Required", {
+																		description:
+																			"Please connect your wallet using the 'Connect Wallet' button at the top to send tips.",
+																		duration: 5000,
+																	});
+																}
+															}}
+															className="max-w-full"
+														/>
+														<FormMessage />
+													</FormItem>
+												</div>
 											</div>
-										</div>
-									</FormControl>
+										</FormControl>
+									) : (
+										<FormControl>
+											<div className="p-4 border rounded border-dashed text-center">
+												<span className="text-muted-foreground">
+													No tip will be sent (message only)
+												</span>
+											</div>
+										</FormControl>
+									)}
+
 									<FormDescription>
-										{form.watch("amount") > 0 ? (
+										{has_tip ? (
 											<span
 												className={
 													!currentAccount ? "text-amber-500 font-medium" : ""
 												}
 											>
 												{!currentAccount
-													? "Wallet connection required for sending SUI"
-													: "SUI will be sent with your message"}
+													? "Wallet connection required for sending tips"
+													: "Tips will be sent with your message"}
 											</span>
 										) : (
 											"Send message only (no wallet connection needed)"
@@ -683,8 +787,16 @@ export function SuperchatForm({
 								</p>
 
 								<div className="grid grid-cols-3 gap-2 text-sm mb-1">
-									<span className="font-medium">Amount:</span>
-									<span className="col-span-2">{selected_option?.label}</span>
+									<span className="font-medium">Tip:</span>
+									<span className="col-span-2">
+										{has_tip
+											? `${form.getValues("amount")} ${
+													SUPPORTED_COINS.find(
+														(c) => c.typeArg === form.getValues("coinTypeArg"),
+													)?.symbol || ""
+												}`
+											: "No tip"}
+									</span>
 								</div>
 
 								<div className="grid grid-cols-3 gap-2 text-sm mb-1">
@@ -723,11 +835,7 @@ export function SuperchatForm({
 									>
 										Cancel
 									</Button>
-									<Button
-										type="submit"
-										className={`flex-1 ${selected_option?.color} text-white`}
-										disabled={isPending}
-									>
+									<Button type="submit" className="flex-1" disabled={isPending}>
 										{isPending ? "Sending..." : "Send"}
 									</Button>
 								</>

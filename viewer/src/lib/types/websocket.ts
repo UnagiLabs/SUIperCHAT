@@ -30,6 +30,8 @@ export enum MessageType {
 export interface SuperchatData {
 	/** 送金額 (SUI単位) */
 	amount: number;
+	/** 使用されたコインの通貨シンボル (例: "SUI", "USDC") */
+	coin: string;
 	/** トランザクションハッシュ */
 	tx_hash: string;
 	/** 送金者のウォレットアドレス */

@@ -6,7 +6,7 @@
  * @module utils
  */
 
-import { SUI_TO_MIST } from "./constants";
+import { SUPPORTED_COINS } from "./constants";
 
 type ClassValue =
 	| string
@@ -96,39 +96,38 @@ export function sleep(ms: number): Promise<void> {
 }
 
 /**
- * SUI通貨をMIST単位に変換する関数 (BigInt対応)
+ * 通貨の数値をコントラクトに渡すためのbigint型に変換する
  *
- * @param {bigint | number} sui - SUI単位の金額 (整数を想定)
- * @returns {bigint} - MIST単位に変換された金額
- * @remarks 小数点を含むSUIを正確に扱いたい場合は、専用のライブラリ(Decimal.jsなど)の使用や、MIST単位での入力を検討してください。
+ * @param {number} amount - 変換する数値
+ * @param {string} coinTypeArg - コインの型引数
+ * @returns {bigint} bigint型の数値
  */
-export function suiToMist(sui: bigint | number): bigint {
-	// number型の場合は整数であることを前提とする（もしくはエラーハンドリングを追加）
-	if (typeof sui === "number" && !Number.isInteger(sui)) {
+export function toContractValue(amount: number, coinTypeArg: string): bigint {
+	const coin = SUPPORTED_COINS.find((c) => c.typeArg === coinTypeArg);
+	if (!coin) throw new Error(`Unsupported coin type: ${coinTypeArg}`);
+
+	// 小数点以下を適切に処理
+	if (!Number.isInteger(amount)) {
 		console.warn(
-			"suiToMist received a non-integer number. Potential precision loss.",
+			`toContractValue received non-integer value: ${amount}. Will convert appropriately.`,
 		);
-		// 必要であればエラーをスローするか、丸める処理を追加
-		// throw new Error("Input must be an integer or BigInt");
 	}
-	return BigInt(sui) * SUI_TO_MIST;
+
+	// 例: 1.5 SUI (decimals=9) → 1.5 * 10^9 = 1,500,000,000
+	return BigInt(Math.floor(amount * 10 ** coin.decimals));
 }
 
 /**
- * MIST単位をSUI通貨に変換する関数 (表示用)
+ * コントラクトから返された値を表示用の数値に変換する
  *
- * @param {bigint} mist - MIST単位の金額
- * @returns {number} - SUI単位に変換された金額 (表示用、精度に注意)
- * @remarks BigIntからNumberへの変換は、Number.MAX_SAFE_INTEGERを超える場合に精度が失われる可能性があります。主に表示用途に使用してください。
+ * @param {bigint} amount - bigint型の数値
+ * @param {string} coinTypeArg - コインの型引数
+ * @returns {number} 表示用の数値
  */
-export function mistToSui(mist: bigint): number {
-	if (mist === BigInt(0)) return 0; // 0n を BigInt(0) に変更
-	// BigIntのまま除算し、最後にNumberに変換することで精度損失を最小限に抑える
-	// ただし、最終的なNumber変換で非常に大きな値は精度を失う可能性がある
-	const suiValue = Number(mist) / Number(SUI_TO_MIST);
-	// 必要に応じて小数点以下の桁数を調整する場合はここで処理
-	return suiValue;
-	// 例: 小数点以下9桁まで考慮する場合
-	// const suiString = (mist / SUI_TO_MIST).toString() + '.' + (mist % SUI_TO_MIST).toString().padStart(9, '0');
-	// return parseFloat(suiString);
+export function fromContractValue(amount: bigint, coinTypeArg: string): number {
+	const coin = SUPPORTED_COINS.find((c) => c.typeArg === coinTypeArg);
+	if (!coin) throw new Error(`Unsupported coin type: ${coinTypeArg}`);
+
+	// 例: 1,500,000,000 (decimals=9) → 1.5
+	return Number(amount) / 10 ** coin.decimals;
 }
