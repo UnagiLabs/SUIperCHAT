@@ -111,6 +111,7 @@ export function useWebSocketMessageHandler({
 							}
 							(baseMessage as Partial<SuperchatMessage>).superchat = {
 								amount: superchat.amount,
+								coin: superchat.coin as string, // coin プロパティを追加
 								tx_hash: superchat.tx_hash,
 								wallet_address: superchat.wallet_address,
 							};

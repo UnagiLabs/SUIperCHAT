@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS messages (
     display_name TEXT NOT NULL,
     message TEXT NOT NULL,
     amount REAL DEFAULT 0,
+    coin TEXT,
     tx_hash TEXT,
     wallet_address TEXT,
     session_id TEXT NOT NULL,

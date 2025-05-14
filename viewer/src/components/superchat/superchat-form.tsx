@@ -61,7 +61,7 @@ import {
 	useSignAndExecuteTransaction,
 	useSuiClient, // useSuiClient をインポート
 } from "@mysten/dapp-kit";
-import { Transaction } from "@mysten/sui/transactions"; // Transaction をインポート
+import { Transaction, coinWithBalance } from "@mysten/sui/transactions"; // Transaction とcoinWithBalanceをインポート
 
 // フォームのバリデーションスキーマ
 const superchat_form_schema = z.object({
@@ -303,144 +303,76 @@ export function SuperchatForm({
 				return;
 			}
 
-			// 1. 金額をコントラクト用の単位に変換
-			const contractAmount = toContractValue(values.amount, selectedCoinType);
-			const GAS_BUDGET = BigInt(DEFAULT_GAS_BUDGET);
+			// SUIコインタイプの定義
+			const SUI_TYPE_ARG = SUPPORTED_COINS.find(
+				(coin) => coin.symbol === "SUI",
+			)?.typeArg;
 
-			// 2. すべてのコインを取得（ページング対応）
-			let nextCursor: string | null | undefined = null;
-			const allCoins: Awaited<ReturnType<typeof suiClient.getCoins>>["data"] =
-				[];
-			do {
-				const page = await suiClient.getCoins({
-					owner: currentAccount.address,
-					coinType: selectedCoinType,
-					limit: 50,
-					cursor: nextCursor,
-				});
-				allCoins.push(...page.data);
-				nextCursor = page.nextCursor;
-			} while (nextCursor);
-
-			// 2-1. 選択したコインの合計残高チェック
-			const totalBalance = allCoins.reduce(
-				(a, c) => a + BigInt(c.balance),
-				BigInt(0),
-			);
-
-			if (totalBalance < contractAmount) {
-				toast.error(`Insufficient ${selectedCoin.symbol} balance`, {
-					description: `Need at least ${fromContractValue(
-						contractAmount,
-						selectedCoinType,
-					)} ${selectedCoin.symbol} for the payment.`,
+			if (!SUI_TYPE_ARG) {
+				toast.error("SUI coin type not found in supported coins", {
+					description: "Configuration error: SUI coin type is missing.",
 				});
 				set_confirm_mode(false);
 				return;
 			}
 
-			// 2-2. SUIコインの取得（ガス用）
-			let suiCoins: Awaited<ReturnType<typeof suiClient.getCoins>>["data"] = [];
-			const SUI_TYPE_ARG = SUPPORTED_COINS[0].typeArg; // SUPPORTEDCOINSの最初の要素がSUI
+			// 1. 金額をコントラクト用の単位に変換
+			const contractAmount = toContractValue(values.amount, selectedCoinType);
 
+			// 2. 残高チェック
+			const balance = await suiClient.getBalance({
+				owner: currentAccount.address,
+				coinType: selectedCoinType,
+			});
+
+			// SUIの場合はガス代も考慮
+			const requiredBalance =
+				selectedCoinType === SUI_TYPE_ARG
+					? BigInt(contractAmount) + BigInt(DEFAULT_GAS_BUDGET)
+					: BigInt(contractAmount);
+
+			if (BigInt(balance.totalBalance) < requiredBalance) {
+				const errorMessage =
+					selectedCoinType === SUI_TYPE_ARG
+						? `Need at least ${fromContractValue(contractAmount, selectedCoinType)} ${selectedCoin.symbol} plus gas fee`
+						: `Need at least ${fromContractValue(contractAmount, selectedCoinType)} ${selectedCoin.symbol}`;
+
+				toast.error(`Insufficient ${selectedCoin.symbol} balance`, {
+					description: errorMessage,
+				});
+				set_confirm_mode(false);
+				return;
+			}
+
+			// ガス用のSUI残高チェック（SUI以外の場合）
 			if (selectedCoinType !== SUI_TYPE_ARG) {
-				// 選択したコインがSUI以外の場合、ガス用のSUIコインを取得
-				let suiNextCursor: string | null | undefined = null;
-				do {
-					const page = await suiClient.getCoins({
-						owner: currentAccount.address,
-						coinType: SUI_TYPE_ARG,
-						limit: 50,
-						cursor: suiNextCursor,
-					});
-					suiCoins.push(...page.data);
-					suiNextCursor = page.nextCursor;
-				} while (suiNextCursor);
+				const suiBalance = await suiClient.getBalance({
+					owner: currentAccount.address,
+					coinType: SUI_TYPE_ARG,
+				});
 
-				// SUIの残高チェック（ガス用）
-				const suiTotalBalance = suiCoins.reduce(
-					(a, c) => a + BigInt(c.balance),
-					BigInt(0),
-				);
-
-				if (suiTotalBalance < GAS_BUDGET) {
+				if (BigInt(suiBalance.totalBalance) < BigInt(DEFAULT_GAS_BUDGET)) {
 					toast.error("Insufficient SUI balance for gas", {
-						description: `Need at least ${fromContractValue(GAS_BUDGET, SUI_TYPE_ARG)} SUI for gas.`,
+						description: `Need at least ${fromContractValue(DEFAULT_GAS_BUDGET, SUI_TYPE_ARG)} SUI for gas.`,
 					});
 					set_confirm_mode(false);
 					return;
 				}
-			} else {
-				// 選択したコインがSUIの場合、allCoinsをsuiCoinsとして使用
-				suiCoins = allCoins;
-			}
-
-			// 2-3. ガス用コインを選定（ガス予算をまかなえる最小のコイン）
-			suiCoins.sort((a, b) => {
-				const balanceA = BigInt(a.balance);
-				const balanceB = BigInt(b.balance);
-				return balanceB > balanceA ? 1 : balanceB < balanceA ? -1 : 0;
-			});
-
-			const gasCoin =
-				suiCoins.find((c) => BigInt(c.balance) >= GAS_BUDGET) || suiCoins[0];
-
-			// 支払い用コインの選択
-			const coinsForPayment =
-				selectedCoinType === SUI_TYPE_ARG
-					? allCoins.filter((c) => c.coinObjectId !== gasCoin.coinObjectId)
-					: allCoins;
-
-			// primary＝支払い元コイン
-			const primary =
-				coinsForPayment[0] ??
-				(selectedCoinType === SUI_TYPE_ARG ? gasCoin : undefined);
-
-			if (!primary) {
-				toast.error(`No ${selectedCoin.symbol} coins available`, {
-					description: "Could not find coins for payment.",
-				});
-				set_confirm_mode(false);
-				return;
 			}
 
 			// 3. Transaction Block 構築
 			const tx = new Transaction();
+			tx.setSender(currentAccount.address); // 安全のため明示的に設定
 
-			// 3-1. ガスコイン固定（digest / version は getCoins のレスポンスに含まれる）
-			tx.setGasPayment([
-				{
-					objectId: gasCoin.coinObjectId,
-					digest: gasCoin.digest,
-					version: gasCoin.version,
-				},
-			]);
-			tx.setGasBudget(DEFAULT_GAS_BUDGET);
+			// coinWithBalance が自動でSplit/Mergeを注入
+			const paymentCoin = coinWithBalance({
+				balance: BigInt(contractAmount),
+				type: selectedCoinType,
+				// SUI送信時は同じコインをガスにも使用可能に
+				useGasCoin: selectedCoinType === SUI_TYPE_ARG,
+			});
 
-			// 3-2. 同じコインタイプの場合、必要に応じてmergeで残高集約
-			const coinsToMerge = coinsForPayment.filter(
-				(c) => c.coinObjectId !== primary.coinObjectId,
-			);
-
-			if (coinsToMerge.length) {
-				tx.mergeCoins(
-					tx.object(primary.coinObjectId),
-					coinsToMerge.map((c) => tx.object(c.coinObjectId)),
-				);
-			}
-
-			// 4. 支払い額を split
-			const sourceForSplit =
-				selectedCoinType === SUI_TYPE_ARG &&
-				primary.coinObjectId === gasCoin.coinObjectId
-					? tx.gas // 1 枚しかないケース
-					: tx.object(primary.coinObjectId);
-
-			const [paymentCoin] = tx.splitCoins(sourceForSplit, [
-				tx.pure.u64(contractAmount),
-			]);
-
-			// 5. Move コントラクト呼び出し
+			// Moveコントラクト呼び出し
 			tx.moveCall({
 				target: `${PACKAGE_ID}::payment::process_superchat_payment`,
 				arguments: [
@@ -452,103 +384,81 @@ export function SuperchatForm({
 				typeArguments: [selectedCoinType],
 			});
 
+			// ガス上限設定（ガスコインの選択はウォレットに任せる）
+			tx.setGasBudget(DEFAULT_GAS_BUDGET);
+
 			// === ステップ4: トランザクション実行 ===
 			signAndExecuteTransaction(
 				{
 					transaction: tx,
 				},
 				{
-					onSuccess: async (result) => {
-						console.log("Transaction broadcast successful:", result);
-						const digest = result.digest;
-
-						try {
-							// トランザクションの詳細と実行結果を取得
-							const txDetails = await suiClient.getTransactionBlock({
-								digest: digest,
-								options: { showEffects: true },
-							});
-
-							// トランザクションが成功したか確認
-							if (txDetails.effects?.status.status === "success") {
-								console.log("Transaction successfully executed on chain.");
-								// WebSocketを使ってスーパーチャットメッセージを送信
-								actions.sendSuperchatMessage(
-									values.display_name,
-									values.message || "",
-									{
-										amount: values.amount,
-										coin: selectedCoin.symbol,
-										tx_hash: digest,
-										wallet_address: currentAccount.address,
-									},
-								);
-
-								toast.success("Super Chat sent successfully!", {
-									description: `Transaction digest: ${digest.substring(0, 8)}...`,
-								});
-
-								// コールバック関数があれば実行
-								on_send_success?.(
-									values.amount,
-									values.display_name,
-									values.message || "",
-									digest,
-								);
-
-								// フォームをリセット
-								form.reset({
-									...default_values,
-									recipient_address: values.recipient_address,
-								});
-
-								// 確認モードをリセット
-								set_confirm_mode(false);
-							} else {
-								// トランザクション失敗時の処理 (ガス不足など)
-								console.warn(
-									"Transaction was not successful on chain:",
-									txDetails.effects?.status.error,
-								);
-								toast.error("Super Chat failed", {
-									description:
-										txDetails.effects?.status.error ||
-										"Transaction execution failed.",
-								});
-								// 確認モードをリセット
-								set_confirm_mode(false);
-							}
-						} catch (error) {
-							console.error(
-								"Failed to get transaction details or process success:",
-								error,
-							);
-							toast.error("Super Chat processing failed", {
-								description:
-									error instanceof Error ? error.message : String(error),
-							});
-							// 確認モードをリセット
-							set_confirm_mode(false);
-						}
-					},
-					onError: (error) => {
-						console.error("Transaction failed:", error);
-						const wallet_error = error as WalletError;
-
-						let error_message = "Unknown error occurred.";
-						if (wallet_error.code === 4001) {
-							// MetaMaskのユーザーキャンセルエラーコード
-							error_message = "Transaction was rejected by the user.";
-						} else if (wallet_error.message) {
-							error_message = wallet_error.message;
-						}
-
-						toast.error("Super Chat failed", {
-							description: error_message,
-						});
-
-						// 確認モードをリセット
+					onSettled: (result, error) => {
+						// 常に確認モードをリセット（共通処理）
 						set_confirm_mode(false);
+
+						// エラー処理
+						if (error) {
+							console.error("Transaction failed:", error);
+							const wallet_error = error as WalletError;
+
+							let error_message = "Unknown error occurred.";
+							if (wallet_error.code === 4001) {
+								// ユーザーによるキャンセル
+								error_message = "Transaction was rejected by the user.";
+							} else if (wallet_error.message) {
+								error_message = wallet_error.message;
+							}
+
+							toast.error("Super Chat failed", {
+								description: error_message,
+							});
+							return;
+						}
+
+						// 結果処理 (resultがundefinedでないことを確認)
+						if (result?.digest) {
+							// トランザクションの成功をチェック
+							// 注意: effectsはすぐに利用できないため、digestが存在することで成功と判断
+							console.log("Transaction successfully executed on chain.");
+							const digest = result.digest;
+
+							// WebSocketを使ってスーパーチャットメッセージを送信
+							actions.sendSuperchatMessage(
+								values.display_name,
+								values.message || "",
+								{
+									amount: values.amount,
+									coin: selectedCoin.symbol,
+									tx_hash: digest,
+									wallet_address: currentAccount.address,
+								},
+							);
+
+							toast.success("Super Chat sent successfully!", {
+								description: `Transaction digest: ${digest.substring(0, 8)}...`,
+							});
+
+							// コールバック関数があれば実行
+							on_send_success?.(
+								values.amount,
+								values.display_name,
+								values.message || "",
+								digest,
+							);
+
+							// フォームをリセット
+							form.reset({
+								...default_values,
+								recipient_address: values.recipient_address,
+							});
+						} else {
+							// トランザクション失敗時の処理
+							console.warn("Transaction was not successful on chain");
+							toast.error("Super Chat failed", {
+								description: "Transaction execution failed.",
+							});
+						}
 					},
 				},
 			);

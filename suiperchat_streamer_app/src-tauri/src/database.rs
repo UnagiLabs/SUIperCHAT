@@ -127,8 +127,8 @@ pub async fn save_message_db(pool: &SqlitePool, message: &Message) -> Result<(),
 
     let result = sqlx::query(
         r#"
-        INSERT INTO messages (id, timestamp, display_name, message, amount, tx_hash, wallet_address, session_id) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (id, timestamp, display_name, message, amount, coin, tx_hash, wallet_address, session_id) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
     )
     .bind(&message.id)
@@ -136,6 +136,7 @@ pub async fn save_message_db(pool: &SqlitePool, message: &Message) -> Result<(),
     .bind(&message.display_name)
     .bind(&message.content)
     .bind(message.amount)
+    .bind(&message.coin)
     .bind(&message.tx_hash)
     .bind(&message.wallet_address)
     .bind(&message.session_id)
@@ -213,6 +214,7 @@ pub async fn fetch_messages(
             display_name, 
             message, 
             amount, 
+            coin,
             tx_hash, 
             wallet_address, 
             session_id
@@ -321,6 +323,7 @@ mod tests {
             display_name: "テストユーザー".to_string(),
             content: "これはテストメッセージです".to_string(),
             amount: Some(10.5),
+            coin: Some("SUI".to_string()),
             tx_hash: Some("0x123456789abcdef".to_string()),
             wallet_address: Some("0xabcdef123456789".to_string()),
             session_id: Some(session_id.clone()),
@@ -374,6 +377,11 @@ mod tests {
                 content: format!("テストメッセージ本文{}", i),
                 amount: if i % 2 == 0 {
                     Some(i as f64 * 10.0)
+                } else {
+                    None
+                },
+                coin: if i % 2 == 0 {
+                    Some("SUI".to_string())
                 } else {
                     None
                 },
