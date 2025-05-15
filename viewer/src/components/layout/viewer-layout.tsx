@@ -8,6 +8,7 @@
  * - 横長画面では左側70%に動画、右側30%にコメント表示+スーパーチャットフォームを配置
  * - 縦長画面では上から順に動画→コメント表示+スーパーチャットフォームの縦長配置
  * - メディアクエリではなく、アスペクト比（縦横比）に基づいてレイアウトを切り替え
+ * - スマホ横画面時は動画とコメント比率を最適化
  *
  * @file 視聴者画面のレイアウトコンポーネントを実装
  */
@@ -17,6 +18,35 @@
 import { useAspectRatio } from "@/hooks/useAspectRatio";
 import { cn } from "@/lib/utils";
 import type React from "react";
+import { useEffect, useState } from "react";
+
+/**
+ * ウィンドウサイズを取得するカスタムフック
+ *
+ * @returns ウィンドウの幅と高さ
+ */
+function useWindowSize() {
+	const [window_size, set_window_size] = useState({
+		window_width: typeof window !== "undefined" ? window.innerWidth : 0,
+		window_height: typeof window !== "undefined" ? window.innerHeight : 0,
+	});
+
+	useEffect(() => {
+		function handle_resize() {
+			set_window_size({
+				window_width: window.innerWidth,
+				window_height: window.innerHeight,
+			});
+		}
+
+		window.addEventListener("resize", handle_resize);
+		handle_resize();
+
+		return () => window.removeEventListener("resize", handle_resize);
+	}, []);
+
+	return window_size;
+}
 
 /**
  * 視聴者画面レイアウトコンポーネントのプロパティ
@@ -60,6 +90,11 @@ export function ViewerLayout({
 }: ViewerLayoutProps): React.ReactElement {
 	// アスペクト比に基づくレイアウトモードを取得
 	const { is_landscape } = useAspectRatio({ threshold: 1.0 });
+	// 画面幅を取得
+	const { window_width } = useWindowSize();
+
+	// スマホ横画面かどうかを判定（768px未満をスマホと判定）
+	const is_mobile_landscape = is_landscape && window_width < 768;
 
 	return (
 		<div
@@ -72,23 +107,29 @@ export function ViewerLayout({
 					is_landscape ? "flex-row" : "flex-col",
 				)}
 			>
-				{/* 動画エリア (横長: 70%, 縦長: 100%) */}
+				{/* 動画エリア - デバイスに応じて最適化 */}
 				<div
 					className={cn(
 						"min-h-[180px]",
-						is_landscape ? "flex-[7_0_0%] min-h-[300px]" : "w-full",
+						is_mobile_landscape
+							? "flex-[6_0_0%] min-h-[140px]"
+							: is_landscape
+								? "flex-[7_0_0%] min-h-[300px]"
+								: "w-full",
 					)}
 				>
 					{video_player}
 				</div>
 
-				{/* コメントとスーパーチャットの統合エリア (横長: 30%, 縦長: 100%) */}
+				{/* コメントとスーパーチャットの統合エリア - デバイスに応じて最適化 */}
 				<div
 					className={cn(
 						"border rounded-lg overflow-hidden flex flex-col",
-						is_landscape
-							? "flex-[3_0_0%] h-[calc(100vh-150px)] max-h-[800px] min-h-[400px]"
-							: "w-full h-[calc(100vh-320px)] min-h-[250px]",
+						is_mobile_landscape
+							? "flex-[4_0_0%] h-[calc(100vh-80px)] min-h-[140px]"
+							: is_landscape
+								? "flex-[3_0_0%] h-[calc(100vh-150px)] max-h-[800px] min-h-[400px]"
+								: "w-full h-[calc(100vh-320px)] min-h-[250px]",
 					)}
 				>
 					{/* コメントエリア - 高さを調整して上部に配置 */}
