@@ -225,18 +225,44 @@ export function CommentList({
 		}
 	}, [add_test_comment]);
 
+	// テスト用にコメントを大量に追加（スクロールバーテスト用）
+	useEffect(() => {
+		// スクロールバーのテスト用に追加のダミーコメントを生成
+		if (comments.length < 30) {
+			const dummyComments: ChatMessage[] = [];
+			for (let i = 0; i < 30; i++) {
+				dummyComments.push({
+					id: `dummy-${i}`,
+					type: MessageType.CHAT,
+					display_name: `視聴者${Math.floor(Math.random() * 100)}`,
+					message: `これはテストコメント ${i} です。`,
+					timestamp: Date.now() - (30000 - i * 1000),
+				});
+			}
+			set_comments((prev) => [...dummyComments, ...prev]);
+		}
+	}, [comments.length]);
+
 	return (
 		<div className={cn("h-full flex flex-col", className)}>
-			<div className="text-sm font-medium py-2 px-3 border-b sticky top-0 bg-background z-10">
+			<div className="text-sm font-medium py-1 px-3 border-b sticky top-0 bg-background z-10">
 				コメント
 			</div>
 
 			<ScrollArea
-				className="flex-grow h-[calc(100%-40px)]"
+				className="h-[calc(100%-2rem)]"
 				ref={scrollAreaRef}
 				onScroll={handle_scroll}
+				type="always"
+				style={
+					{
+						"--scrollbar-size": "6px",
+						"--scrollbar-thumb-color": "rgba(120, 120, 120, 0.5)",
+						"--scrollbar-background-color": "transparent",
+					} as React.CSSProperties
+				}
 			>
-				<div className="space-y-0">
+				<div className="py-1 px-0.5">
 					{comments.length === 0 ? (
 						<div className="text-center py-4 text-muted-foreground text-sm">
 							コメントはまだありません
@@ -251,8 +277,8 @@ export function CommentList({
 				</div>
 			</ScrollArea>
 
-			{/* 開発時のみ表示するテスト用ボタン */}
-			{process.env.NODE_ENV === "development" && (
+			{/* 開発時のみ表示するテスト用ボタン - 統合UIでは非表示に */}
+			{process.env.NODE_ENV === "development" && false && (
 				<button
 					type="button"
 					onClick={add_test_comment}

@@ -131,7 +131,7 @@ export function Superchat({
 					display_name={complete_info.display_name}
 					message={complete_info.message}
 					transaction_id={complete_info.transaction_id}
-					onReset={handle_reset}
+					on_close={handle_reset}
 				/>
 			</div>
 		);
@@ -142,8 +142,11 @@ export function Superchat({
 		<div className={className}>
 			<SuperchatForm
 				on_send_success={handle_send_success}
-				initial_recipient_address={initial_recipient_address}
-				compact_mode={compact_mode}
+				initial_recipient_address={
+					initial_recipient_address || streamer_address
+				}
+				compact_mode={true}
+				integrated_ui={true}
 			/>
 		</div>
 	);

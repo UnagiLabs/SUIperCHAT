@@ -6,7 +6,7 @@
  *
  * @remarks
  * - PC画面では左側70%に動画、右側30%にコメント表示+スーパーチャットフォームを配置
- * - モバイル画面では上から順に動画→コメント表示→スーパーチャットフォームの縦長配置
+ * - モバイル画面では上から順に動画→コメント表示+スーパーチャットフォームの縦長配置
  *
  * @file 視聴者画面のレイアウトコンポーネントを実装
  */
@@ -57,20 +57,23 @@ export function ViewerLayout({
 	className,
 }: ViewerLayoutProps): React.ReactElement {
 	return (
-		<div className={cn("w-full max-w-7xl mx-auto", className)}>
+		<div
+			className={cn("w-full max-w-7xl mx-auto h-full flex flex-col", className)}
+		>
 			{/* PC: 横並び (左70%:右30%) / モバイル: 縦並び */}
-			<div className="flex flex-col md:flex-row w-full gap-4">
+			<div className="flex flex-col md:flex-row w-full gap-4 flex-grow">
 				{/* 動画エリア (PC: 70%, モバイル: 100%) */}
 				<div className="w-full md:w-[70%] min-h-[300px]">{video_player}</div>
 
-				{/* コメントとスーパーチャットエリア (PC: 30%, モバイル: 100%) */}
-				<div className="w-full md:w-[30%] flex flex-col gap-4">
-					{/* コメントエリア - 高さを制限して固定 */}
-					<div className="h-[350px] md:h-[400px] border rounded-lg overflow-hidden">
-						{comment_list}
-					</div>
+				{/* コメントとスーパーチャットの統合エリア (PC: 30%, モバイル: 100%) */}
+				<div className="w-full md:w-[30%] border rounded-lg overflow-hidden flex flex-col h-[calc(100vh-200px)] md:h-[calc(100vh-150px)] max-h-[800px] min-h-[400px]">
+					{/* コメントエリア - 高さを調整して上部に配置 */}
+					<div className="flex-grow overflow-auto">{comment_list}</div>
 
-					{/* スーパーチャットエリア */}
+					{/* 区切り線 */}
+					<div className="border-t border-border/40" />
+
+					{/* スーパーチャットエリア - 下部に固定 */}
 					<div className="w-full">{superchat_form}</div>
 				</div>
 			</div>

@@ -139,6 +139,12 @@ interface SuperchatFormProps {
 	 * (レイアウト調整用)
 	 */
 	compact_mode?: boolean;
+
+	/**
+	 * 統合UIモードを有効にするかどうか
+	 * コメントリストと統合表示する場合はtrue
+	 */
+	integrated_ui?: boolean;
 }
 
 /**
@@ -151,6 +157,7 @@ export function SuperchatForm({
 	on_send_success,
 	initial_recipient_address = "",
 	compact_mode = false,
+	integrated_ui = false,
 }: SuperchatFormProps = {}) {
 	// 確認モード状態管理
 	const [confirm_mode, set_confirm_mode] = useState(false);
@@ -484,7 +491,208 @@ export function SuperchatForm({
 		set_confirm_mode(false);
 	}
 
-	// 使用するカードコンポーネントのサイズ調整
+	// 統合UIの場合はカードを使わず、シンプルなUIを提供
+	if (integrated_ui) {
+		return (
+			<div className="p-2">
+				<Form {...form}>
+					<form onSubmit={form.handleSubmit(on_submit)} className="space-y-3">
+						<div className="flex items-center justify-between mb-1">
+							<FormField
+								control={form.control}
+								name="display_name"
+								render={({ field }) => (
+									<FormItem className="flex-grow mr-2">
+										<Input
+											placeholder="表示名"
+											{...field}
+											className="text-sm h-8"
+											onChange={(e) => {
+												field.onChange(e);
+												// ユーザー名の更新（debounce処理）
+												if (debouncedNameUpdate.current) {
+													clearTimeout(debouncedNameUpdate.current);
+												}
+												debouncedNameUpdate.current = setTimeout(() => {
+													setUsername(e.target.value);
+												}, 1000);
+											}}
+										/>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
+
+							<div className="flex items-center space-x-1 bg-secondary rounded-lg p-0.5">
+								<button
+									type="button"
+									onClick={() => set_has_tip(false)}
+									className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
+										!has_tip
+											? "bg-card shadow-sm"
+											: "text-muted-foreground hover:bg-secondary/80"
+									}`}
+								>
+									NoTip
+								</button>
+								<button
+									type="button"
+									onClick={() => set_has_tip(true)}
+									className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
+										has_tip
+											? "bg-card shadow-sm"
+											: "text-muted-foreground hover:bg-secondary/80"
+									}`}
+								>
+									SuperChat
+								</button>
+							</div>
+						</div>
+
+						{has_tip && (
+							<div className="flex items-center gap-2">
+								<FormField
+									control={form.control}
+									name="coinTypeArg"
+									render={({ field: coinField }) => (
+										<FormItem className="flex-grow-0">
+											<Select
+												value={coinField.value}
+												onValueChange={coinField.onChange}
+											>
+												<SelectTrigger className="w-20 text-xs h-8">
+													<SelectValue placeholder="Coin" />
+												</SelectTrigger>
+												<SelectContent>
+													{SUPPORTED_COINS.map((coin) => (
+														<SelectItem key={coin.typeArg} value={coin.typeArg}>
+															{coin.symbol}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+
+								<FormField
+									control={form.control}
+									name="amount"
+									render={({ field: { onChange, value, ...field } }) => (
+										<FormItem className="flex-grow">
+											<Input
+												type="number"
+												placeholder="金額"
+												step="any"
+												min="0"
+												{...field}
+												value={value === 0 ? "" : value}
+												onChange={(e) => {
+													const val =
+														e.target.value === ""
+															? 0
+															: Number.parseFloat(e.target.value);
+													onChange(val);
+												}}
+												className="text-sm h-8"
+											/>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
+							</div>
+						)}
+
+						<FormField
+							control={form.control}
+							name="recipient_address"
+							render={({ field }) => (
+								<FormItem className="hidden">
+									<Input {...field} type="hidden" />
+								</FormItem>
+							)}
+						/>
+
+						<div className="flex items-start">
+							<FormField
+								control={form.control}
+								name="message"
+								render={({ field }) => (
+									<FormItem className="flex-grow">
+										<Input
+											placeholder="メッセージを入力..."
+											{...field}
+											className="text-sm h-8"
+										/>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
+							<Button
+								type="submit"
+								className="ml-2 h-8"
+								disabled={isPending}
+								size="sm"
+							>
+								{confirm_mode ? (isPending ? "送信中..." : "送信") : "送信"}
+							</Button>
+						</div>
+
+						{confirm_mode && (
+							<div className="p-2 border rounded-md bg-secondary/50 text-xs mb-1">
+								<p className="font-medium mb-1">送信内容を確認</p>
+								{has_tip && (
+									<div className="flex gap-1 mb-1">
+										<span className="font-medium">Tip:</span>
+										<span>
+											{form.getValues("amount")}{" "}
+											{SUPPORTED_COINS.find(
+												(c) => c.typeArg === form.getValues("coinTypeArg"),
+											)?.symbol || ""}
+										</span>
+									</div>
+								)}
+								<div className="flex gap-1 mb-1">
+									<span className="font-medium">名前:</span>
+									<span>{form.getValues("display_name")}</span>
+								</div>
+								{form.getValues("message") && (
+									<div className="flex gap-1 mb-1">
+										<span className="font-medium">メッセージ:</span>
+										<span className="break-words">
+											{form.getValues("message")}
+										</span>
+									</div>
+								)}
+								<div className="flex gap-1 mt-2">
+									<Button
+										type="button"
+										variant="outline"
+										onClick={handle_cancel}
+										className="text-xs h-7 flex-1"
+										size="sm"
+									>
+										キャンセル
+									</Button>
+									<Button
+										type="submit"
+										className="text-xs h-7 flex-1"
+										disabled={isPending}
+										size="sm"
+									>
+										{isPending ? "送信中..." : "確定"}
+									</Button>
+								</div>
+							</div>
+						)}
+					</form>
+				</Form>
+			</div>
+		);
+	}
+
+	// 通常モード（統合UIではない場合）はカードUIを使用
 	const cardClassName = compact_mode ? "max-w-none" : "max-w-md mx-auto";
 
 	return (
