@@ -9,7 +9,7 @@
 
 "use client";
 
-import { Button } from "@/components/ui/button";
+// import { Button } from "@/components/ui/button";
 import { useAspectRatio } from "@/hooks/useAspectRatio";
 import { cn } from "@/lib/utils";
 import { useCurrentAccount } from "@mysten/dapp-kit";
@@ -31,15 +31,13 @@ export function HeaderWalletButton(): React.ReactElement {
 			{account ? (
 				<WalletConnectButton />
 			) : (
-				<div className="flex flex-col items-end">
-					<WalletConnectButton
-						buttonContent={<>Connect Wallet</>}
-						className={cn(
-							"border rounded-md",
-							is_landscape ? "text-sm px-4 py-2" : "text-xs px-2 py-1",
-						)}
-					/>
-				</div>
+				<WalletConnectButton
+					buttonContent={<>Connect Wallet</>}
+					className={cn(
+						"rounded-md",
+						is_landscape ? "text-sm px-4 py-2" : "text-xs px-2 py-1",
+					)}
+				/>
 			)}
 		</div>
 	);
