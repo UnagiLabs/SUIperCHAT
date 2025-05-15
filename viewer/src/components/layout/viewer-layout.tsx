@@ -2,17 +2,19 @@
  * 視聴者画面レイアウトコンポーネント
  *
  * 動画埋め込み、コメント表示、スーパーチャット送信フォームを一体化したレイアウトを提供します。
- * PCとモバイルそれぞれに最適化されたレスポンシブなレイアウトを実装しています。
+ * 横長（PC）と縦長（スマホ）のそれぞれに最適化されたレスポンシブなレイアウトを実装しています。
  *
  * @remarks
- * - PC画面では左側70%に動画、右側30%にコメント表示+スーパーチャットフォームを配置
- * - モバイル画面では上から順に動画→コメント表示+スーパーチャットフォームの縦長配置
+ * - 横長画面では左側70%に動画、右側30%にコメント表示+スーパーチャットフォームを配置
+ * - 縦長画面では上から順に動画→コメント表示+スーパーチャットフォームの縦長配置
+ * - メディアクエリではなく、アスペクト比（縦横比）に基づいてレイアウトを切り替え
  *
  * @file 視聴者画面のレイアウトコンポーネントを実装
  */
 
 "use client";
 
+import { useAspectRatio } from "@/hooks/useAspectRatio";
 import { cn } from "@/lib/utils";
 import type React from "react";
 
@@ -45,7 +47,7 @@ interface ViewerLayoutProps {
  * 視聴者画面レイアウトコンポーネント
  *
  * 動画・コメント・スーパーチャットフォームを一体化したレイアウトを提供します。
- * PCとモバイルでそれぞれ最適なレイアウトに自動調整されます。
+ * 横長と縦長でそれぞれ最適なレイアウトに自動調整されます。
  *
  * @param props - コンポーネントのプロパティ
  * @returns 視聴者画面レイアウトのJSXエレメント
@@ -56,19 +58,39 @@ export function ViewerLayout({
 	superchat_form,
 	className,
 }: ViewerLayoutProps): React.ReactElement {
+	// アスペクト比に基づくレイアウトモードを取得
+	const { is_landscape } = useAspectRatio({ threshold: 1.0 });
+
 	return (
 		<div
 			className={cn("w-full max-w-7xl mx-auto h-full flex flex-col", className)}
 		>
-			{/* PC: 横並び (左70%:右30%) / モバイル: 縦並び */}
-			<div className="flex flex-col md:flex-row w-full gap-2 md:gap-4 flex-grow">
-				{/* 動画エリア (PC: 70%, モバイル: 100%) */}
-				<div className="w-full md:w-[70%] min-h-[180px] md:min-h-[300px]">
+			{/* レイアウトをアスペクト比に基づいて切り替え */}
+			<div
+				className={cn(
+					"flex w-full gap-2 flex-grow",
+					is_landscape ? "flex-row" : "flex-col",
+				)}
+			>
+				{/* 動画エリア (横長: 70%, 縦長: 100%) */}
+				<div
+					className={cn(
+						"w-full min-h-[180px]",
+						is_landscape ? "w-[70%] min-h-[300px]" : "",
+					)}
+				>
 					{video_player}
 				</div>
 
-				{/* コメントとスーパーチャットの統合エリア (PC: 30%, モバイル: 100%) */}
-				<div className="w-full md:w-[30%] border rounded-lg overflow-hidden flex flex-col h-[calc(100vh-320px)] md:h-[calc(100vh-150px)] max-h-[800px] min-h-[250px] md:min-h-[400px]">
+				{/* コメントとスーパーチャットの統合エリア (横長: 30%, 縦長: 100%) */}
+				<div
+					className={cn(
+						"w-full border rounded-lg overflow-hidden flex flex-col",
+						is_landscape
+							? "w-[30%] h-[calc(100vh-150px)] max-h-[800px] min-h-[400px]"
+							: "h-[calc(100vh-320px)] min-h-[250px]",
+					)}
+				>
 					{/* コメントエリア - 高さを調整して上部に配置 */}
 					<div className="flex-grow overflow-auto">{comment_list}</div>
 

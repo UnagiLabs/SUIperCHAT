@@ -6,6 +6,7 @@
  * @remarks
  * - アプリケーションのロゴ（SUIperCHAT）
  * - ウォレット接続ボタン
+ * - アスペクト比に基づくレスポンシブ対応
  *
  * @file 視聴者画面のヘッダーコンポーネントを実装
  */
@@ -13,6 +14,7 @@
 "use client";
 
 import { HeaderWalletButton } from "@/components/wallet/header-wallet-button";
+import { useAspectRatio } from "@/hooks/useAspectRatio";
 import { cn } from "@/lib/utils";
 import type React from "react";
 import { Toaster } from "sonner";
@@ -36,17 +38,30 @@ interface ViewerHeaderProps {
 export function ViewerHeader({
 	className,
 }: ViewerHeaderProps): React.ReactElement {
+	// アスペクト比に基づくレイアウトモードを取得
+	const { is_landscape } = useAspectRatio({ threshold: 1.0 });
+
 	return (
 		<>
 			<Toaster richColors position="top-center" />
 			<header
 				className={cn(
-					"w-full py-2 md:py-3 border-b border-border/40",
+					"w-full border-b border-border/40",
+					is_landscape ? "py-3" : "py-2",
 					className,
 				)}
 			>
-				<div className="container max-w-screen-xl mx-auto px-2 md:px-3 flex items-center justify-between">
-					<h1 className="text-xl md:text-2xl font-bold">SUIperCHAT</h1>
+				<div
+					className={cn(
+						"container max-w-screen-xl mx-auto px-2 flex items-center justify-between",
+						is_landscape ? "px-3" : "px-2",
+					)}
+				>
+					<h1
+						className={cn("font-bold", is_landscape ? "text-2xl" : "text-xl")}
+					>
+						SUIperCHAT
+					</h1>
 					<HeaderWalletButton />
 				</div>
 			</header>

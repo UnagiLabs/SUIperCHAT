@@ -5,8 +5,9 @@
  * 動画の埋め込み、コメント表示、スーパーチャット送信機能を提供します。
  *
  * @remarks
- * - PCとモバイルでレスポンシブに対応
+ * - 横長（PC）と縦長（スマホ）でレスポンシブに対応
  * - 各コンポーネントが統合された一体的なUI
+ * - アスペクト比（縦横比）に基づくレイアウト切り替え
  *
  * @file 視聴者メインページの実装
  */
@@ -16,7 +17,9 @@ import { ViewerHeader } from "@/components/layout/viewer-header";
 import { ViewerLayout } from "@/components/layout/viewer-layout";
 import { Superchat } from "@/components/superchat/superchat";
 import { VideoPlayer } from "@/components/video/video-player";
+import { useAspectRatio } from "@/hooks/useAspectRatio";
 import { getServerConfig } from "@/lib/server-config";
+import { cn } from "@/lib/utils";
 
 /**
  * 視聴者向けホームページコンポーネント
