@@ -11,11 +11,7 @@
  */
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { useState } from "react";
-import { Toaster } from "sonner";
-
-import { cn } from "@/lib/utils";
+import { Suspense } from "react";
 import { SuperchatComplete } from "./superchat-complete";
 import { SuperchatForm } from "./superchat-form";
 
@@ -69,6 +65,27 @@ interface SuperchatProps {
  * @returns スーパーチャットコンポーネント
  */
 export function Superchat({
+	className,
+	on_send_success,
+	initial_recipient_address,
+	compact_mode = false,
+}: SuperchatProps) {
+	return (
+		<Suspense fallback={<div className="p-2">読み込み中...</div>}>
+			<SuperchatContent
+				className={className}
+				on_send_success={on_send_success}
+				initial_recipient_address={initial_recipient_address}
+				compact_mode={compact_mode}
+			/>
+		</Suspense>
+	);
+}
+
+/**
+ * useSearchParamsを使用するスーパーチャットの内部コンポーネント
+ */
+function SuperchatContent({
 	className,
 	on_send_success,
 	initial_recipient_address,
@@ -151,3 +168,7 @@ export function Superchat({
 		</div>
 	);
 }
+
+// 不足しているインポートを追加
+import { useSearchParams } from "next/navigation";
+import { useState } from "react";
