@@ -164,7 +164,12 @@ function SuperchatContent({
 	return (
 		<div
 			className={className}
-			style={{ height: "100%", display: "flex", flexDirection: "column" }}
+			style={{
+				height: "100%",
+				display: "flex",
+				flexDirection: "column",
+				justifyContent: "flex-end",
+			}}
 		>
 			<SuperchatForm
 				on_send_success={handle_send_success}

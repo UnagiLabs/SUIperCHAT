@@ -178,7 +178,7 @@ export function ViewerLayout({
 
 					// コメントラッパーの高さを計算
 					const wrapperHeight = availableHeight - bottomElementsHeight;
-					commentWrapperRef.current.style.height = `${wrapperHeight}px`;
+					commentWrapperRef.current.style.minHeight = "0";
 				}
 			} else if (is_landscape) {
 				// PC横画面時も同様の計算
@@ -199,7 +199,7 @@ export function ViewerLayout({
 
 					// コメントラッパーの高さを計算
 					const wrapperHeight = availableHeight - bottomElementsHeight;
-					commentWrapperRef.current.style.height = `${wrapperHeight}px`;
+					commentWrapperRef.current.style.minHeight = "0";
 				}
 			} else {
 				// 縦長画面時の計算
@@ -232,7 +232,7 @@ export function ViewerLayout({
 
 					// コメントラッパーの高さを計算
 					const wrapperHeight = commentContainerHeight - bottomElementsHeight;
-					commentWrapperRef.current.style.height = `${wrapperHeight}px`;
+					commentWrapperRef.current.style.minHeight = "0";
 				}
 			}
 		}
@@ -315,13 +315,13 @@ export function ViewerLayout({
 									? "flex-[3_0_0%]"
 									: "w-full",
 					)}
-					style={{ display: "flex", flexDirection: "column" }}
+					style={{ display: "flex", flexDirection: "column", height: "100%" }}
 				>
-					{/* コメントエリア - 明示的に高さを固定 */}
+					{/* コメントエリア - 残りのスペースを埋める */}
 					<div
 						ref={commentWrapperRef}
-						className="overflow-hidden"
-						style={{ flex: "0 0 auto" }}
+						className="overflow-hidden flex-grow"
+						style={{ flex: "1 1 auto", minHeight: "0" }}
 					>
 						{comment_list}
 					</div>
@@ -329,10 +329,10 @@ export function ViewerLayout({
 					{/* 区切り線 */}
 					<div className="border-t border-border/40" />
 
-					{/* スーパーチャットエリア - 高さを固定 */}
+					{/* スーパーチャットエリア - 高さを固定して下部に配置 */}
 					<div
 						ref={superchatRef}
-						className="w-full"
+						className="w-full flex-shrink-0"
 						style={{ height: `${superchatHeight}px`, flex: "0 0 auto" }}
 					>
 						{superchat_form}

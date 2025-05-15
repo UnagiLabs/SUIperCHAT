@@ -259,7 +259,7 @@ export function CommentList({
 						"--scrollbar-size": "4px",
 						"--scrollbar-thumb-color": "rgba(120, 120, 120, 0.5)",
 						"--scrollbar-background-color": "transparent",
-						height: "calc(100% - 1.5rem)",
+						height: "100%",
 					} as React.CSSProperties
 				}
 			>
