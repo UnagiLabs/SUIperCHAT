@@ -1,18 +1,61 @@
-"use client";
+/**
+ * 視聴者ページ
+ *
+ * 視聴者としてライブ配信を視聴するためのメインページ。
+ * 動画の埋め込み、コメント表示、スーパーチャット送信機能を提供します。
+ *
+ * @remarks
+ * - PCとモバイルでレスポンシブに対応
+ * - 各コンポーネントが統合された一体的なUI
+ *
+ * @file 視聴者メインページの実装
+ */
 
-import dynamic from "next/dynamic";
-import { Suspense } from "react";
+import { CommentList } from "@/components/comments/comment-list";
+import { ViewerHeader } from "@/components/layout/viewer-header";
+import { ViewerLayout } from "@/components/layout/viewer-layout";
+import { Superchat } from "@/components/superchat/superchat";
+import { VideoPlayer } from "@/components/video/video-player";
+import { getServerConfig } from "@/lib/server-config";
 
-// Dynamically import the HomePage component with ssr: false
-const HomePage = dynamic(() => import("@/components/home-page"), {
-	ssr: false,
-	loading: () => <div>Loading page content...</div>, // Add a basic loading indicator
-});
+/**
+ * 視聴者向けホームページコンポーネント
+ *
+ * @returns 視聴者ページのJSXエレメント
+ */
+export default async function HomePage() {
+	// サーバー設定を取得
+	const config = await getServerConfig();
 
-export default function Page() {
 	return (
-		<Suspense fallback={<div>Loading...</div>}>
-			<HomePage />
-		</Suspense>
+		<>
+			<ViewerHeader />
+			<main className="container max-w-screen-xl mx-auto p-2 md:p-4">
+				<ViewerLayout
+					video_player={
+						<VideoPlayer
+							video_url={
+								config?.streamUrl ||
+								"https://www.youtube.com/watch?v=jfKfPfyJRdk"
+							}
+							fallback_content={
+								<div className="w-full h-full flex items-center justify-center bg-muted">
+									<p className="text-center p-4">
+										動画URLが設定されていないか、読み込みに失敗しました。
+									</p>
+								</div>
+							}
+						/>
+					}
+					comment_list={<CommentList auto_scroll={true} />}
+					superchat_form={
+						<Superchat
+							initial_recipient_address={config?.walletAddress || ""}
+							compact_mode={true}
+						/>
+					}
+				/>
+			</main>
+		</>
 	);
 }

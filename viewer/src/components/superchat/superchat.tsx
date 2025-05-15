@@ -15,6 +15,7 @@ import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Toaster } from "sonner";
 
+import { cn } from "@/lib/utils";
 import { SuperchatComplete } from "./superchat-complete";
 import { SuperchatForm } from "./superchat-form";
 
@@ -50,15 +51,29 @@ interface SuperchatProps {
 		message: string,
 		transaction_id?: string,
 	) => void;
+	/**
+	 * 初期受取人ウォレットアドレス
+	 */
+	initial_recipient_address?: string;
+	/**
+	 * コンパクトモードを有効にするかどうか
+	 * レイアウト調整用
+	 */
+	compact_mode?: boolean;
 }
 
 /**
  * スーパーチャットコンポーネント
  *
  * @param props - コンポーネントのプロパティ
- * @returns スーパーチャットコンポーネントのJSXエレメント
+ * @returns スーパーチャットコンポーネント
  */
-export function Superchat({ className = "", on_send_success }: SuperchatProps) {
+export function Superchat({
+	className,
+	on_send_success,
+	initial_recipient_address,
+	compact_mode = false,
+}: SuperchatProps) {
 	// URLパラメータから配信者のウォレットアドレスを取得
 	const search_params = useSearchParams();
 	const streamer_address = search_params.get("streamerAddress") || "";
@@ -103,32 +118,33 @@ export function Superchat({ className = "", on_send_success }: SuperchatProps) {
 	/**
 	 * 完了画面を閉じるハンドラー
 	 */
-	function handle_close_complete() {
+	function handle_reset() {
 		set_send_state("form");
 	}
 
+	// 送信状態が「完了」の場合は完了画面を表示
+	if (send_state === "complete" && complete_info) {
+		return (
+			<div className={className}>
+				<SuperchatComplete
+					amount={complete_info.amount}
+					display_name={complete_info.display_name}
+					message={complete_info.message}
+					transaction_id={complete_info.transaction_id}
+					onReset={handle_reset}
+				/>
+			</div>
+		);
+	}
+
+	// 通常はフォームを表示
 	return (
-		<div className={`superchat ${className}`}>
-			<Toaster richColors position="top-center" />
-
-			<>
-				{send_state === "form" && (
-					<SuperchatForm
-						on_send_success={handle_send_success}
-						initial_recipient_address={streamer_address}
-					/>
-				)}
-
-				{send_state === "complete" && (
-					<SuperchatComplete
-						amount={complete_info.amount}
-						display_name={complete_info.display_name}
-						message={complete_info.message}
-						transaction_id={complete_info.transaction_id}
-						on_close={handle_close_complete}
-					/>
-				)}
-			</>
+		<div className={className}>
+			<SuperchatForm
+				on_send_success={handle_send_success}
+				initial_recipient_address={initial_recipient_address}
+				compact_mode={compact_mode}
+			/>
 		</div>
 	);
 }

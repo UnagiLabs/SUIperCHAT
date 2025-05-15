@@ -133,6 +133,12 @@ interface SuperchatFormProps {
 	 * 初期受取人ウォレットアドレス
 	 */
 	initial_recipient_address?: string;
+
+	/**
+	 * コンパクトモードを有効にするかどうか
+	 * (レイアウト調整用)
+	 */
+	compact_mode?: boolean;
 }
 
 /**
@@ -144,6 +150,7 @@ interface SuperchatFormProps {
 export function SuperchatForm({
 	on_send_success,
 	initial_recipient_address = "",
+	compact_mode = false,
 }: SuperchatFormProps = {}) {
 	// 確認モード状態管理
 	const [confirm_mode, set_confirm_mode] = useState(false);
@@ -477,47 +484,92 @@ export function SuperchatForm({
 		set_confirm_mode(false);
 	}
 
+	// 使用するカードコンポーネントのサイズ調整
+	const cardClassName = compact_mode ? "max-w-none" : "max-w-md mx-auto";
+
 	return (
-		<Card className="w-full max-w-md mx-auto">
-			<CardHeader>
+		<Card className={`w-full ${cardClassName}`}>
+			<CardHeader className={compact_mode ? "px-4 pt-4 pb-0" : ""}>
 				<CardTitle>Send a Super Chat</CardTitle>
 				<CardDescription>
 					Send a message and optionally SUI directly to the streamer
 				</CardDescription>
 			</CardHeader>
-			<CardContent>
+			<CardContent className={compact_mode ? "px-4 pt-4" : ""}>
 				<Form {...form}>
 					<form onSubmit={form.handleSubmit(on_submit)} className="space-y-6">
 						<FormField
 							control={form.control}
-							name="amount"
-							render={({ field: { onChange, value, ...field } }) => (
-								<FormItem className="space-y-3">
-									<div className="flex justify-between items-center">
-										<FormLabel>Tip</FormLabel>
-										<Button
-											type="button"
-											variant="ghost"
-											size="sm"
-											onClick={() => {
-												set_has_tip(!has_tip);
-												if (!has_tip) {
-													// Tipを有効にする時、デフォルト値を設定
-													onChange(0);
-												} else {
-													// Tipを無効にする時、金額を0にリセット
-													onChange(0);
+							name="display_name"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>Display Name</FormLabel>
+									<FormControl>
+										<Input
+											placeholder="Your display name"
+											{...field}
+											onChange={(e) => {
+												field.onChange(e);
+												// ユーザー名の更新（debounce処理）
+												if (debouncedNameUpdate.current) {
+													clearTimeout(debouncedNameUpdate.current);
 												}
+												debouncedNameUpdate.current = setTimeout(() => {
+													setUsername(e.target.value);
+													toast.success("Display name saved", {
+														description:
+															"This name will be used for your future messages",
+														duration: 2000,
+													});
+												}, 1000);
 											}}
-											className="text-xs h-6 px-2"
-										>
-											{has_tip ? "Remove Tip" : "Add Tip"}
-										</Button>
-									</div>
+										/>
+									</FormControl>
+									<FormDescription>
+										This name will be displayed with your message
+									</FormDescription>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
 
-									{has_tip ? (
-										<FormControl>
-											<div className="space-y-4">
+						<div className="space-y-3">
+							<div className="flex justify-between items-center">
+								<span className="text-sm font-medium">Message Type</span>
+								<div className="flex items-center space-x-1 bg-secondary rounded-lg p-1">
+									<button
+										type="button"
+										onClick={() => set_has_tip(false)}
+										className={`px-3 py-1 text-sm rounded-md transition-colors ${
+											!has_tip
+												? "bg-card shadow-sm"
+												: "text-muted-foreground hover:bg-secondary/80"
+										}`}
+									>
+										NoTip
+									</button>
+									<button
+										type="button"
+										onClick={() => set_has_tip(true)}
+										className={`px-3 py-1 text-sm rounded-md transition-colors ${
+											has_tip
+												? "bg-card shadow-sm"
+												: "text-muted-foreground hover:bg-secondary/80"
+										}`}
+									>
+										SuperChat
+									</button>
+								</div>
+							</div>
+
+							{has_tip && (
+								<FormField
+									control={form.control}
+									name="amount"
+									render={({ field: { onChange, value, ...field } }) => (
+										<FormItem className="space-y-3">
+											<FormLabel>Tip Amount</FormLabel>
+											<FormControl>
 												<div className="flex items-center gap-3">
 													<FormField
 														control={form.control}
@@ -576,43 +628,31 @@ export function SuperchatForm({
 														<FormMessage />
 													</FormItem>
 												</div>
-											</div>
-										</FormControl>
-									) : (
-										<FormControl>
-											<div className="p-4 border rounded border-dashed text-center">
-												<span className="text-muted-foreground">
-													No tip will be sent (message only)
-												</span>
-											</div>
-										</FormControl>
-									)}
+											</FormControl>
 
-									<FormDescription>
-										{has_tip ? (
-											<span
-												className={
-													!currentAccount ? "text-amber-500 font-medium" : ""
-												}
-											>
-												{!currentAccount
-													? "Wallet connection required for sending tips"
-													: "Tips will be sent with your message"}
-											</span>
-										) : (
-											"Send message only (no wallet connection needed)"
-										)}
-									</FormDescription>
-									<FormMessage />
-								</FormItem>
+											<FormDescription>
+												<span
+													className={
+														!currentAccount ? "text-amber-500 font-medium" : ""
+													}
+												>
+													{!currentAccount
+														? "Wallet connection required for sending tips"
+														: "Tips will be sent with your message"}
+												</span>
+											</FormDescription>
+											<FormMessage />
+										</FormItem>
+									)}
+								/>
 							)}
-						/>
+						</div>
 
 						<FormField
 							control={form.control}
 							name="recipient_address"
 							render={({ field }) => (
-								<FormItem>
+								<FormItem className={compact_mode ? "hidden" : ""}>
 									<FormLabel>Recipient Address</FormLabel>
 									<FormControl>
 										<Input
@@ -638,46 +678,10 @@ export function SuperchatForm({
 
 						<FormField
 							control={form.control}
-							name="display_name"
-							render={({ field }) => (
-								<FormItem>
-									<FormLabel>Display Name</FormLabel>
-									<FormControl>
-										<Input
-											placeholder="Your display name"
-											{...field}
-											onChange={(e) => {
-												field.onChange(e);
-												// ユーザー名の更新（debounce処理）
-												if (debouncedNameUpdate.current) {
-													clearTimeout(debouncedNameUpdate.current);
-												}
-												debouncedNameUpdate.current = setTimeout(() => {
-													setUsername(e.target.value);
-													toast.success("Display name saved", {
-														description:
-															"This name will be used for your future messages",
-														duration: 2000,
-													});
-												}, 1000);
-											}}
-										/>
-									</FormControl>
-									<FormDescription>
-										This name will be displayed with your message. Changes will
-										be automatically saved.
-									</FormDescription>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-
-						<FormField
-							control={form.control}
 							name="message"
 							render={({ field }) => (
 								<FormItem>
-									<FormLabel>Message (Optional)</FormLabel>
+									<FormLabel>Message {!has_tip && "(Optional)"}</FormLabel>
 									<FormControl>
 										<Input placeholder="Message to the streamer" {...field} />
 									</FormControl>
@@ -751,7 +755,7 @@ export function SuperchatForm({
 								</>
 							) : (
 								<Button type="submit" className="w-full">
-									Confirm
+									{has_tip ? "Confirm SuperChat" : "Send Message"}
 								</Button>
 							)}
 						</div>
