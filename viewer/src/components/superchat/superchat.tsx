@@ -71,7 +71,13 @@ export function Superchat({
 	compact_mode = false,
 }: SuperchatProps) {
 	return (
-		<Suspense fallback={<div className="p-2">読み込み中...</div>}>
+		<Suspense
+			fallback={
+				<div className="h-full flex items-center justify-center">
+					読み込み中...
+				</div>
+			}
+		>
 			<SuperchatContent
 				className={className}
 				on_send_success={on_send_success}
@@ -156,7 +162,10 @@ function SuperchatContent({
 
 	// 通常はフォームを表示
 	return (
-		<div className={className}>
+		<div
+			className={className}
+			style={{ height: "100%", display: "flex", flexDirection: "column" }}
+		>
 			<SuperchatForm
 				on_send_success={handle_send_success}
 				initial_recipient_address={

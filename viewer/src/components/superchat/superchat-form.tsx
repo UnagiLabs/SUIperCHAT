@@ -499,7 +499,7 @@ export function SuperchatForm({
 
 	// UIは常に統合UIを使用（non-integrated UIは使用されていないため削除）
 	return (
-		<div className="p-0.5">
+		<div className="h-full flex flex-col justify-center">
 			<Form {...form}>
 				<form onSubmit={form.handleSubmit(on_submit)} className="space-y-1">
 					<div className="flex items-center justify-between mb-0.5">

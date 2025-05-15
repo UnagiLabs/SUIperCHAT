@@ -250,7 +250,7 @@ export function CommentList({
 			</div>
 
 			<ScrollArea
-				className="h-[calc(100%-1.5rem)]"
+				className="flex-1 overflow-hidden"
 				ref={scrollAreaRef}
 				onScroll={handle_scroll}
 				type="always"
@@ -259,6 +259,7 @@ export function CommentList({
 						"--scrollbar-size": "4px",
 						"--scrollbar-thumb-color": "rgba(120, 120, 120, 0.5)",
 						"--scrollbar-background-color": "transparent",
+						height: "calc(100% - 1.5rem)",
 					} as React.CSSProperties
 				}
 			>

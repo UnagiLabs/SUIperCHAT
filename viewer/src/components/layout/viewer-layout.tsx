@@ -115,6 +115,8 @@ export function ViewerLayout({
 	const commentRef = useRef<HTMLDivElement>(null);
 	const headerRef = useRef<HTMLDivElement | null>(null);
 	const superchatRef = useRef<HTMLDivElement>(null);
+	const commentListRef = useRef<HTMLDivElement>(null);
+	const commentWrapperRef = useRef<HTMLDivElement>(null);
 
 	// スーパーチャットエリアの高さ（デバイスに応じて調整）
 	// SSRとクライアント初回レンダリングで一致するよう、SSR時は常にデスクトップ用の値を使用
@@ -168,6 +170,16 @@ export function ViewerLayout({
 				if (commentRef.current) {
 					commentRef.current.style.height = containerHeight;
 				}
+
+				// コメントリストの高さを設定（スーパーチャットフォームと区切り線の高さを考慮）
+				if (commentWrapperRef.current) {
+					// スーパーチャットと区切り線の合計高さ
+					const bottomElementsHeight = superchatHeight + 1; // 1pxの区切り線
+
+					// コメントラッパーの高さを計算
+					const wrapperHeight = availableHeight - bottomElementsHeight;
+					commentWrapperRef.current.style.height = `${wrapperHeight}px`;
+				}
 			} else if (is_landscape) {
 				// PC横画面時も同様の計算
 				const containerHeight = `${availableHeight}px`;
@@ -178,6 +190,16 @@ export function ViewerLayout({
 
 				if (commentRef.current) {
 					commentRef.current.style.height = containerHeight;
+				}
+
+				// コメントリストの高さを設定（スーパーチャットフォームと区切り線の高さを考慮）
+				if (commentWrapperRef.current) {
+					// スーパーチャットと区切り線の合計高さ
+					const bottomElementsHeight = superchatHeight + 1; // 1pxの区切り線
+
+					// コメントラッパーの高さを計算
+					const wrapperHeight = availableHeight - bottomElementsHeight;
+					commentWrapperRef.current.style.height = `${wrapperHeight}px`;
 				}
 			} else {
 				// 縦長画面時の計算
@@ -201,6 +223,16 @@ export function ViewerLayout({
 				// コメントコンテナの高さを設定
 				if (commentRef.current) {
 					commentRef.current.style.height = `${commentContainerHeight}px`;
+				}
+
+				// コメントリストの高さを設定（スーパーチャットフォームと区切り線の高さを考慮）
+				if (commentWrapperRef.current) {
+					// スーパーチャットと区切り線の合計高さ
+					const bottomElementsHeight = superchatHeight + 1; // 1pxの区切り線
+
+					// コメントラッパーの高さを計算
+					const wrapperHeight = commentContainerHeight - bottomElementsHeight;
+					commentWrapperRef.current.style.height = `${wrapperHeight}px`;
 				}
 			}
 		}
@@ -273,7 +305,7 @@ export function ViewerLayout({
 				<div
 					ref={commentRef}
 					className={cn(
-						"border rounded-lg overflow-hidden flex flex-col",
+						"border rounded-lg overflow-hidden",
 						// SSRとクライアント初回レンダリングで一致するよう、SSR時は常にデスクトップ用の値を使用
 						!is_mounted
 							? "flex-[3_0_0%]"
@@ -283,9 +315,14 @@ export function ViewerLayout({
 									? "flex-[3_0_0%]"
 									: "w-full",
 					)}
+					style={{ display: "flex", flexDirection: "column" }}
 				>
-					{/* コメントエリア - flex-growで残りのスペースを自動的に埋める */}
-					<div className="flex-grow overflow-auto overflow-x-hidden">
+					{/* コメントエリア - 明示的に高さを固定 */}
+					<div
+						ref={commentWrapperRef}
+						className="overflow-hidden"
+						style={{ flex: "0 0 auto" }}
+					>
 						{comment_list}
 					</div>
 
@@ -295,8 +332,8 @@ export function ViewerLayout({
 					{/* スーパーチャットエリア - 高さを固定 */}
 					<div
 						ref={superchatRef}
-						className="w-full shrink-0"
-						style={{ height: `${superchatHeight}px` }}
+						className="w-full"
+						style={{ height: `${superchatHeight}px`, flex: "0 0 auto" }}
 					>
 						{superchat_form}
 					</div>
