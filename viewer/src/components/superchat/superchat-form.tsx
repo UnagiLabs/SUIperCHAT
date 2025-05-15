@@ -499,19 +499,19 @@ export function SuperchatForm({
 
 	// UIは常に統合UIを使用（non-integrated UIは使用されていないため削除）
 	return (
-		<div className="p-2">
+		<div className="p-0.5">
 			<Form {...form}>
-				<form onSubmit={form.handleSubmit(on_submit)} className="space-y-3">
-					<div className="flex items-center justify-between mb-1">
+				<form onSubmit={form.handleSubmit(on_submit)} className="space-y-1">
+					<div className="flex items-center justify-between mb-0.5">
 						<FormField
 							control={form.control}
 							name="display_name"
 							render={({ field }) => (
-								<FormItem className="flex-grow mr-2">
+								<FormItem className="flex-grow mr-1">
 									<Input
 										placeholder="表示名"
 										{...field}
-										className="text-sm h-8"
+										className="text-xs h-6"
 										onChange={(e) => {
 											field.onChange(e);
 											updateUsername(e.target.value);
@@ -522,11 +522,11 @@ export function SuperchatForm({
 							)}
 						/>
 
-						<div className="flex items-center space-x-1 bg-secondary rounded-lg p-0.5">
+						<div className="flex items-center space-x-0.5 bg-secondary rounded-lg p-0.5">
 							<button
 								type="button"
 								onClick={() => set_has_tip(false)}
-								className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
+								className={`px-1.5 py-0.5 text-xs rounded-md transition-colors ${
 									!has_tip
 										? "bg-card shadow-sm"
 										: "text-muted-foreground hover:bg-secondary/80"
@@ -537,7 +537,7 @@ export function SuperchatForm({
 							<button
 								type="button"
 								onClick={() => set_has_tip(true)}
-								className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
+								className={`px-1.5 py-0.5 text-xs rounded-md transition-colors ${
 									has_tip
 										? "bg-card shadow-sm"
 										: "text-muted-foreground hover:bg-secondary/80"
@@ -549,7 +549,7 @@ export function SuperchatForm({
 					</div>
 
 					{has_tip && (
-						<div className="flex items-center gap-2">
+						<div className="flex items-center gap-1 mb-0.5">
 							<FormField
 								control={form.control}
 								name="coinTypeArg"
@@ -559,7 +559,7 @@ export function SuperchatForm({
 											value={coinField.value}
 											onValueChange={coinField.onChange}
 										>
-											<SelectTrigger className="w-20 text-xs h-8">
+											<SelectTrigger className="w-16 text-xs h-6">
 												<SelectValue placeholder="Coin" />
 											</SelectTrigger>
 											<SelectContent>
@@ -594,7 +594,7 @@ export function SuperchatForm({
 														: Number.parseFloat(e.target.value);
 												onChange(val);
 											}}
-											className="text-sm h-8"
+											className="text-xs h-6"
 										/>
 										<FormMessage />
 									</FormItem>
@@ -622,7 +622,7 @@ export function SuperchatForm({
 									<Input
 										placeholder="メッセージを入力..."
 										{...field}
-										className="text-sm h-8"
+										className="text-xs h-6"
 									/>
 									<FormMessage />
 								</FormItem>
@@ -630,7 +630,7 @@ export function SuperchatForm({
 						/>
 						<Button
 							type="submit"
-							className="ml-2 h-8"
+							className="ml-1 h-6"
 							disabled={isPending}
 							size="sm"
 						>
@@ -639,10 +639,10 @@ export function SuperchatForm({
 					</div>
 
 					{confirm_mode && (
-						<div className="p-2 border rounded-md bg-secondary/50 text-xs mb-1">
-							<p className="font-medium mb-1">送信内容を確認</p>
+						<div className="p-1 border rounded-md bg-secondary/50 text-xs mb-0.5">
+							<p className="font-medium mb-0.5 text-[10px]">送信内容を確認</p>
 							{has_tip && (
-								<div className="flex gap-1 mb-1">
+								<div className="flex gap-1 mb-0.5 text-[10px]">
 									<span className="font-medium">Tip:</span>
 									<span>
 										{form.getValues("amount")}{" "}
@@ -652,31 +652,31 @@ export function SuperchatForm({
 									</span>
 								</div>
 							)}
-							<div className="flex gap-1 mb-1">
+							<div className="flex gap-1 mb-0.5 text-[10px]">
 								<span className="font-medium">名前:</span>
 								<span>{form.getValues("display_name")}</span>
 							</div>
 							{form.getValues("message") && (
-								<div className="flex gap-1 mb-1">
+								<div className="flex gap-1 mb-0.5 text-[10px]">
 									<span className="font-medium">メッセージ:</span>
 									<span className="break-words">
 										{form.getValues("message")}
 									</span>
 								</div>
 							)}
-							<div className="flex gap-1 mt-2">
+							<div className="flex gap-1 mt-0.5">
 								<Button
 									type="button"
 									variant="outline"
 									onClick={handle_cancel}
-									className="text-xs h-7 flex-1"
+									className="text-[10px] h-5 flex-1"
 									size="sm"
 								>
 									キャンセル
 								</Button>
 								<Button
 									type="submit"
-									className="text-xs h-7 flex-1"
+									className="text-[10px] h-5 flex-1"
 									disabled={isPending}
 									size="sm"
 								>

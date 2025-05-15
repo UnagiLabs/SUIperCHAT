@@ -245,26 +245,26 @@ export function CommentList({
 
 	return (
 		<div className={cn("h-full flex flex-col", className)}>
-			<div className="text-sm font-medium py-1 px-3 border-b sticky top-0 bg-background z-10">
+			<div className="text-xs font-medium py-0.5 px-2 border-b sticky top-0 bg-background z-10">
 				コメント
 			</div>
 
 			<ScrollArea
-				className="h-[calc(100%-2rem)]"
+				className="h-[calc(100%-1.5rem)]"
 				ref={scrollAreaRef}
 				onScroll={handle_scroll}
 				type="always"
 				style={
 					{
-						"--scrollbar-size": "6px",
+						"--scrollbar-size": "4px",
 						"--scrollbar-thumb-color": "rgba(120, 120, 120, 0.5)",
 						"--scrollbar-background-color": "transparent",
 					} as React.CSSProperties
 				}
 			>
-				<div className="py-1 px-0.5">
+				<div className="py-0.5 px-0.5">
 					{comments.length === 0 ? (
-						<div className="text-center py-4 text-muted-foreground text-sm">
+						<div className="text-center py-2 text-muted-foreground text-xs">
 							コメントはまだありません
 						</div>
 					) : (
@@ -319,22 +319,22 @@ function CommentItem({ comment }: CommentItemProps) {
 	return (
 		<div
 			className={cn(
-				"py-1.5 px-3 text-sm border-b border-border/20 last:border-b-0",
+				"py-0.5 px-1.5 text-xs border-b border-border/20 last:border-b-0",
 				is_superchat ? "bg-black" : "hover:bg-secondary/10 transition-colors",
 			)}
 		>
 			{is_superchat ? (
 				// スーパーチャット表示
 				<>
-					<div className="flex items-center justify-between gap-2">
-						<span className="font-semibold text-white">
+					<div className="flex items-center justify-between gap-1">
+						<span className="font-semibold text-white text-[10px]">
 							スーパーチャッター{numeric_id}
 						</span>
-						<span className="px-3 py-0.5 rounded-full bg-zinc-700 text-white font-medium">
+						<span className="px-1.5 py-0.5 rounded-full bg-zinc-700 text-white font-medium text-[10px]">
 							{(comment as SuperchatMessage).superchat.amount} SUI
 						</span>
 					</div>
-					<div className="font-medium text-white mt-1">
+					<div className="font-medium text-white text-[10px]">
 						応援メッセージ！ {comment.message}
 					</div>
 				</>
@@ -342,8 +342,10 @@ function CommentItem({ comment }: CommentItemProps) {
 				// 通常コメント表示
 				<div className="flex items-start">
 					<div className="flex-grow">
-						<span className="font-semibold mr-1">{comment.display_name}</span>
-						<span className="break-words">{comment.message}</span>
+						<span className="font-semibold mr-1 text-[11px]">
+							{comment.display_name}
+						</span>
+						<span className="break-words text-[11px]">{comment.message}</span>
 					</div>
 				</div>
 			)}

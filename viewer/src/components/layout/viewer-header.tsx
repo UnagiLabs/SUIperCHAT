@@ -40,10 +40,13 @@ export function ViewerHeader({
 		<>
 			<Toaster richColors position="top-center" />
 			<header
-				className={cn("w-full py-3 border-b border-border/40", className)}
+				className={cn(
+					"w-full py-2 md:py-3 border-b border-border/40",
+					className,
+				)}
 			>
-				<div className="container max-w-screen-xl mx-auto px-3 flex items-center justify-between">
-					<h1 className="text-2xl font-bold">SUIperCHAT</h1>
+				<div className="container max-w-screen-xl mx-auto px-2 md:px-3 flex items-center justify-between">
+					<h1 className="text-xl md:text-2xl font-bold">SUIperCHAT</h1>
 					<HeaderWalletButton />
 				</div>
 			</header>

@@ -61,12 +61,14 @@ export function ViewerLayout({
 			className={cn("w-full max-w-7xl mx-auto h-full flex flex-col", className)}
 		>
 			{/* PC: 横並び (左70%:右30%) / モバイル: 縦並び */}
-			<div className="flex flex-col md:flex-row w-full gap-4 flex-grow">
+			<div className="flex flex-col md:flex-row w-full gap-2 md:gap-4 flex-grow">
 				{/* 動画エリア (PC: 70%, モバイル: 100%) */}
-				<div className="w-full md:w-[70%] min-h-[300px]">{video_player}</div>
+				<div className="w-full md:w-[70%] min-h-[180px] md:min-h-[300px]">
+					{video_player}
+				</div>
 
 				{/* コメントとスーパーチャットの統合エリア (PC: 30%, モバイル: 100%) */}
-				<div className="w-full md:w-[30%] border rounded-lg overflow-hidden flex flex-col h-[calc(100vh-200px)] md:h-[calc(100vh-150px)] max-h-[800px] min-h-[400px]">
+				<div className="w-full md:w-[30%] border rounded-lg overflow-hidden flex flex-col h-[calc(100vh-320px)] md:h-[calc(100vh-150px)] max-h-[800px] min-h-[250px] md:min-h-[400px]">
 					{/* コメントエリア - 高さを調整して上部に配置 */}
 					<div className="flex-grow overflow-auto">{comment_list}</div>
 
@@ -74,7 +76,7 @@ export function ViewerLayout({
 					<div className="border-t border-border/40" />
 
 					{/* スーパーチャットエリア - 下部に固定 */}
-					<div className="w-full">{superchat_form}</div>
+					<div className="w-full shrink-0">{superchat_form}</div>
 				</div>
 			</div>
 		</div>

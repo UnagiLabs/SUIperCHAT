@@ -31,12 +31,15 @@ export function HeaderWalletButton(): React.ReactElement {
 					<WalletConnectButton
 						buttonContent={
 							<>
-								Connect Wallet <span className="text-xs ml-1">(Optional)</span>
+								Connect Wallet{" "}
+								<span className="text-xs ml-1 hidden sm:inline">
+									(Optional)
+								</span>
 							</>
 						}
-						className="text-sm border rounded-md px-4 py-2"
+						className="text-xs md:text-sm border rounded-md px-2 md:px-4 py-1 md:py-2"
 					/>
-					<span className="text-xs text-muted-foreground mt-1">
+					<span className="text-[10px] md:text-xs text-muted-foreground mt-0.5 md:mt-1 hidden sm:block">
 						Only required for sending SUI
 					</span>
 				</div>
