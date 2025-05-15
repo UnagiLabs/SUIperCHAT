@@ -22,16 +22,22 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * ウィンドウサイズを取得するカスタムフック
+ * SSRとクライアントで一貫したレンダリング結果を得るため、初期値を調整しています
  *
  * @returns ウィンドウの幅と高さ
  */
 function useWindowSize() {
+	// ハイドレーションエラーを防ぐため、SSRでは常に初期値を使用
+	const [is_client, set_is_client] = useState(false);
 	const [window_size, set_window_size] = useState({
-		window_width: typeof window !== "undefined" ? window.innerWidth : 0,
-		window_height: typeof window !== "undefined" ? window.innerHeight : 0,
+		window_width: 1024, // SSRでの初期値をデスクトップサイズに設定
+		window_height: 768,
 	});
 
 	useEffect(() => {
+		// クライアントサイドでのみ実行されるコード
+		set_is_client(true);
+
 		function handle_resize() {
 			set_window_size({
 				window_width: window.innerWidth,
@@ -45,7 +51,8 @@ function useWindowSize() {
 		return () => window.removeEventListener("resize", handle_resize);
 	}, []);
 
-	return window_size;
+	// SSRではデフォルト値を返し、クライアントでは実際の値を返す
+	return is_client ? window_size : { window_width: 1024, window_height: 768 };
 }
 
 /**
@@ -93,6 +100,12 @@ export function ViewerLayout({
 	// 画面幅を取得
 	const { window_width, window_height } = useWindowSize();
 
+	// クライアントサイドでのレンダリングかどうかを検出
+	const [is_mounted, set_is_mounted] = useState(false);
+	useEffect(() => {
+		set_is_mounted(true);
+	}, []);
+
 	// スマホ横画面かどうかを判定（768px未満をスマホと判定）
 	const is_mobile_landscape = is_landscape && window_width < 768;
 
@@ -104,7 +117,8 @@ export function ViewerLayout({
 	const superchatRef = useRef<HTMLDivElement>(null);
 
 	// スーパーチャットエリアの高さ（デバイスに応じて調整）
-	const superchatHeight = is_mobile_landscape ? 100 : 140;
+	// SSRとクライアント初回レンダリングで一致するよう、SSR時は常にデスクトップ用の値を使用
+	const superchatHeight = !is_mounted ? 140 : is_mobile_landscape ? 100 : 140;
 
 	// ヘッダー要素を探す
 	useLayoutEffect(() => {
@@ -242,11 +256,14 @@ export function ViewerLayout({
 				<div
 					ref={videoRef}
 					className={cn(
-						is_mobile_landscape
-							? "flex-[6_0_0%]"
-							: is_landscape
-								? "flex-[7_0_0%]"
-								: "w-full",
+						// SSRとクライアント初回レンダリングで一致するよう、SSR時は常にデスクトップ用の値を使用
+						!is_mounted
+							? "flex-[7_0_0%]"
+							: is_mobile_landscape
+								? "flex-[6_0_0%]"
+								: is_landscape
+									? "flex-[7_0_0%]"
+									: "w-full",
 					)}
 				>
 					{video_player}
@@ -257,11 +274,14 @@ export function ViewerLayout({
 					ref={commentRef}
 					className={cn(
 						"border rounded-lg overflow-hidden flex flex-col",
-						is_mobile_landscape
-							? "flex-[4_0_0%]"
-							: is_landscape
-								? "flex-[3_0_0%]"
-								: "w-full",
+						// SSRとクライアント初回レンダリングで一致するよう、SSR時は常にデスクトップ用の値を使用
+						!is_mounted
+							? "flex-[3_0_0%]"
+							: is_mobile_landscape
+								? "flex-[4_0_0%]"
+								: is_landscape
+									? "flex-[3_0_0%]"
+									: "w-full",
 					)}
 				>
 					{/* コメントエリア - flex-growで残りのスペースを自動的に埋める */}
