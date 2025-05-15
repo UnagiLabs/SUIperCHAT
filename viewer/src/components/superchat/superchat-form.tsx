@@ -40,6 +40,7 @@ import {
 	SUPPORTED_COINS,
 } from "@/lib/constants"; // 定数をインポート
 import { fromContractValue, toContractValue } from "@/lib/utils"; // ユーティリティをインポート
+import { cn } from "@/lib/utils";
 // Sui SDK インポート
 import {
 	useCurrentAccount,
@@ -130,6 +131,11 @@ interface SuperchatFormProps {
 	 * コメントリストと統合表示する場合はtrue
 	 */
 	integrated_ui?: boolean;
+
+	/**
+	 * Tipモード変更時のコールバック関数
+	 */
+	on_tip_mode_change?: (has_tip: boolean) => void;
 }
 
 /**
@@ -143,6 +149,7 @@ export function SuperchatForm({
 	initial_recipient_address = "",
 	compact_mode = false,
 	integrated_ui = false,
+	on_tip_mode_change,
 }: SuperchatFormProps = {}) {
 	// 確認モード状態管理
 	const [confirm_mode, set_confirm_mode] = useState(false);
@@ -186,6 +193,13 @@ export function SuperchatForm({
 			form.setValue("display_name", username);
 		}
 	}, [username, form]);
+
+	// Tipモード変更通知
+	useEffect(() => {
+		if (on_tip_mode_change) {
+			on_tip_mode_change(has_tip);
+		}
+	}, [has_tip, on_tip_mode_change]);
 
 	/**
 	 * Tipmodeなしで通常メッセージを送信する処理
@@ -503,9 +517,16 @@ export function SuperchatForm({
 			<Form {...form}>
 				<form
 					onSubmit={form.handleSubmit(on_submit)}
-					className="space-y-1 p-1 pb-2"
+					className={cn(
+						has_tip ? "p-1 pb-2 space-y-1" : "px-1 py-1.5 space-y-0",
+					)}
 				>
-					<div className="flex items-center justify-between mb-0.5">
+					<div
+						className={cn(
+							"flex items-center justify-between",
+							has_tip ? "mb-0.5" : "",
+						)}
+					>
 						<FormField
 							control={form.control}
 							name="display_name"

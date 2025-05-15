@@ -11,7 +11,7 @@
  */
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { SuperchatComplete } from "./superchat-complete";
 import { SuperchatForm } from "./superchat-form";
 
@@ -56,6 +56,10 @@ interface SuperchatProps {
 	 * レイアウト調整用
 	 */
 	compact_mode?: boolean;
+	/**
+	 * Tipモードの変更通知コールバック
+	 */
+	on_tip_mode_change?: (has_tip: boolean) => void;
 }
 
 /**
@@ -69,6 +73,7 @@ export function Superchat({
 	on_send_success,
 	initial_recipient_address,
 	compact_mode = false,
+	on_tip_mode_change,
 }: SuperchatProps) {
 	return (
 		<Suspense
@@ -83,6 +88,7 @@ export function Superchat({
 				on_send_success={on_send_success}
 				initial_recipient_address={initial_recipient_address}
 				compact_mode={compact_mode}
+				on_tip_mode_change={on_tip_mode_change}
 			/>
 		</Suspense>
 	);
@@ -96,6 +102,7 @@ function SuperchatContent({
 	on_send_success,
 	initial_recipient_address,
 	compact_mode = false,
+	on_tip_mode_change,
 }: SuperchatProps) {
 	// URLパラメータから配信者のウォレットアドレスを取得
 	const search_params = useSearchParams();
@@ -109,6 +116,15 @@ function SuperchatContent({
 		display_name: "",
 		message: "",
 	});
+	// Tipモード状態
+	const [has_tip, set_has_tip] = useState<boolean>(false);
+
+	// Tipモード変更を親コンポーネントに通知
+	useEffect(() => {
+		if (on_tip_mode_change) {
+			on_tip_mode_change(has_tip);
+		}
+	}, [has_tip, on_tip_mode_change]);
 
 	/**
 	 * 送信成功時のハンドラー
@@ -145,6 +161,13 @@ function SuperchatContent({
 		set_send_state("form");
 	}
 
+	/**
+	 * Tipモード変更ハンドラー
+	 */
+	function handle_tip_mode_change(has_tip: boolean) {
+		set_has_tip(has_tip);
+	}
+
 	// 送信状態が「完了」の場合は完了画面を表示
 	if (send_state === "complete" && complete_info) {
 		return (
@@ -164,12 +187,7 @@ function SuperchatContent({
 	return (
 		<div
 			className={className}
-			style={{
-				height: "100%",
-				display: "flex",
-				flexDirection: "column",
-				justifyContent: "flex-end",
-			}}
+			style={{ height: "100%", display: "flex", flexDirection: "column" }}
 		>
 			<SuperchatForm
 				on_send_success={handle_send_success}
@@ -178,6 +196,7 @@ function SuperchatContent({
 				}
 				compact_mode={true}
 				integrated_ui={true}
+				on_tip_mode_change={handle_tip_mode_change}
 			/>
 		</div>
 	);

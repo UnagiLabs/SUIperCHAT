@@ -263,7 +263,7 @@ export function CommentList({
 					} as React.CSSProperties
 				}
 			>
-				<div className="py-0.5 px-0.5">
+				<div className="py-0.5 px-0.5 pb-1">
 					{comments.length === 0 ? (
 						<div className="text-center py-2 text-muted-foreground text-xs">
 							コメントはまだありません

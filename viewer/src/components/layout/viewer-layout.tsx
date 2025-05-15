@@ -17,8 +17,14 @@
 
 import { useAspectRatio } from "@/hooks/useAspectRatio";
 import { cn } from "@/lib/utils";
-import type React from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 
 /**
  * ウィンドウサイズを取得するカスタムフック
@@ -81,6 +87,23 @@ interface ViewerLayoutProps {
 }
 
 /**
+ * Superchatコンポーネントに対応するインターフェース
+ */
+interface SuperchatComponentProps {
+	on_tip_mode_change?: (has_tip: boolean) => void;
+	className?: string;
+	on_send_success?: (
+		amount: number,
+		display_name: string,
+		message: string,
+		transaction_id?: string,
+	) => void;
+	initial_recipient_address?: string;
+	compact_mode?: boolean;
+	integrated_ui?: boolean;
+}
+
+/**
  * 視聴者画面レイアウトコンポーネント
  *
  * 動画・コメント・スーパーチャットフォームを一体化したレイアウトを提供します。
@@ -109,6 +132,9 @@ export function ViewerLayout({
 	// スマホ横画面かどうかを判定（768px未満をスマホと判定）
 	const is_mobile_landscape = is_landscape && window_width < 768;
 
+	// Tipモードの状態
+	const [has_tip, set_has_tip] = useState(false);
+
 	// コンテナの参照を作成
 	const containerRef = useRef<HTMLDivElement>(null);
 	const videoRef = useRef<HTMLDivElement>(null);
@@ -118,9 +144,23 @@ export function ViewerLayout({
 	const commentListRef = useRef<HTMLDivElement>(null);
 	const commentWrapperRef = useRef<HTMLDivElement>(null);
 
-	// スーパーチャットエリアの高さ（デバイスに応じて調整）
-	// SSRとクライアント初回レンダリングで一致するよう、SSR時は常にデスクトップ用の値を使用
-	const superchatHeight = !is_mounted ? 140 : is_mobile_landscape ? 100 : 140;
+	// スーパーチャットエリアの高さ（NoTipモードとデバイスに応じて調整）
+	const getSuperchatHeight = useCallback(() => {
+		if (!has_tip) {
+			// NoTipモードの場合は最小限の高さにする
+			return !is_mounted ? 80 : is_mobile_landscape ? 65 : 80;
+		}
+		// Tipありの場合は通常の高さにする
+		return !is_mounted ? 140 : is_mobile_landscape ? 100 : 140;
+	}, [has_tip, is_mounted, is_mobile_landscape]);
+
+	// スーパーチャット高さの計算
+	const superchatHeight = getSuperchatHeight();
+
+	// Tipモード変更ハンドラー
+	const handleTipModeChange = useCallback((tip_mode: boolean) => {
+		set_has_tip(tip_mode);
+	}, []);
 
 	// ヘッダー要素を探す
 	useLayoutEffect(() => {
@@ -327,7 +367,7 @@ export function ViewerLayout({
 					</div>
 
 					{/* 区切り線 */}
-					<div className="border-t border-border/40" />
+					<div className="border-t border-border/40 my-0.5" />
 
 					{/* スーパーチャットエリア - 高さを固定して下部に配置 */}
 					<div
@@ -335,7 +375,14 @@ export function ViewerLayout({
 						className="w-full flex-shrink-0"
 						style={{ height: `${superchatHeight}px`, flex: "0 0 auto" }}
 					>
-						{superchat_form}
+						{React.isValidElement(superchat_form)
+							? React.cloneElement(
+									superchat_form as React.ReactElement<SuperchatComponentProps>,
+									{
+										on_tip_mode_change: handleTipModeChange,
+									},
+								)
+							: superchat_form}
 					</div>
 				</div>
 			</div>
