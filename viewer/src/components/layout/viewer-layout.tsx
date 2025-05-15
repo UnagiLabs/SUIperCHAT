@@ -68,15 +68,15 @@ export function ViewerLayout({
 			{/* レイアウトをアスペクト比に基づいて切り替え */}
 			<div
 				className={cn(
-					"flex w-full gap-2 flex-grow",
+					"flex w-full gap-2 flex-grow box-border",
 					is_landscape ? "flex-row" : "flex-col",
 				)}
 			>
 				{/* 動画エリア (横長: 70%, 縦長: 100%) */}
 				<div
 					className={cn(
-						"w-full min-h-[180px]",
-						is_landscape ? "w-[70%] min-h-[300px]" : "",
+						"min-h-[180px]",
+						is_landscape ? "flex-[7_0_0%] min-h-[300px]" : "w-full",
 					)}
 				>
 					{video_player}
@@ -85,10 +85,10 @@ export function ViewerLayout({
 				{/* コメントとスーパーチャットの統合エリア (横長: 30%, 縦長: 100%) */}
 				<div
 					className={cn(
-						"w-full border rounded-lg overflow-hidden flex flex-col",
+						"border rounded-lg overflow-hidden flex flex-col",
 						is_landscape
-							? "w-[30%] h-[calc(100vh-150px)] max-h-[800px] min-h-[400px]"
-							: "h-[calc(100vh-320px)] min-h-[250px]",
+							? "flex-[3_0_0%] h-[calc(100vh-150px)] max-h-[800px] min-h-[400px]"
+							: "w-full h-[calc(100vh-320px)] min-h-[250px]",
 					)}
 				>
 					{/* コメントエリア - 高さを調整して上部に配置 */}
