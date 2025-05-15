@@ -18,7 +18,7 @@
 import { useAspectRatio } from "@/hooks/useAspectRatio";
 import { cn } from "@/lib/utils";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * ウィンドウサイズを取得するカスタムフック
@@ -91,30 +91,161 @@ export function ViewerLayout({
 	// アスペクト比に基づくレイアウトモードを取得
 	const { is_landscape } = useAspectRatio({ threshold: 1.0 });
 	// 画面幅を取得
-	const { window_width } = useWindowSize();
+	const { window_width, window_height } = useWindowSize();
 
 	// スマホ横画面かどうかを判定（768px未満をスマホと判定）
 	const is_mobile_landscape = is_landscape && window_width < 768;
 
+	// コンテナの参照を作成
+	const containerRef = useRef<HTMLDivElement>(null);
+	const videoRef = useRef<HTMLDivElement>(null);
+	const commentRef = useRef<HTMLDivElement>(null);
+	const headerRef = useRef<HTMLDivElement | null>(null);
+	const superchatRef = useRef<HTMLDivElement>(null);
+
+	// スーパーチャットエリアの高さ（デバイスに応じて調整）
+	const superchatHeight = is_mobile_landscape ? 100 : 140;
+
+	// ヘッダー要素を探す
+	useLayoutEffect(() => {
+		// header要素を取得
+		const header = document.querySelector("header") as HTMLDivElement;
+		if (header) {
+			headerRef.current = header;
+		}
+	}, []);
+
+	// リサイズや初期レンダリング時にレイアウトを動的に計算
+	useEffect(() => {
+		// ビューポートの高さを取得するための関数
+		const getViewportHeight = () => {
+			// 実際のビューポートの高さを取得（モバイルブラウザのUI要素を考慮）
+			return window.visualViewport
+				? window.visualViewport.height
+				: window.innerHeight;
+		};
+
+		function updateLayout() {
+			// ヘッダーの高さを取得
+			const headerHeight = headerRef.current
+				? headerRef.current.offsetHeight
+				: is_landscape
+					? 40
+					: 32;
+
+			// メインコンテンツのパディング
+			const mainPadding = 8;
+
+			// ビューポートの高さを取得
+			const viewportHeight = getViewportHeight();
+
+			// 使用可能な高さを計算（ヘッダーとパディングを引く）
+			const availableHeight = viewportHeight - headerHeight - mainPadding;
+
+			if (is_mobile_landscape) {
+				// スマホ横画面時は動画とコメントコンテナの高さを同じに
+				const containerHeight = `${availableHeight}px`;
+
+				// コンテナの高さをスタイルで設定
+				if (videoRef.current) {
+					videoRef.current.style.height = containerHeight;
+				}
+
+				if (commentRef.current) {
+					commentRef.current.style.height = containerHeight;
+				}
+			} else if (is_landscape) {
+				// PC横画面時も同様の計算
+				const containerHeight = `${availableHeight}px`;
+
+				if (videoRef.current) {
+					videoRef.current.style.height = containerHeight;
+				}
+
+				if (commentRef.current) {
+					commentRef.current.style.height = containerHeight;
+				}
+			} else {
+				// 縦長画面時の計算
+				// 動画の高さを計算（16:9比率を維持）
+				const videoWidth = containerRef.current
+					? containerRef.current.offsetWidth
+					: window_width;
+				const videoHeightByRatio = videoWidth * (9 / 16);
+
+				// 動画の高さを設定
+				if (videoRef.current) {
+					videoRef.current.style.height = `${videoHeightByRatio}px`;
+				}
+
+				// 残りのスペースをコメントエリアに割り当て
+				const commentContainerHeight = Math.max(
+					availableHeight - videoHeightByRatio - 16, // 16はセパレータとマージン用
+					superchatHeight + 80, // 最小高さを確保
+				);
+
+				// コメントコンテナの高さを設定
+				if (commentRef.current) {
+					commentRef.current.style.height = `${commentContainerHeight}px`;
+				}
+			}
+		}
+
+		// 初期計算
+		updateLayout();
+
+		// ResizeObserverの設定
+		const resizeObserver = new ResizeObserver(() => {
+			updateLayout();
+		});
+
+		// コンテナ要素を監視
+		if (containerRef.current) {
+			resizeObserver.observe(containerRef.current);
+		}
+
+		// ビューポートの変更を監視
+		if (window.visualViewport) {
+			window.visualViewport.addEventListener("resize", updateLayout);
+		}
+
+		// リサイズイベントでも更新
+		window.addEventListener("resize", updateLayout);
+
+		return () => {
+			if (containerRef.current) {
+				resizeObserver.unobserve(containerRef.current);
+			}
+			resizeObserver.disconnect();
+
+			if (window.visualViewport) {
+				window.visualViewport.removeEventListener("resize", updateLayout);
+			}
+			window.removeEventListener("resize", updateLayout);
+		};
+	}, [is_landscape, is_mobile_landscape, window_width, superchatHeight]);
+
 	return (
 		<div
+			ref={containerRef}
 			className={cn("w-full max-w-7xl mx-auto h-full flex flex-col", className)}
+			style={{ minHeight: "calc(100vh - 60px)" }}
 		>
 			{/* レイアウトをアスペクト比に基づいて切り替え */}
 			<div
 				className={cn(
-					"flex w-full gap-2 flex-grow box-border",
+					"flex w-full gap-1 flex-grow box-border",
 					is_landscape ? "flex-row" : "flex-col",
 				)}
 			>
 				{/* 動画エリア - デバイスに応じて最適化 */}
 				<div
+					ref={videoRef}
 					className={cn(
-						"min-h-[180px]",
 						is_mobile_landscape
-							? "flex-[6_0_0%] min-h-[140px]"
+							? "flex-[6_0_0%]"
 							: is_landscape
-								? "flex-[7_0_0%] min-h-[300px]"
+								? "flex-[7_0_0%]"
 								: "w-full",
 					)}
 				>
@@ -123,23 +254,32 @@ export function ViewerLayout({
 
 				{/* コメントとスーパーチャットの統合エリア - デバイスに応じて最適化 */}
 				<div
+					ref={commentRef}
 					className={cn(
 						"border rounded-lg overflow-hidden flex flex-col",
 						is_mobile_landscape
-							? "flex-[4_0_0%] h-[calc(100vh-80px)] min-h-[140px]"
+							? "flex-[4_0_0%]"
 							: is_landscape
-								? "flex-[3_0_0%] h-[calc(100vh-150px)] max-h-[800px] min-h-[400px]"
-								: "w-full h-[calc(100vh-320px)] min-h-[250px]",
+								? "flex-[3_0_0%]"
+								: "w-full",
 					)}
 				>
-					{/* コメントエリア - 高さを調整して上部に配置 */}
-					<div className="flex-grow overflow-auto">{comment_list}</div>
+					{/* コメントエリア - flex-growで残りのスペースを自動的に埋める */}
+					<div className="flex-grow overflow-auto overflow-x-hidden">
+						{comment_list}
+					</div>
 
 					{/* 区切り線 */}
 					<div className="border-t border-border/40" />
 
-					{/* スーパーチャットエリア - 下部に固定 */}
-					<div className="w-full shrink-0">{superchat_form}</div>
+					{/* スーパーチャットエリア - 高さを固定 */}
+					<div
+						ref={superchatRef}
+						className="w-full shrink-0"
+						style={{ height: `${superchatHeight}px` }}
+					>
+						{superchat_form}
+					</div>
 				</div>
 			</div>
 		</div>

@@ -47,18 +47,18 @@ export function ViewerHeader({
 			<header
 				className={cn(
 					"w-full border-b border-border/40",
-					is_landscape ? "py-3" : "py-2",
+					is_landscape ? "py-1" : "py-0.5",
 					className,
 				)}
 			>
 				<div
 					className={cn(
-						"container max-w-screen-xl mx-auto px-2 flex items-center justify-between",
-						is_landscape ? "px-3" : "px-2",
+						"container max-w-screen-xl mx-auto flex items-center justify-between",
+						is_landscape ? "px-2" : "px-1",
 					)}
 				>
 					<h1
-						className={cn("font-bold", is_landscape ? "text-2xl" : "text-xl")}
+						className={cn("font-bold", is_landscape ? "text-xl" : "text-base")}
 					>
 						SUIperCHAT
 					</h1>

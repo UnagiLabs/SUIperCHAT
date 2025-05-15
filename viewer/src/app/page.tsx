@@ -33,7 +33,7 @@ export default async function HomePage() {
 	return (
 		<>
 			<ViewerHeader />
-			<main className="container max-w-screen-xl mx-auto p-1 md:p-3">
+			<main className="container max-w-screen-xl mx-auto p-0.5 md:p-1">
 				<ViewerLayout
 					video_player={
 						<VideoPlayer
