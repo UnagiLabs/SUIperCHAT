@@ -256,14 +256,14 @@ export function CommentList({
 				type="always"
 				style={
 					{
-						"--scrollbar-size": "4px",
+						"--scrollbar-size": "8px",
 						"--scrollbar-thumb-color": "rgba(120, 120, 120, 0.5)",
 						"--scrollbar-background-color": "transparent",
 						height: "100%",
 					} as React.CSSProperties
 				}
 			>
-				<div className="py-0.5 px-0.5 pb-1">
+				<div className="py-0.5 px-0.5 pb-1 pr-2">
 					{comments.length === 0 ? (
 						<div className="text-center py-2 text-muted-foreground text-xs">
 							コメントはまだありません
@@ -327,11 +327,11 @@ function CommentItem({ comment }: CommentItemProps) {
 			{is_superchat ? (
 				// スーパーチャット表示
 				<>
-					<div className="flex items-center justify-between gap-1">
+					<div className="flex items-center justify-between gap-1 pr-1">
 						<span className="font-semibold text-white text-[10px]">
 							スーパーチャッター{numeric_id}
 						</span>
-						<span className="px-1.5 py-0.5 rounded-full bg-zinc-700 text-white font-medium text-[10px]">
+						<span className="px-1.5 py-0.5 rounded-full bg-zinc-700 text-white font-medium text-[10px] flex-shrink-0">
 							{(comment as SuperchatMessage).superchat.amount} SUI
 						</span>
 					</div>

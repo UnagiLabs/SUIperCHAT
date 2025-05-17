@@ -101,6 +101,7 @@ interface SuperchatComponentProps {
 	initial_recipient_address?: string;
 	compact_mode?: boolean;
 	integrated_ui?: boolean;
+	on_height_change?: (height: number) => void;
 }
 
 /**
@@ -156,6 +157,19 @@ export function ViewerLayout({
 
 	// スーパーチャット高さの計算
 	const superchatHeight = getSuperchatHeight();
+	// テキストエリアの拡張に対応するための追加の高さ
+	const [additionalHeight, setAdditionalHeight] = useState(0);
+
+	// テキストエリアの高さ変更を監視する関数
+	const handleSuperchatHeightChange = useCallback(
+		(height: number) => {
+			// 基本の高さからの追加分を計算
+			const baseHeight = getSuperchatHeight();
+			const additional = Math.max(0, height - baseHeight);
+			setAdditionalHeight(additional);
+		},
+		[getSuperchatHeight],
+	);
 
 	// Tipモード変更ハンドラー
 	const handleTipModeChange = useCallback((tip_mode: boolean) => {
@@ -373,13 +387,18 @@ export function ViewerLayout({
 					<div
 						ref={superchatRef}
 						className="w-full flex-shrink-0"
-						style={{ height: `${superchatHeight}px`, flex: "0 0 auto" }}
+						style={{
+							minHeight: `${superchatHeight}px`,
+							height: `${superchatHeight + additionalHeight}px`,
+							flex: "0 0 auto",
+						}}
 					>
 						{React.isValidElement(superchat_form)
 							? React.cloneElement(
 									superchat_form as React.ReactElement<SuperchatComponentProps>,
 									{
 										on_tip_mode_change: handleTipModeChange,
+										on_height_change: handleSuperchatHeightChange,
 									},
 								)
 							: superchat_form}

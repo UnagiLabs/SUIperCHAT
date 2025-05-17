@@ -16,7 +16,7 @@
 
 import { useUser } from "@/context/UserContext";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
@@ -31,6 +31,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
 import {
@@ -136,6 +137,11 @@ interface SuperchatFormProps {
 	 * Tipモード変更時のコールバック関数
 	 */
 	on_tip_mode_change?: (has_tip: boolean) => void;
+
+	/**
+	 * 高さ変更時のコールバック関数
+	 */
+	on_height_change?: (height: number) => void;
 }
 
 /**
@@ -150,6 +156,7 @@ export function SuperchatForm({
 	compact_mode = false,
 	integrated_ui = false,
 	on_tip_mode_change,
+	on_height_change,
 }: SuperchatFormProps = {}) {
 	// 確認モード状態管理
 	const [confirm_mode, set_confirm_mode] = useState(false);
@@ -163,6 +170,8 @@ export function SuperchatForm({
 	const { username, setUsername } = useUser();
 	// 名前入力後の自動保存用タイマー参照
 	const debouncedNameUpdate = useRef<NodeJS.Timeout | null>(null);
+	// フォーム全体の参照
+	const formRef = useRef<HTMLFormElement>(null);
 
 	// Suiクライアントとウォレット接続ステータスを取得
 	const suiClient = useSuiClient(); // suiClient を取得
@@ -200,6 +209,42 @@ export function SuperchatForm({
 			on_tip_mode_change(has_tip);
 		}
 	}, [has_tip, on_tip_mode_change]);
+
+	// 高さ変更を通知する関数
+	const notifyHeightChange = useCallback(() => {
+		if (on_height_change && formRef.current) {
+			on_height_change(formRef.current.offsetHeight);
+		}
+	}, [on_height_change]);
+
+	// テキストエリアの高さが変更されたときに親コンポーネントに通知
+	const handleTextareaResize = useCallback(
+		(e: React.FormEvent<HTMLTextAreaElement>) => {
+			const target = e.target as HTMLTextAreaElement;
+			// 高さをリセットしてスクロールの高さに合わせる
+			target.style.height = "auto";
+			const newHeight = Math.min(target.scrollHeight, 96); // 最大高さを96pxに制限
+			target.style.height = `${newHeight}px`;
+
+			// 少し遅延させて高さ変更を通知（DOM更新後に実行）
+			setTimeout(notifyHeightChange, 0);
+		},
+		[notifyHeightChange],
+	);
+
+	// Tipモード変更時に高さ変更を通知
+	useEffect(() => {
+		notifyHeightChange();
+	}, [notifyHeightChange]);
+
+	// Tipモードが変更されたときにも高さを通知
+	useEffect(() => {
+		if (on_tip_mode_change) {
+			on_tip_mode_change(has_tip);
+		}
+		// Tipモードが変わったら高さも変わるので通知
+		notifyHeightChange();
+	}, [has_tip, on_tip_mode_change, notifyHeightChange]);
 
 	/**
 	 * Tipmodeなしで通常メッセージを送信する処理
@@ -516,6 +561,7 @@ export function SuperchatForm({
 		<div className="h-full flex flex-col justify-end">
 			<Form {...form}>
 				<form
+					ref={formRef}
 					onSubmit={form.handleSubmit(on_submit)}
 					className={cn(
 						has_tip ? "p-1 pb-2 space-y-1" : "px-1 py-1.5 space-y-0",
@@ -643,10 +689,12 @@ export function SuperchatForm({
 							name="message"
 							render={({ field }) => (
 								<FormItem className="flex-grow">
-									<Input
+									<Textarea
 										placeholder="メッセージを入力..."
 										{...field}
-										className="text-xs h-6"
+										className="text-xs min-h-6 max-h-24 py-1 px-3 resize-none overflow-hidden"
+										style={{ height: "auto" }}
+										onInput={handleTextareaResize}
 									/>
 									<FormMessage />
 								</FormItem>

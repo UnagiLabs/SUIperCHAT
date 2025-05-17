@@ -60,6 +60,10 @@ interface SuperchatProps {
 	 * Tipモードの変更通知コールバック
 	 */
 	on_tip_mode_change?: (has_tip: boolean) => void;
+	/**
+	 * 高さ変更通知コールバック
+	 */
+	on_height_change?: (height: number) => void;
 }
 
 /**
@@ -74,6 +78,7 @@ export function Superchat({
 	initial_recipient_address,
 	compact_mode = false,
 	on_tip_mode_change,
+	on_height_change,
 }: SuperchatProps) {
 	return (
 		<Suspense
@@ -89,6 +94,7 @@ export function Superchat({
 				initial_recipient_address={initial_recipient_address}
 				compact_mode={compact_mode}
 				on_tip_mode_change={on_tip_mode_change}
+				on_height_change={on_height_change}
 			/>
 		</Suspense>
 	);
@@ -103,6 +109,7 @@ function SuperchatContent({
 	initial_recipient_address,
 	compact_mode = false,
 	on_tip_mode_change,
+	on_height_change,
 }: SuperchatProps) {
 	// URLパラメータから配信者のウォレットアドレスを取得
 	const search_params = useSearchParams();
@@ -197,6 +204,7 @@ function SuperchatContent({
 				compact_mode={true}
 				integrated_ui={true}
 				on_tip_mode_change={handle_tip_mode_change}
+				on_height_change={on_height_change}
 			/>
 		</div>
 	);
