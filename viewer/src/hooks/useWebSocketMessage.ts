@@ -154,7 +154,7 @@ export function useWebSocketMessageHandler({
 					type: MessageType.CHAT,
 					id: `chat-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
 					display_name: displayName,
-					content: message,
+					message: message,
 					timestamp: Date.now(),
 				};
 
@@ -194,7 +194,7 @@ export function useWebSocketMessageHandler({
 					type: MessageType.SUPERCHAT,
 					id: `superchat-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
 					display_name: displayName,
-					content: message,
+					message: message,
 					timestamp: Date.now(),
 					superchat: superchatData,
 				};
