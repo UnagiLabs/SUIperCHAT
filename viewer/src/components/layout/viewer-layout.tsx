@@ -15,6 +15,7 @@
 
 "use client";
 
+import { WebSocketConnectionStatus } from "@/components/superchat/ws-connection-status";
 import { useAspectRatio } from "@/hooks/useAspectRatio";
 import { cn } from "@/lib/utils";
 import React from "react";
@@ -405,6 +406,9 @@ export function ViewerLayout({
 					</div>
 				</div>
 			</div>
+
+			{/* WebSocket接続状態インジケーター */}
+			<WebSocketConnectionStatus />
 		</div>
 	);
 }
