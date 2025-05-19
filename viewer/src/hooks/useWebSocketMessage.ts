@@ -15,7 +15,12 @@ import {
 	type SuperchatMessage,
 	type WebSocketState,
 } from "@/lib/types/websocket";
-import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
+import {
+	type Dispatch,
+	type MutableRefObject,
+	type SetStateAction,
+	useCallback,
+} from "react";
 
 /**
  * WebSocketメッセージハンドラーオプション
@@ -227,14 +232,14 @@ export function useWebSocketMessage() {
 	// この関数は現在ダミー実装で、将来的にはWebSocketProviderのコンテキストから
 	// メッセージ関連の状態とアクションを取得する実装に置き換えられる予定。
 	// WebSocketProviderとの連携が完了したら実装する。
-	
+
 	// 仮実装として空の値を返す
 	return {
 		/**
 		 * メッセージリスト
 		 */
 		messages: [],
-		
+
 		/**
 		 * チャットメッセージを送信
 		 * @param displayName 表示名
@@ -243,7 +248,7 @@ export function useWebSocketMessage() {
 		sendChatMessage: (displayName: string, message: string) => {
 			console.warn("WebSocketProviderとの連携が未実装です: sendChatMessage");
 		},
-		
+
 		/**
 		 * スーパーチャットを送信
 		 * @param displayName 表示名
@@ -255,30 +260,32 @@ export function useWebSocketMessage() {
 			message: string,
 			superchatData: SuperchatData,
 		) => {
-			console.warn("WebSocketProviderとの連携が未実装です: sendSuperchatMessage");
+			console.warn(
+				"WebSocketProviderとの連携が未実装です: sendSuperchatMessage",
+			);
 		},
-		
+
 		/**
 		 * 過去ログ取得中フラグ
 		 */
 		isLoadingHistory: false,
-		
+
 		/**
 		 * さらに古いログがあるかどうか
 		 */
 		hasMoreHistory: false,
-		
+
 		/**
 		 * 履歴取得中のエラーメッセージ
 		 */
 		historyError: null,
-		
+
 		/**
 		 * 古いメッセージをさらに読み込む
 		 * @param limit 取得件数
 		 */
 		loadMoreHistory: (limit?: number) => {
 			console.warn("WebSocketProviderとの連携が未実装です: loadMoreHistory");
-		}
+		},
 	};
 }
