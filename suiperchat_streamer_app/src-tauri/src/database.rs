@@ -238,6 +238,100 @@ pub async fn fetch_messages(
     Ok(messages)
 }
 
+/// セッションIDに基づいてメッセージを取得する
+///
+/// 指定されたセッションIDに属するメッセージを取得し、オプションでタイムスタンプによるフィルタリングを行います。
+///
+/// # 引数
+/// * `pool` - SQLiteデータベース接続プール
+/// * `session_id` - メッセージを取得する対象のセッションID
+/// * `limit` - 取得するメッセージの最大数（1-1000）
+/// * `before_timestamp` - このタイムスタンプより前のメッセージのみを取得（ミリ秒単位のUnixタイムスタンプ）
+///
+/// # 戻り値
+/// * `Result<Vec<Message>, SqlxError>` - 成功時はメッセージのベクター、エラー時は `SqlxError`
+///
+/// # エラー
+/// - データベース接続エラー
+/// - SQLクエリ実行エラー
+pub async fn get_messages_by_session_id(
+    pool: &SqlitePool,
+    session_id: &str,
+    limit: i64,
+    before_timestamp: Option<i64>,
+) -> Result<Vec<Message>, SqlxError> {
+    // パラメータの検証と調整
+    let safe_limit = if limit <= 0 {
+        println!(
+            "警告: 無効なlimit値({})が指定されました。デフォルト値(50)を使用します。",
+            limit
+        );
+        50
+    } else if limit > 1000 {
+        println!(
+            "警告: limit値({})が大きすぎます。最大値(1000)に制限します。",
+            limit
+        );
+        1000
+    } else {
+        limit
+    };
+
+    // クエリを構築
+    let mut query_builder = sqlx::QueryBuilder::new(
+        "SELECT id, timestamp, display_name, message, amount, coin, tx_hash, wallet_address, session_id FROM messages WHERE session_id = ",
+    );
+
+    query_builder.push_bind(session_id);
+
+    // before_timestampが指定されていれば条件を追加
+    if let Some(timestamp) = before_timestamp {
+        query_builder.push(" AND timestamp < ");
+        query_builder.push_bind(timestamp);
+    }
+
+    // ORDER BY句を追加（最初は新しいものから取得）
+    query_builder.push(" ORDER BY timestamp DESC LIMIT ");
+    query_builder.push_bind(safe_limit + 1); // +1することで、さらに古いログがあるかの判断材料にする
+
+    // クエリを実行
+    let query = query_builder.build_query_as::<Message>();
+    let mut messages = query.fetch_all(pool).await?;
+
+    // timestampの昇順（古い順）にソート
+    messages.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+
+    println!(
+        "セッション {} のメッセージを {} 件取得しました（before_timestamp: {:?}）",
+        session_id,
+        messages.len(),
+        before_timestamp
+    );
+
+    // メッセージインデックスの確認と作成
+    ensure_message_index(pool).await?;
+
+    Ok(messages)
+}
+
+/// メッセージテーブルにインデックスが存在することを確認し、必要に応じて作成する
+///
+/// # 引数
+/// * `pool` - SQLiteデータベース接続プール
+///
+/// # 戻り値
+/// * `Result<(), SqlxError>` - 成功時は `Ok(())`, エラー時は `SqlxError`
+async fn ensure_message_index(pool: &SqlitePool) -> Result<(), SqlxError> {
+    // インデックスを作成
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_messages_session_timestamp ON messages(session_id, timestamp)",
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use crate::db_models::{Message, Session};
