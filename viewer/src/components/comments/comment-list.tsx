@@ -111,6 +111,7 @@ export function CommentList({
 			isLoadingHistory ||
 			!hasMoreHistory ||
 			!parentElement ||
+			!virtualizer.range ||
 			!virtualizer.range.startIndex
 		) {
 			return;
@@ -128,7 +129,7 @@ export function CommentList({
 		isLoadingHistory,
 		hasMoreHistory,
 		parentElement,
-		virtualizer.range.startIndex,
+		virtualizer.range,
 		actions,
 	]);
 
@@ -154,7 +155,8 @@ export function CommentList({
 		// 1. 親要素が存在しない
 		// 2. 自動スクロールが無効
 		// 3. メッセージ数が増えていない
-		if (!parentElement || !isAutoScrollingRef.current) return;
+		if (!parentElement || !isAutoScrollingRef.current || !virtualizer.range)
+			return;
 
 		const messagesAdded = messages.length > prevMessagesLengthRef.current;
 		prevMessagesLengthRef.current = messages.length;
