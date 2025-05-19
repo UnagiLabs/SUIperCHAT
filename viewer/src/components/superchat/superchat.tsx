@@ -12,23 +12,7 @@
 "use client";
 
 import { Suspense, useEffect } from "react";
-import { SuperchatComplete } from "./superchat-complete";
 import { SuperchatForm } from "./superchat-form";
-
-/**
- * 送信状態を表す型
- */
-type SendState = "form" | "complete";
-
-/**
- * 完了情報を表す型
- */
-interface CompleteInfo {
-	amount: number;
-	display_name: string;
-	message: string;
-	transaction_id?: string;
-}
 
 /**
  * スーパーチャットコンポーネントのプロパティ
@@ -115,14 +99,6 @@ function SuperchatContent({
 	const search_params = useSearchParams();
 	const streamer_address = search_params.get("streamerAddress") || "";
 
-	// 現在の表示状態
-	const [send_state, set_send_state] = useState<SendState>("form");
-	// 完了情報
-	const [complete_info, set_complete_info] = useState<CompleteInfo>({
-		amount: 0,
-		display_name: "",
-		message: "",
-	});
 	// Tipモード状態
 	const [has_tip, set_has_tip] = useState<boolean>(false);
 
@@ -134,60 +110,10 @@ function SuperchatContent({
 	}, [has_tip, on_tip_mode_change]);
 
 	/**
-	 * 送信成功時のハンドラー
-	 *
-	 * @param amount - 送信金額
-	 * @param display_name - 表示名
-	 * @param message - メッセージ内容
-	 * @param transaction_id - トランザクションID
-	 */
-	function handle_send_success(
-		amount: number,
-		display_name: string,
-		message: string,
-		transaction_id?: string,
-	) {
-		set_complete_info({
-			amount,
-			display_name,
-			message,
-			transaction_id,
-		});
-		set_send_state("complete");
-
-		// 親コンポーネントのコールバックがあれば呼び出す
-		if (on_send_success) {
-			on_send_success(amount, display_name, message, transaction_id);
-		}
-	}
-
-	/**
-	 * 完了画面を閉じるハンドラー
-	 */
-	function handle_reset() {
-		set_send_state("form");
-	}
-
-	/**
 	 * Tipモード変更ハンドラー
 	 */
 	function handle_tip_mode_change(has_tip: boolean) {
 		set_has_tip(has_tip);
-	}
-
-	// 送信状態が「完了」の場合は完了画面を表示
-	if (send_state === "complete" && complete_info) {
-		return (
-			<div className={className}>
-				<SuperchatComplete
-					amount={complete_info.amount}
-					display_name={complete_info.display_name}
-					message={complete_info.message}
-					transaction_id={complete_info.transaction_id}
-					on_close={handle_reset}
-				/>
-			</div>
-		);
 	}
 
 	// 通常はフォームを表示
@@ -197,7 +123,7 @@ function SuperchatContent({
 			style={{ height: "100%", display: "flex", flexDirection: "column" }}
 		>
 			<SuperchatForm
-				on_send_success={handle_send_success}
+				on_send_success={on_send_success}
 				initial_recipient_address={
 					initial_recipient_address || streamer_address
 				}

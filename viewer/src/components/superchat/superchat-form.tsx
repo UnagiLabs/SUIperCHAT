@@ -158,8 +158,7 @@ export function SuperchatForm({
 	on_tip_mode_change,
 	on_height_change,
 }: SuperchatFormProps = {}) {
-	// 確認モード状態管理
-	const [confirm_mode, set_confirm_mode] = useState(false);
+	// 確認モード状態管理は不要になったため削除
 	// Tipの有無を管理するステート
 	const [has_tip, set_has_tip] = useState(false);
 
@@ -271,16 +270,11 @@ export function SuperchatForm({
 				recipient_address: values.recipient_address,
 				display_name: values.display_name,
 			});
-
-			// 確認モードをリセット
-			set_confirm_mode(false);
 		} catch (error) {
 			console.error("Failed to send chat message:", error);
 			toast.error("Failed to send message", {
 				description: error instanceof Error ? error.message : String(error),
 			});
-			// 確認モードをリセット
-			set_confirm_mode(false);
 		}
 	}
 
@@ -296,7 +290,6 @@ export function SuperchatForm({
 				toast.error("Wallet Connection Required", {
 					description: "Please connect your wallet to send tips.",
 				});
-				set_confirm_mode(false);
 				return;
 			}
 
@@ -310,7 +303,6 @@ export function SuperchatForm({
 				toast.error("Invalid Coin Type", {
 					description: "Please select a valid coin type.",
 				});
-				set_confirm_mode(false);
 				return;
 			}
 
@@ -323,7 +315,6 @@ export function SuperchatForm({
 				toast.error("SUI coin type not found in supported coins", {
 					description: "Configuration error: SUI coin type is missing.",
 				});
-				set_confirm_mode(false);
 				return;
 			}
 
@@ -351,7 +342,6 @@ export function SuperchatForm({
 				toast.error(`Insufficient ${selectedCoin.symbol} balance`, {
 					description: errorMessage,
 				});
-				set_confirm_mode(false);
 				return;
 			}
 
@@ -366,7 +356,6 @@ export function SuperchatForm({
 					toast.error("Insufficient SUI balance for gas", {
 						description: `Need at least ${fromContractValue(DEFAULT_GAS_BUDGET, SUI_TYPE_ARG)} SUI for gas.`,
 					});
-					set_confirm_mode(false);
 					return;
 				}
 			}
@@ -405,9 +394,6 @@ export function SuperchatForm({
 				},
 				{
 					onSettled: (result, error) => {
-						// 常に確認モードをリセット（共通処理）
-						set_confirm_mode(false);
-
 						// エラー処理
 						if (error) {
 							console.error("Transaction failed:", error);
@@ -477,7 +463,6 @@ export function SuperchatForm({
 			toast.error("Payment preparation failed", {
 				description: error instanceof Error ? error.message : String(error),
 			});
-			set_confirm_mode(false);
 		}
 	}
 
@@ -522,16 +507,10 @@ export function SuperchatForm({
 				),
 				duration: 10000,
 			});
-			set_confirm_mode(false);
 			return;
 		}
 
-		if (!confirm_mode) {
-			// 確認モードに切り替え
-			set_confirm_mode(true);
-			return;
-		}
-
+		// 確認モードなしで直接送信処理へ進む
 		// Tipなしの場合、WebSocketでチャットメッセージとして直接送信
 		if (!sendTip) {
 			await sendNormalMessage(values);
@@ -539,11 +518,6 @@ export function SuperchatForm({
 			// Tipありの場合、スーパーチャットとして送信
 			await sendSuperchat(values);
 		}
-	}
-
-	// 確認モードキャンセル処理
-	function handle_cancel() {
-		set_confirm_mode(false);
 	}
 
 	// ユーザー名を更新する関数
@@ -706,57 +680,9 @@ export function SuperchatForm({
 							disabled={isPending}
 							size="sm"
 						>
-							{confirm_mode ? (isPending ? "送信中..." : "送信") : "送信"}
+							{isPending ? "送信中..." : "送信"}
 						</Button>
 					</div>
-
-					{confirm_mode && (
-						<div className="p-1 border rounded-md bg-secondary/50 text-xs mb-0.5">
-							<p className="font-medium mb-0.5 text-[10px]">送信内容を確認</p>
-							{has_tip && (
-								<div className="flex gap-1 mb-0.5 text-[10px]">
-									<span className="font-medium">Tip:</span>
-									<span>
-										{form.getValues("amount")}{" "}
-										{SUPPORTED_COINS.find(
-											(c) => c.typeArg === form.getValues("coinTypeArg"),
-										)?.symbol || ""}
-									</span>
-								</div>
-							)}
-							<div className="flex gap-1 mb-0.5 text-[10px]">
-								<span className="font-medium">名前:</span>
-								<span>{form.getValues("display_name")}</span>
-							</div>
-							{form.getValues("message") && (
-								<div className="flex gap-1 mb-0.5 text-[10px]">
-									<span className="font-medium">メッセージ:</span>
-									<span className="break-words">
-										{form.getValues("message")}
-									</span>
-								</div>
-							)}
-							<div className="flex gap-1 mt-0.5">
-								<Button
-									type="button"
-									variant="outline"
-									onClick={handle_cancel}
-									className="text-[10px] h-5 flex-1"
-									size="sm"
-								>
-									キャンセル
-								</Button>
-								<Button
-									type="submit"
-									className="text-[10px] h-5 flex-1"
-									disabled={isPending}
-									size="sm"
-								>
-									{isPending ? "送信中..." : "確定"}
-								</Button>
-							</div>
-						</div>
-					)}
 				</form>
 			</Form>
 		</div>
