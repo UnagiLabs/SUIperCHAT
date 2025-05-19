@@ -1,19 +1,32 @@
+/**
+ * WebSocketUrlHandlerコンポーネント
+ *
+ * URLパラメータからWebSocket URLと配信者アドレスを取得し、
+ * WebSocketに接続するためのコンポーネントです。
+ *
+ * このコンポーネントは表示要素を持たず、URLパラメータからの接続処理のみを行います。
+ * 以下のURLパラメータに対応しています:
+ * - wsUrl: WebSocketのURL (URLエンコードされた状態)
+ * - streamerAddress: 配信者のウォレットアドレス
+ *
+ * @module components/websocket/websocket-url-handler
+ */
+
 "use client";
 
 import { useWebSocket } from "@/components/providers/WebSocketProvider";
-import { Superchat } from "@/components/superchat/superchat";
-import { WebSocketConnectionStatus } from "@/components/superchat/ws-connection-status";
-import { UsernameInputForm } from "@/components/user/UsernameInputForm";
-import { HeaderWalletButton } from "@/components/wallet/header-wallet-button";
-import { useUser } from "@/context/UserContext";
 import { ConnectionStatus } from "@/lib/types/websocket";
 import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 
-export default function HomePage() {
+/**
+ * WebSocketUrlHandlerコンポーネント
+ *
+ * @returns {null} 表示要素なし
+ */
+export default function WebSocketUrlHandler() {
 	const search_params = useSearchParams();
 	const { state, actions } = useWebSocket();
-	const { isUsernameSet } = useUser();
 
 	useEffect(() => {
 		const ws_url_encoded = search_params.get("wsUrl");
@@ -34,7 +47,6 @@ export default function HomePage() {
 				console.log(`Attempting to connect to WebSocket: ${ws_url}`);
 				console.log(`Streamer Wallet Address: ${streamer_address}`);
 				console.log(`Connection status: ${state.status}`);
-				console.log("Current WebSocket state:", state);
 
 				let final_url = ws_url;
 				if (!ws_url.endsWith("/ws")) {
@@ -54,28 +66,8 @@ export default function HomePage() {
 				connectionStatus: state.status,
 			});
 		}
-	}, [search_params, state, actions]);
+	}, [search_params, state.status, actions]);
 
-	return (
-		<div className="grid grid-rows-[auto_1fr_auto] items-center min-h-screen p-8 gap-8 sm:p-10 font-[family-name:var(--font-geist-sans)]">
-			<header className="w-full max-w-4xl mx-auto">
-				<div className="flex items-center justify-between w-full">
-					<h1 className="text-2xl font-bold">SUIperCHAT</h1>
-					<HeaderWalletButton />
-				</div>
-			</header>
-
-			<main className="flex flex-col gap-8 w-full">
-				{!isUsernameSet ? <UsernameInputForm /> : <Superchat />}
-			</main>
-
-			<footer className="flex gap-[24px] flex-wrap items-center justify-center">
-				<div className="text-sm text-muted-foreground">
-					© 2025 Unagi Labs. All rights reserved.
-				</div>
-			</footer>
-
-			<WebSocketConnectionStatus />
-		</div>
-	);
+	// このコンポーネントは表示要素を持たない
+	return null;
 }

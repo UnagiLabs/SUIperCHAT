@@ -8,6 +8,7 @@
  * - 横長（PC）と縦長（スマホ）でレスポンシブに対応
  * - 各コンポーネントが統合された一体的なUI
  * - アスペクト比（縦横比）に基づくレイアウト切り替え
+ * - URLパラメータからWebSocket URLと配信者アドレスを取得
  *
  * @file 視聴者メインページの実装
  */
@@ -17,6 +18,7 @@ import { ViewerHeader } from "@/components/layout/viewer-header";
 import { ViewerLayout } from "@/components/layout/viewer-layout";
 import { Superchat } from "@/components/superchat/superchat";
 import { VideoPlayer } from "@/components/video/video-player";
+import WebSocketUrlHandler from "@/components/websocket/websocket-url-handler";
 import { useAspectRatio } from "@/hooks/useAspectRatio";
 import { getServerConfig } from "@/lib/server-config";
 import { cn } from "@/lib/utils";
@@ -32,6 +34,9 @@ export default async function HomePage() {
 
 	return (
 		<>
+			{/* WebSocketのURL処理用コンポーネント (URLパラメータからWS接続) */}
+			<WebSocketUrlHandler />
+
 			<ViewerHeader />
 			<main className="container max-w-screen-xl mx-auto p-0.5 md:p-1">
 				<ViewerLayout
