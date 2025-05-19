@@ -1,5 +1,12 @@
-// Provider修正後に有効化
-import { useWebSocket } from "@/components/providers/WebSocketProvider";
+/**
+ * WebSocketメッセージ処理カスタムフック
+ *
+ * WebSocketメッセージの送受信と処理を行うロジックを提供します。
+ * チャットやスーパーチャットの送信、受信メッセージの処理を担当します。
+ *
+ * @module hooks/useWebSocketMessage
+ */
+
 import {
 	type ChatMessage,
 	ConnectionStatus,
@@ -8,20 +15,11 @@ import {
 	type SuperchatMessage,
 	type WebSocketState,
 } from "@/lib/types/websocket";
-/**
- * WebSocketメッセージ送受信管理フック
- *
- * @module hooks/useWebSocketMessage
- */
-import {
-	type Dispatch,
-	type MutableRefObject,
-	type SetStateAction,
-	useCallback,
-	useMemo,
-} from "react";
+import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 
-// --- 内部的なメッセージ処理ロジックフック ---
+/**
+ * WebSocketメッセージハンドラーオプション
+ */
 interface UseWebSocketMessageHandlerOptions {
 	wsRef: MutableRefObject<WebSocket | null>;
 	setState: Dispatch<SetStateAction<WebSocketState>>; // ProviderのsetState
@@ -29,271 +27,258 @@ interface UseWebSocketMessageHandlerOptions {
 }
 
 /**
- * WebSocketのメッセージ送受信のコアロジックを管理する内部フック
+ * WebSocketメッセージ処理フック
+ * WebSocketメッセージの送受信と処理ロジックを提供します
  */
 export function useWebSocketMessageHandler({
 	wsRef,
 	setState,
 	updateStatus,
 }: UseWebSocketMessageHandlerOptions) {
-	// メッセージ受信処理 (Providerのonmessageから呼び出される)
+	/**
+	 * メッセージ受信イベントハンドラ
+	 * WebSocketから受信したメッセージを処理する関数
+	 *
+	 * @param event WebSocketのメッセージイベント
+	 */
 	const handleMessage = useCallback(
 		(event: MessageEvent) => {
-			console.debug(
-				"WebSocketメッセージ受信(hook):",
-				event.data.substring(0, 100) + (event.data.length > 100 ? "..." : ""),
-			);
+			// メッセージ本文のパース
 			try {
-				if (!event.data) {
-					console.warn("空のWebSocketメッセージ受信 (hook)");
-					return;
-				}
+				const data = JSON.parse(event.data);
+				console.debug("受信メッセージ:", data);
 
-				let parsedData: Record<string, unknown>;
-				try {
-					parsedData = JSON.parse(event.data);
-				} catch (parseError) {
-					console.error("JSON解析失敗 (hook):", event.data, parseError);
-					updateStatus(ConnectionStatus.CONNECTED, "メッセージ解析失敗"); // 接続自体は維持
-					return;
-				}
-
-				if (!parsedData.type || typeof parsedData.type !== "string") {
-					console.error("typeフィールド不正 (hook):", parsedData);
-					return;
-				}
-
-				const messageType = parsedData.type as string;
-
-				switch (messageType) {
+				// メッセージタイプによる処理分岐
+				switch (data.type) {
 					case MessageType.CHAT:
-					case MessageType.SUPERCHAT: {
-						console.debug(`${messageType}メッセージ処理中 (hook)...`);
-						// 型ガードとフィールド検証
-						if (
-							typeof parsedData.display_name !== "string" ||
-							typeof parsedData.message !== "string" ||
-							!parsedData.id ||
-							typeof parsedData.id !== "string" || // IDの型もチェック
-							!parsedData.timestamp ||
-							typeof parsedData.timestamp !== "number" // Timestampの型もチェック
-						) {
-							console.error(
-								"必須フィールド不足(CHAT/SUPERCHAT) (hook):",
-								parsedData,
-							);
-							return;
-						}
-
-						const baseMessage: Partial<ChatMessage | SuperchatMessage> = {
-							type: messageType as MessageType.CHAT | MessageType.SUPERCHAT,
-							display_name: parsedData.display_name,
-							message: parsedData.message,
-							id: parsedData.id,
-							timestamp: parsedData.timestamp,
-						};
-
-						if (messageType === MessageType.SUPERCHAT) {
-							// スーパーチャットの型ガード
-							const superchat = parsedData.superchat as Record<string, unknown>;
-							if (
-								!superchat ||
-								typeof superchat !== "object" ||
-								typeof superchat.amount !== "number" ||
-								typeof superchat.tx_hash !== "string" ||
-								typeof superchat.wallet_address !== "string"
-							) {
-								console.error(
-									"必須フィールド不足(SUPERCHAT data) (hook):",
-									parsedData,
-								);
-								return;
-							}
-							(baseMessage as Partial<SuperchatMessage>).superchat = {
-								amount: superchat.amount,
-								coin: superchat.coin as string, // coin プロパティを追加
-								tx_hash: superchat.tx_hash,
-								wallet_address: superchat.wallet_address,
+						{
+							// チャットメッセージ受信処理
+							const chatMessage: ChatMessage = {
+								id: data.id,
+								type: MessageType.CHAT,
+								display_name: data.display_name,
+								message: data.message,
+								timestamp: data.timestamp,
 							};
-						}
 
-						// 状態にメッセージを追加
-						setState((prev) => {
-							const message =
-								messageType === MessageType.CHAT
-									? (baseMessage as ChatMessage)
-									: (baseMessage as SuperchatMessage);
-							// 重複チェック (IDが存在すれば)
-							if (prev.messages.some((m) => m.id === message.id)) {
-								console.warn(`重複メッセージID (${message.id}) をスキップ`);
-								return prev;
-							}
-							const newMessages = [...prev.messages, message];
-							console.debug(
-								`メッセージ追加(hook)。新メッセージ数: ${newMessages.length}`,
-							);
-							return { ...prev, messages: newMessages };
-						});
-						break;
-					}
-					case MessageType.ERROR: {
-						if (typeof parsedData.message === "string") {
-							console.error("サーバーエラー受信 (hook):", parsedData.message);
-							updateStatus(
-								ConnectionStatus.CONNECTED,
-								`サーバーエラー: ${parsedData.message}`,
-							);
-						} else {
-							console.error(
-								"不正なサーバーエラーメッセージ (hook):",
-								parsedData,
-							);
-							updateStatus(
-								ConnectionStatus.CONNECTED,
-								"不正なサーバーエラー受信",
-							);
+							// メッセージリストに追加
+							setState((prev) => {
+								// 重複を避けるためID確認
+								if (prev.messages.some((msg) => msg.id === chatMessage.id)) {
+									return prev;
+								}
+								return {
+									...prev,
+									messages: [...prev.messages, chatMessage],
+								};
+							});
 						}
 						break;
-					}
-					case MessageType.CONNECTION_STATUS: {
-						console.log(
-							"接続状態更新(サーバー通知) (hook):",
-							parsedData.status,
-							parsedData.info ?? "",
-						);
-						// クライアント側の状態管理に影響を与えるかは要検討
+
+					case MessageType.SUPERCHAT:
+						{
+							// スーパーチャットメッセージ受信処理
+							const superchatMessage: SuperchatMessage = {
+								id: data.id,
+								type: MessageType.SUPERCHAT,
+								display_name: data.display_name,
+								message: data.message,
+								timestamp: data.timestamp,
+								superchat: {
+									amount: data.superchat.amount,
+									coin: data.superchat.coin,
+									tx_hash: data.superchat.tx_hash,
+									wallet_address: data.superchat.wallet_address,
+								},
+							};
+
+							// メッセージリストに追加
+							setState((prev) => {
+								// 重複を避けるためID確認
+								if (
+									prev.messages.some((msg) => msg.id === superchatMessage.id)
+								) {
+									return prev;
+								}
+								return {
+									...prev,
+									messages: [...prev.messages, superchatMessage],
+								};
+							});
+						}
 						break;
-					}
-					case MessageType.PING:
+
 					case MessageType.PONG:
-						console.debug(`${messageType}メッセージ受信 (hook)`);
+						// PONGメッセージ受信時の処理
+						console.debug("PONG received");
 						break;
+
+					case MessageType.ERROR:
+						// エラーメッセージ受信時の処理
+						console.error("WebSocket Error:", data.message);
+						updateStatus(ConnectionStatus.ERROR, data.message);
+						break;
+
 					default:
-						console.warn("未知のメッセージタイプ受信 (hook):", messageType);
+						console.debug("Unhandled message type:", data.type);
 				}
-			} catch (error) {
-				console.error("メッセージ処理中エラー (hook):", error);
-				updateStatus(ConnectionStatus.CONNECTED, "メッセージ処理失敗");
+			} catch (err) {
+				console.error("Failed to parse WebSocket message:", err, event.data);
 			}
 		},
 		[setState, updateStatus],
 	);
 
-	// 共通メッセージ送信ロジック (Providerから呼び出される)
-	const sendMessageInternal = useCallback(
-		(messageData: Record<string, unknown>) => {
-			if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-				try {
-					const messageWithMeta = {
-						...messageData,
-						id: crypto.randomUUID(),
-						timestamp: Date.now(),
-					};
-					wsRef.current.send(JSON.stringify(messageWithMeta));
-					console.debug("WebSocketメッセージ送信 (hook):", messageWithMeta);
-				} catch (error) {
-					console.error("メッセージ送信失敗 (hook):", error);
-					updateStatus(ConnectionStatus.CONNECTED, "メッセージ送信失敗"); // 接続自体は維持
-				}
-			} else {
-				console.warn("WebSocket未接続、メッセージ送信不可 (hook)");
-				// 必要であればエラー状態を更新する
-				// updateStatus(ConnectionStatus.CONNECTED, "メッセージ送信不可: 未接続");
+	/**
+	 * チャットメッセージを送信する関数
+	 *
+	 * @param displayName 表示名
+	 * @param message メッセージ内容
+	 */
+	const sendChatMessage = useCallback(
+		(displayName: string, message: string) => {
+			if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+				console.error(
+					"チャットメッセージを送信できません: WebSocket接続がありません",
+				);
+				return;
+			}
+
+			try {
+				const chatMessage = {
+					type: MessageType.CHAT,
+					id: `chat-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+					display_name: displayName,
+					content: message,
+					timestamp: Date.now(),
+				};
+
+				console.debug("チャットメッセージ送信:", chatMessage);
+				wsRef.current.send(JSON.stringify(chatMessage));
+			} catch (error) {
+				console.error("チャットメッセージ送信エラー:", error);
+				updateStatus(
+					ConnectionStatus.ERROR,
+					`チャットの送信に失敗しました: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				);
 			}
 		},
 		[wsRef, updateStatus],
 	);
 
-	// チャットメッセージ送信 (外部公開用)
-	const sendChatMessage = useCallback(
-		(displayName: string, message: string) => {
-			sendMessageInternal({
-				type: MessageType.CHAT,
-				display_name: displayName,
-				message,
-			});
-		},
-		[sendMessageInternal],
-	);
-
-	// スーパーチャットメッセージ送信 (外部公開用)
+	/**
+	 * スーパーチャットメッセージを送信する関数
+	 *
+	 * @param displayName 表示名
+	 * @param message メッセージ内容
+	 * @param superchatData スーパーチャットデータ
+	 */
 	const sendSuperchatMessage = useCallback(
 		(displayName: string, message: string, superchatData: SuperchatData) => {
-			sendMessageInternal({
-				type: MessageType.SUPERCHAT,
-				display_name: displayName,
-				message,
-				superchat: superchatData,
-			});
+			if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+				console.error(
+					"スーパーチャットを送信できません: WebSocket接続がありません",
+				);
+				return;
+			}
+
+			try {
+				const superchatMessage = {
+					type: MessageType.SUPERCHAT,
+					id: `superchat-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+					display_name: displayName,
+					content: message,
+					timestamp: Date.now(),
+					superchat: superchatData,
+				};
+
+				console.debug("スーパーチャットメッセージ送信:", superchatMessage);
+				wsRef.current.send(JSON.stringify(superchatMessage));
+			} catch (error) {
+				console.error("スーパーチャットメッセージ送信エラー:", error);
+				updateStatus(
+					ConnectionStatus.ERROR,
+					`スーパーチャットの送信に失敗しました: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				);
+			}
 		},
-		[sendMessageInternal],
+		[wsRef, updateStatus],
 	);
 
-	// Providerが利用するハンドラと、外部公開用アクションを返す
+	// 返却値: メッセージ処理関連の関数やステート
 	return {
 		handleMessage,
 		sendChatMessage,
 		sendSuperchatMessage,
-		sendMessageInternal, // Provider内部でのみ使う想定
 	};
 }
 
-// --- 外部向けフック ---
 /**
- * WebSocketでメッセージを送受信するためのカスタムフック (外部向けAPI)
- * Providerから状態とメッセージアクションを取得する
+ * WebSocketプロバイダーから提供されるメッセージ機能を使用するためのフック
+ * WebSocketContextから状態とアクションを取得し、メッセージ関連の機能を提供
+ *
+ * @returns WebSocketのメッセージ関連機能
  */
 export function useWebSocketMessage() {
-	// Providerから状態とアクションを取得 (Provider修正後に有効化)
-	const {
-		state: { status, messages },
-		actions,
-	} = useWebSocket();
-
-	// 送信可能かどうか
-	const canSend = useMemo(
-		() => status === ConnectionStatus.CONNECTED,
-		[status],
-	);
-
-	// 送信関数のラッパー (エラーハンドリングは内部で行われている想定)
-	const sendChat = useCallback(
-		(displayName: string, message: string): boolean => {
-			if (!canSend || !actions.sendChatMessage) {
-				console.warn(
-					"Cannot send chat message, not connected or action unavailable.",
-				);
-				return false;
-			}
-			actions.sendChatMessage(displayName, message);
-			return true; // 呼び出し自体は成功したとみなす
+	// この関数は現在ダミー実装で、将来的にはWebSocketProviderのコンテキストから
+	// メッセージ関連の状態とアクションを取得する実装に置き換えられる予定。
+	// WebSocketProviderとの連携が完了したら実装する。
+	
+	// 仮実装として空の値を返す
+	return {
+		/**
+		 * メッセージリスト
+		 */
+		messages: [],
+		
+		/**
+		 * チャットメッセージを送信
+		 * @param displayName 表示名
+		 * @param message メッセージ内容
+		 */
+		sendChatMessage: (displayName: string, message: string) => {
+			console.warn("WebSocketProviderとの連携が未実装です: sendChatMessage");
 		},
-		[canSend, actions], // actions全体を依存配列に追加
-	);
-
-	const sendSuperchat = useCallback(
-		(
+		
+		/**
+		 * スーパーチャットを送信
+		 * @param displayName 表示名
+		 * @param message メッセージ内容
+		 * @param superchatData スーパーチャット情報
+		 */
+		sendSuperchatMessage: (
 			displayName: string,
 			message: string,
 			superchatData: SuperchatData,
-		): boolean => {
-			if (!canSend || !actions.sendSuperchatMessage) {
-				console.warn(
-					"Cannot send superchat message, not connected or action unavailable.",
-				);
-				return false;
-			}
-			actions.sendSuperchatMessage(displayName, message, superchatData);
-			return true; // 呼び出し自体は成功したとみなす
+		) => {
+			console.warn("WebSocketProviderとの連携が未実装です: sendSuperchatMessage");
 		},
-		[canSend, actions], // actions全体を依存配列に追加
-	);
-
-	// Providerから取得した状態とラップしたアクションを返す
-	return {
-		canSend,
-		messages, // メッセージリストをそのまま公開
-		sendChat,
-		sendSuperchat,
+		
+		/**
+		 * 過去ログ取得中フラグ
+		 */
+		isLoadingHistory: false,
+		
+		/**
+		 * さらに古いログがあるかどうか
+		 */
+		hasMoreHistory: false,
+		
+		/**
+		 * 履歴取得中のエラーメッセージ
+		 */
+		historyError: null,
+		
+		/**
+		 * 古いメッセージをさらに読み込む
+		 * @param limit 取得件数
+		 */
+		loadMoreHistory: (limit?: number) => {
+			console.warn("WebSocketProviderとの連携が未実装です: loadMoreHistory");
+		}
 	};
 }

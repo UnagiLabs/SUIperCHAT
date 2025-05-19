@@ -3,18 +3,20 @@
  *
  * コメントとスーパーチャットを表示するためのコンポーネント。
  * スクロール可能なリスト形式でコメントを表示します。
- * 現時点ではWebSocket受信部分はダミー実装になっています。
+ * 仮想スクロールを使用して大量のコメントを効率的に表示します。
  *
  * @remarks
- * - ScrollAreaコンポーネントを使用したスクロール可能なコメントリスト
+ * - 仮想スクロールによる効率的なレンダリング
  * - 一般コメントとスーパーチャットの視覚的な区別
  * - 自動スクロール機能
+ * - 過去ログの無限スクロール
  *
  * @file コメント表示コンポーネントの実装
  */
 
 "use client";
 
+import { useWebSocket } from "@/components/providers/WebSocketProvider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
 	type ChatMessage,
@@ -22,7 +24,16 @@ import {
 	type SuperchatMessage,
 } from "@/lib/types/websocket";
 import { cn } from "@/lib/utils";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { Loader2 } from "lucide-react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 
 /**
  * コメントリストコンポーネントのプロパティ
@@ -50,198 +61,115 @@ export function CommentList({
 	className,
 	auto_scroll = true,
 }: CommentListProps) {
-	// コメントデータの状態
-	const [comments, set_comments] = useState<(ChatMessage | SuperchatMessage)[]>(
-		[],
+	// WebSocketからメッセージとアクションを取得
+	const { state, actions } = useWebSocket();
+	const { messages, isLoadingHistory, hasMoreHistory, historyError } = state;
+
+	// スクロール関連の状態
+	const parentRef = useRef<HTMLDivElement>(null);
+	const [parentElement, setParentElement] = useState<HTMLElement | null>(null);
+	const isAutoScrollingRef = useRef(auto_scroll);
+	const prevMessagesLengthRef = useRef(messages.length);
+
+	// コメントをタイムスタンプでソート
+	const sortedMessages = useMemo(() => {
+		return [...messages].sort((a, b) => a.timestamp - b.timestamp);
+	}, [messages]);
+
+	// 各アイテムの高さを推定する関数
+	const estimateItemSize = useCallback(
+		(index: number) => {
+			const message = sortedMessages[index];
+			if (!message) return 40; // デフォルト値
+			return message.type === MessageType.SUPERCHAT ? 80 : 40;
+		},
+		[sortedMessages],
 	);
 
-	// 自動スクロールの参照
-	const scrollAreaRef = useRef<HTMLDivElement>(null);
-	const isAutoScrolling = useRef(auto_scroll);
+	// 仮想スクロールの設定
+	const virtualizer = useVirtualizer({
+		count: sortedMessages.length,
+		getScrollElement: () => parentElement,
+		estimateSize: estimateItemSize,
+		overscan: 10, // スクロール時により多くのアイテムを事前に描画
+	});
 
-	// モックデータでコメントを初期化（本番環境では削除）
-	useEffect(() => {
-		const mockComments: (ChatMessage | SuperchatMessage)[] = [
-			{
-				id: "1",
-				type: MessageType.CHAT,
-				display_name: "視聴者77",
-				message: "これはテストコメントです。",
-				timestamp: Date.now() - 25000,
-			},
-			{
-				id: "2",
-				type: MessageType.SUPERCHAT,
-				display_name: "スーパーチャッター73",
-				message: "応援メッセージ！",
-				timestamp: Date.now() - 20000,
-				superchat: {
-					amount: 95,
-					coin: "SUI",
-					tx_hash: "0x123456789abcdef",
-					wallet_address: "0xabcdef123456789",
-				},
-			},
-			{
-				id: "3",
-				type: MessageType.SUPERCHAT,
-				display_name: "スーパーチャッター10",
-				message: "応援メッセージ！",
-				timestamp: Date.now() - 15000,
-				superchat: {
-					amount: 1,
-					coin: "SUI",
-					tx_hash: "0xabcdef123456789",
-					wallet_address: "0x123456789abcdef",
-				},
-			},
-			{
-				id: "4",
-				type: MessageType.SUPERCHAT,
-				display_name: "スーパーチャッター46",
-				message: "応援メッセージ！",
-				timestamp: Date.now() - 10000,
-				superchat: {
-					amount: 84,
-					coin: "SUI",
-					tx_hash: "0x987654321abcdef",
-					wallet_address: "0xfedcba987654321",
-				},
-			},
-			{
-				id: "5",
-				type: MessageType.CHAT,
-				display_name: "視聴者12",
-				message: "これはテストコメントです。",
-				timestamp: Date.now() - 5000,
-			},
-			{
-				id: "6",
-				type: MessageType.CHAT,
-				display_name: "視聴者21",
-				message: "これはテストコメントです。",
-				timestamp: Date.now() - 1000,
-			},
-		];
-
-		set_comments(mockComments);
+	// 親要素の設定
+	useLayoutEffect(() => {
+		if (parentRef.current) {
+			// ScrollAreaのビューポート要素を取得
+			const viewport = parentRef.current.querySelector(
+				"[data-radix-scroll-area-viewport]",
+			);
+			setParentElement(viewport as HTMLElement);
+		}
 	}, []);
 
-	/**
-	 * WebSocketからコメントを受信する関数
-	 * 注: この関数は現時点ではダミー実装です。実際のWebSocket実装は別途行います。
-	 *
-	 * @todo WebSocket接続を実装して実際のコメントを受信する
-	 */
-	const receive_comment = useCallback(
-		(comment: ChatMessage | SuperchatMessage) => {
-			// この関数は将来的にWebSocketから受信したコメントを処理します
-			// WebSocketプロバイダーと連携する予定
-			set_comments((prev) => [...prev, comment]);
+	// 無限スクロール - 上部へのスクロールで過去ログを読み込む
+	const handleScrollUpward = useCallback(() => {
+		if (
+			isLoadingHistory ||
+			!hasMoreHistory ||
+			!parentElement ||
+			!virtualizer.range.startIndex
+		) {
+			return;
+		}
+
+		// スクロール位置が上部20%以内になったら過去ログを読み込む
+		const { scrollTop, scrollHeight, clientHeight } = parentElement;
+		const scrollThreshold = 0.2; // 上部20%
+		const scrollPercentage = scrollTop / (scrollHeight - clientHeight);
+
+		if (scrollPercentage < scrollThreshold) {
+			actions.requestHistory(50);
+		}
+	}, [
+		isLoadingHistory,
+		hasMoreHistory,
+		parentElement,
+		virtualizer.range.startIndex,
+		actions,
+	]);
+
+	// スクロールイベントハンドラ
+	const handleScroll = useCallback(
+		(e: React.UIEvent<HTMLDivElement>) => {
+			const target = e.currentTarget;
+			const isAtBottom =
+				target.scrollHeight - target.scrollTop - target.clientHeight < 30;
+
+			// 最下部付近ならば自動スクロールを有効に、そうでなければ無効に
+			isAutoScrollingRef.current = isAtBottom;
+
+			// 上部へのスクロールで過去ログを読み込む
+			handleScrollUpward();
 		},
-		[],
+		[handleScrollUpward],
 	);
 
-	/**
-	 * 擬似的にコメントを追加する関数（テスト用）
-	 */
-	const add_test_comment = useCallback(() => {
-		const now = Date.now();
-		const is_superchat = Math.random() > 0.7; // 30%の確率でスーパーチャット
-
-		const new_comment: ChatMessage | SuperchatMessage = is_superchat
-			? {
-					id: `sc-${now}`,
-					type: MessageType.SUPERCHAT,
-					display_name: `スーパーチャッター${Math.floor(Math.random() * 100)}`,
-					message: `応援メッセージ！${now}`,
-					timestamp: now,
-					superchat: {
-						amount: Math.floor(Math.random() * 100) + 1,
-						coin: "SUI",
-						tx_hash: `0x${now.toString(16)}`,
-						wallet_address: `0x${Math.random().toString(16).substring(2)}`,
-					},
-				}
-			: {
-					id: `chat-${now}`,
-					type: MessageType.CHAT,
-					display_name: `視聴者${Math.floor(Math.random() * 100)}`,
-					message: `これはテストコメントです。${now}`,
-					timestamp: now,
-				};
-
-		receive_comment(new_comment);
-	}, [receive_comment]);
-
-	// useRefを使って前回のコメント数を追跡
-	const prevCommentsLengthRef = useRef(comments.length);
-
-	// 自動スクロール処理
+	// 新しいメッセージが追加されたら自動スクロール
 	useEffect(() => {
 		// 以下の条件でスクロールしない:
-		// 1. 自動スクロールが無効
-		// 2. ユーザーが手動でスクロールした
-		// 3. スクロールエリアが存在しない
-		// 4. コメント数が増えていない（初回読み込みを除く）
-		if (!auto_scroll || !isAutoScrolling.current || !scrollAreaRef.current)
-			return;
+		// 1. 親要素が存在しない
+		// 2. 自動スクロールが無効
+		// 3. メッセージ数が増えていない
+		if (!parentElement || !isAutoScrollingRef.current) return;
 
-		const isCommentAdded =
-			comments.length > prevCommentsLengthRef.current ||
-			prevCommentsLengthRef.current === 0;
+		const messagesAdded = messages.length > prevMessagesLengthRef.current;
+		prevMessagesLengthRef.current = messages.length;
 
-		// コメント数の変更を記録
-		prevCommentsLengthRef.current = comments.length;
-
-		// コメントが追加されていない場合はスクロールしない
-		if (!isCommentAdded) return;
-
-		// スクロール位置を最下部に移動
-		const scrollContainer = scrollAreaRef.current.querySelector(
-			"[data-radix-scroll-area-viewport]",
-		);
-		if (scrollContainer) {
-			scrollContainer.scrollTop = scrollContainer.scrollHeight;
+		if (messagesAdded) {
+			// スクロール位置を最下部に移動
+			virtualizer.scrollToIndex(sortedMessages.length - 1, {
+				align: "end",
+				behavior: "smooth",
+			});
 		}
-	}, [auto_scroll, comments.length]);
+	}, [messages.length, parentElement, sortedMessages.length, virtualizer]);
 
-	// ユーザー操作でスクロールした場合の処理
-	const handle_scroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-		const target = e.currentTarget;
-		const isAtBottom =
-			target.scrollHeight - target.scrollTop - target.clientHeight < 30;
-
-		// 最下部付近ならば自動スクロールを有効に、そうでなければ無効に
-		isAutoScrolling.current = isAtBottom;
-	}, []);
-
-	// デバッグ用: 定期的にテストコメントを追加（開発時のみ）
-	useEffect(() => {
-		// 開発環境のみ有効
-		if (process.env.NODE_ENV === "development") {
-			const interval = setInterval(add_test_comment, 5000);
-			return () => clearInterval(interval);
-		}
-	}, [add_test_comment]);
-
-	// テスト用にコメントを大量に追加（スクロールバーテスト用）
-	useEffect(() => {
-		// スクロールバーのテスト用に追加のダミーコメントを生成
-		if (comments.length < 30) {
-			const dummyComments: ChatMessage[] = [];
-			for (let i = 0; i < 30; i++) {
-				dummyComments.push({
-					id: `dummy-${i}`,
-					type: MessageType.CHAT,
-					display_name: `視聴者${Math.floor(Math.random() * 100)}`,
-					message: `これはテストコメント ${i} です。`,
-					timestamp: Date.now() - (30000 - i * 1000),
-				});
-			}
-			set_comments((prev) => [...dummyComments, ...prev]);
-		}
-	}, [comments.length]);
+	// 仮想アイテムをレンダリング
+	const virtualItems = virtualizer.getVirtualItems();
 
 	return (
 		<div className={cn("h-full flex flex-col", className)}>
@@ -251,8 +179,8 @@ export function CommentList({
 
 			<ScrollArea
 				className="flex-1 overflow-hidden"
-				ref={scrollAreaRef}
-				onScroll={handle_scroll}
+				ref={parentRef}
+				onScroll={handleScroll}
 				type="always"
 				style={
 					{
@@ -263,31 +191,65 @@ export function CommentList({
 					} as React.CSSProperties
 				}
 			>
-				<div className="py-0.5 px-0.5 pb-1 pr-2">
-					{comments.length === 0 ? (
-						<div className="text-center py-2 text-muted-foreground text-xs">
-							コメントはまだありません
-						</div>
-					) : (
-						comments
-							.sort((a, b) => a.timestamp - b.timestamp)
-							.map((comment) => (
-								<CommentItem key={comment.id} comment={comment} />
-							))
-					)}
-				</div>
-			</ScrollArea>
+				{/* 過去ログ読み込み中の表示 */}
+				{isLoadingHistory && (
+					<div className="flex items-center justify-center py-2 border-b">
+						<Loader2 className="h-4 w-4 animate-spin mr-2" />
+						<span className="text-xs text-muted-foreground">
+							過去のコメントを読み込み中...
+						</span>
+					</div>
+				)}
 
-			{/* 開発時のみ表示するテスト用ボタン - 統合UIでは非表示に */}
-			{process.env.NODE_ENV === "development" && false && (
-				<button
-					type="button"
-					onClick={add_test_comment}
-					className="text-xs p-1 border rounded-sm mx-3 mb-2 text-muted-foreground hover:bg-accent"
+				{/* エラー表示 */}
+				{historyError && (
+					<div className="flex items-center justify-center py-2 border-b">
+						<span className="text-xs text-red-500 mr-2">
+							エラー: {historyError}
+						</span>
+						<button
+							type="button"
+							onClick={() => actions.requestHistory()}
+							className="text-xs text-primary hover:underline"
+						>
+							再試行
+						</button>
+					</div>
+				)}
+
+				{/* 仮想スクロールのコンテナ */}
+				<div
+					className="relative w-full"
+					style={{ height: `${virtualizer.getTotalSize()}px` }}
 				>
-					テストコメント追加（開発用）
-				</button>
-			)}
+					{virtualItems.map((virtualItem) => {
+						const comment = sortedMessages[virtualItem.index];
+						if (!comment) return null;
+
+						return (
+							<div
+								key={virtualItem.key}
+								data-index={virtualItem.index}
+								ref={virtualizer.measureElement}
+								className="absolute top-0 left-0 w-full"
+								style={{
+									height: `${virtualItem.size}px`,
+									transform: `translateY(${virtualItem.start}px)`,
+								}}
+							>
+								<CommentItem comment={comment} />
+							</div>
+						);
+					})}
+				</div>
+
+				{/* メッセージがない場合の表示 */}
+				{sortedMessages.length === 0 && !isLoadingHistory && (
+					<div className="text-center py-2 text-muted-foreground text-xs">
+						コメントはまだありません
+					</div>
+				)}
+			</ScrollArea>
 		</div>
 	);
 }
