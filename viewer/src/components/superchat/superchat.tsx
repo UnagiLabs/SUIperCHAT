@@ -11,10 +11,7 @@
  */
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { useState } from "react";
-import { Toaster } from "sonner";
-
+import { Suspense, useEffect } from "react";
 import { SuperchatComplete } from "./superchat-complete";
 import { SuperchatForm } from "./superchat-form";
 
@@ -50,15 +47,70 @@ interface SuperchatProps {
 		message: string,
 		transaction_id?: string,
 	) => void;
+	/**
+	 * 初期受取人ウォレットアドレス
+	 */
+	initial_recipient_address?: string;
+	/**
+	 * コンパクトモードを有効にするかどうか
+	 * レイアウト調整用
+	 */
+	compact_mode?: boolean;
+	/**
+	 * Tipモードの変更通知コールバック
+	 */
+	on_tip_mode_change?: (has_tip: boolean) => void;
+	/**
+	 * 高さ変更通知コールバック
+	 */
+	on_height_change?: (height: number) => void;
 }
 
 /**
  * スーパーチャットコンポーネント
  *
  * @param props - コンポーネントのプロパティ
- * @returns スーパーチャットコンポーネントのJSXエレメント
+ * @returns スーパーチャットコンポーネント
  */
-export function Superchat({ className = "", on_send_success }: SuperchatProps) {
+export function Superchat({
+	className,
+	on_send_success,
+	initial_recipient_address,
+	compact_mode = false,
+	on_tip_mode_change,
+	on_height_change,
+}: SuperchatProps) {
+	return (
+		<Suspense
+			fallback={
+				<div className="h-full flex items-center justify-center">
+					読み込み中...
+				</div>
+			}
+		>
+			<SuperchatContent
+				className={className}
+				on_send_success={on_send_success}
+				initial_recipient_address={initial_recipient_address}
+				compact_mode={compact_mode}
+				on_tip_mode_change={on_tip_mode_change}
+				on_height_change={on_height_change}
+			/>
+		</Suspense>
+	);
+}
+
+/**
+ * useSearchParamsを使用するスーパーチャットの内部コンポーネント
+ */
+function SuperchatContent({
+	className,
+	on_send_success,
+	initial_recipient_address,
+	compact_mode = false,
+	on_tip_mode_change,
+	on_height_change,
+}: SuperchatProps) {
 	// URLパラメータから配信者のウォレットアドレスを取得
 	const search_params = useSearchParams();
 	const streamer_address = search_params.get("streamerAddress") || "";
@@ -71,6 +123,15 @@ export function Superchat({ className = "", on_send_success }: SuperchatProps) {
 		display_name: "",
 		message: "",
 	});
+	// Tipモード状態
+	const [has_tip, set_has_tip] = useState<boolean>(false);
+
+	// Tipモード変更を親コンポーネントに通知
+	useEffect(() => {
+		if (on_tip_mode_change) {
+			on_tip_mode_change(has_tip);
+		}
+	}, [has_tip, on_tip_mode_change]);
 
 	/**
 	 * 送信成功時のハンドラー
@@ -103,32 +164,52 @@ export function Superchat({ className = "", on_send_success }: SuperchatProps) {
 	/**
 	 * 完了画面を閉じるハンドラー
 	 */
-	function handle_close_complete() {
+	function handle_reset() {
 		set_send_state("form");
 	}
 
+	/**
+	 * Tipモード変更ハンドラー
+	 */
+	function handle_tip_mode_change(has_tip: boolean) {
+		set_has_tip(has_tip);
+	}
+
+	// 送信状態が「完了」の場合は完了画面を表示
+	if (send_state === "complete" && complete_info) {
+		return (
+			<div className={className}>
+				<SuperchatComplete
+					amount={complete_info.amount}
+					display_name={complete_info.display_name}
+					message={complete_info.message}
+					transaction_id={complete_info.transaction_id}
+					on_close={handle_reset}
+				/>
+			</div>
+		);
+	}
+
+	// 通常はフォームを表示
 	return (
-		<div className={`superchat ${className}`}>
-			<Toaster richColors position="top-center" />
-
-			<>
-				{send_state === "form" && (
-					<SuperchatForm
-						on_send_success={handle_send_success}
-						initial_recipient_address={streamer_address}
-					/>
-				)}
-
-				{send_state === "complete" && (
-					<SuperchatComplete
-						amount={complete_info.amount}
-						display_name={complete_info.display_name}
-						message={complete_info.message}
-						transaction_id={complete_info.transaction_id}
-						on_close={handle_close_complete}
-					/>
-				)}
-			</>
+		<div
+			className={className}
+			style={{ height: "100%", display: "flex", flexDirection: "column" }}
+		>
+			<SuperchatForm
+				on_send_success={handle_send_success}
+				initial_recipient_address={
+					initial_recipient_address || streamer_address
+				}
+				compact_mode={true}
+				integrated_ui={true}
+				on_tip_mode_change={handle_tip_mode_change}
+				on_height_change={on_height_change}
+			/>
 		</div>
 	);
 }
+
+// 不足しているインポートを追加
+import { useSearchParams } from "next/navigation";
+import { useState } from "react";

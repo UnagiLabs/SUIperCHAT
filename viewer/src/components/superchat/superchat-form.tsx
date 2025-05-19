@@ -16,28 +16,13 @@
 
 import { useUser } from "@/context/UserContext";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
 import { useWebSocket } from "@/components/providers/WebSocketProvider";
 import { Button } from "@/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import {
-	Form,
-	FormControl,
-	FormDescription,
-	FormField,
-	FormItem,
-	FormLabel,
-	FormMessage,
-} from "@/components/ui/form";
+import { Form, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -46,6 +31,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
 import {
@@ -55,6 +41,7 @@ import {
 	SUPPORTED_COINS,
 } from "@/lib/constants"; // 定数をインポート
 import { fromContractValue, toContractValue } from "@/lib/utils"; // ユーティリティをインポート
+import { cn } from "@/lib/utils";
 // Sui SDK インポート
 import {
 	useCurrentAccount,
@@ -133,6 +120,28 @@ interface SuperchatFormProps {
 	 * 初期受取人ウォレットアドレス
 	 */
 	initial_recipient_address?: string;
+
+	/**
+	 * コンパクトモードを有効にするかどうか
+	 * (レイアウト調整用)
+	 */
+	compact_mode?: boolean;
+
+	/**
+	 * 統合UIモードを有効にするかどうか
+	 * コメントリストと統合表示する場合はtrue
+	 */
+	integrated_ui?: boolean;
+
+	/**
+	 * Tipモード変更時のコールバック関数
+	 */
+	on_tip_mode_change?: (has_tip: boolean) => void;
+
+	/**
+	 * 高さ変更時のコールバック関数
+	 */
+	on_height_change?: (height: number) => void;
 }
 
 /**
@@ -144,6 +153,10 @@ interface SuperchatFormProps {
 export function SuperchatForm({
 	on_send_success,
 	initial_recipient_address = "",
+	compact_mode = false,
+	integrated_ui = false,
+	on_tip_mode_change,
+	on_height_change,
 }: SuperchatFormProps = {}) {
 	// 確認モード状態管理
 	const [confirm_mode, set_confirm_mode] = useState(false);
@@ -157,6 +170,8 @@ export function SuperchatForm({
 	const { username, setUsername } = useUser();
 	// 名前入力後の自動保存用タイマー参照
 	const debouncedNameUpdate = useRef<NodeJS.Timeout | null>(null);
+	// フォーム全体の参照
+	const formRef = useRef<HTMLFormElement>(null);
 
 	// Suiクライアントとウォレット接続ステータスを取得
 	const suiClient = useSuiClient(); // suiClient を取得
@@ -188,99 +203,95 @@ export function SuperchatForm({
 		}
 	}, [username, form]);
 
+	// Tipモード変更通知
+	useEffect(() => {
+		if (on_tip_mode_change) {
+			on_tip_mode_change(has_tip);
+		}
+	}, [has_tip, on_tip_mode_change]);
+
+	// 高さ変更を通知する関数
+	const notifyHeightChange = useCallback(() => {
+		if (on_height_change && formRef.current) {
+			on_height_change(formRef.current.offsetHeight);
+		}
+	}, [on_height_change]);
+
+	// テキストエリアの高さが変更されたときに親コンポーネントに通知
+	const handleTextareaResize = useCallback(
+		(e: React.FormEvent<HTMLTextAreaElement>) => {
+			const target = e.target as HTMLTextAreaElement;
+			// 高さをリセットしてスクロールの高さに合わせる
+			target.style.height = "auto";
+			const newHeight = Math.min(target.scrollHeight, 96); // 最大高さを96pxに制限
+			target.style.height = `${newHeight}px`;
+
+			// 少し遅延させて高さ変更を通知（DOM更新後に実行）
+			setTimeout(notifyHeightChange, 0);
+		},
+		[notifyHeightChange],
+	);
+
+	// Tipモード変更時に高さ変更を通知
+	useEffect(() => {
+		notifyHeightChange();
+	}, [notifyHeightChange]);
+
+	// Tipモードが変更されたときにも高さを通知
+	useEffect(() => {
+		if (on_tip_mode_change) {
+			on_tip_mode_change(has_tip);
+		}
+		// Tipモードが変わったら高さも変わるので通知
+		notifyHeightChange();
+	}, [has_tip, on_tip_mode_change, notifyHeightChange]);
+
 	/**
-	 * フォーム送信ハンドラー
+	 * Tipmodeなしで通常メッセージを送信する処理
 	 *
 	 * @param values - フォームの入力値
 	 */
-	async function on_submit(values: SuperchatFormValues) {
-		// チップ金額が0または非Tip選択状態のチェック
-		const sendTip = has_tip && values.amount > 0;
-
-		// Tipありで金額が0より大きい場合のみウォレット接続チェック
-		if (sendTip && !currentAccount) {
-			toast.error("Wallet Connection Required", {
-				description: (
-					<div className="mt-2 flex flex-col gap-2">
-						<p>Wallet connection is required to send tips.</p>
-						<p>
-							Please connect your wallet using the "Connect Wallet" button at
-							the top.
-						</p>
-						<p>
-							Alternatively, you can disable tipping to send a message without
-							wallet connection.
-						</p>
-						<Button
-							variant="outline"
-							size="sm"
-							className="mt-1"
-							onClick={() => {
-								set_has_tip(false);
-								form.setValue("amount", 0);
-								toast.success("Tip removed", {
-									description:
-										"You can now send your message without wallet connection",
-								});
-							}}
-						>
-							Disable Tip
-						</Button>
-					</div>
-				),
-				duration: 10000,
-			});
-			set_confirm_mode(false);
-			return;
-		}
-
-		if (!confirm_mode) {
-			// 確認モードに切り替え
-			set_confirm_mode(true);
-			return;
-		}
-
-		// Tipなしの場合、WebSocketでチャットメッセージとして直接送信
-		if (!sendTip) {
-			console.log("Sending as normal chat message (no tip)");
-
-			try {
-				// チャットメッセージとして送信
-				actions.sendChatMessage(values.display_name, values.message || "");
-
-				toast.success("Message sent successfully!");
-
-				// コールバック関数があれば実行
-				on_send_success?.(
-					0, // 金額は0
-					values.display_name,
-					values.message || "",
-				);
-
-				// フォームをリセット
-				form.reset({
-					...default_values,
-					recipient_address: values.recipient_address,
-				});
-
-				// 確認モードをリセット
-				set_confirm_mode(false);
-
-				return;
-			} catch (error) {
-				console.error("Failed to send chat message:", error);
-				toast.error("Failed to send message", {
-					description: error instanceof Error ? error.message : String(error),
-				});
-				// 確認モードをリセット
-				set_confirm_mode(false);
-				return;
-			}
-		}
-
-		// === ステップ3: PTB構築 ===
+	async function sendNormalMessage(values: SuperchatFormValues) {
 		try {
-			// ウォレット接続チェック (念のため)
+			// チャットメッセージとして送信
+			actions.sendChatMessage(values.display_name, values.message || "");
+
+			toast.success("Message sent successfully!");
+
+			// コールバック関数があれば実行
+			on_send_success?.(
+				0, // 金額は0
+				values.display_name,
+				values.message || "",
+			);
+
+			// フォームをリセット
+			form.reset({
+				...default_values,
+				recipient_address: values.recipient_address,
+				display_name: values.display_name,
+			});
+
+			// 確認モードをリセット
+			set_confirm_mode(false);
+		} catch (error) {
+			console.error("Failed to send chat message:", error);
+			toast.error("Failed to send message", {
+				description: error instanceof Error ? error.message : String(error),
+			});
+			// 確認モードをリセット
+			set_confirm_mode(false);
+		}
+	}
+
+	/**
+	 * スーパーチャットを送信する処理
+	 *
+	 * @param values - フォームの入力値
+	 */
+	async function sendSuperchat(values: SuperchatFormValues) {
+		try {
+			// ウォレット接続チェック
 			if (!currentAccount) {
 				toast.error("Wallet Connection Required", {
 					description: "Please connect your wallet to send tips.",
@@ -362,7 +373,7 @@ export function SuperchatForm({
 
 			// 3. Transaction Block 構築
 			const tx = new Transaction();
-			tx.setSender(currentAccount.address); // 安全のため明示的に設定
+			tx.setSender(currentAccount.address);
 
 			// coinWithBalance が自動でSplit/Mergeを注入
 			const paymentCoin = coinWithBalance({
@@ -384,10 +395,10 @@ export function SuperchatForm({
 				typeArguments: [selectedCoinType],
 			});
 
-			// ガス上限設定（ガスコインの選択はウォレットに任せる）
+			// ガス上限設定
 			tx.setGasBudget(DEFAULT_GAS_BUDGET);
 
-			// === ステップ4: トランザクション実行 ===
+			// 4. トランザクション実行
 			signAndExecuteTransaction(
 				{
 					transaction: tx,
@@ -416,14 +427,12 @@ export function SuperchatForm({
 							return;
 						}
 
-						// 結果処理 (resultがundefinedでないことを確認)
+						// 結果処理
 						if (result?.digest) {
-							// トランザクションの成功をチェック
-							// 注意: effectsはすぐに利用できないため、digestが存在することで成功と判断
 							console.log("Transaction successfully executed on chain.");
 							const digest = result.digest;
 
-							// WebSocketを使ってスーパーチャットメッセージを送信
+							// WebSocketでスーパーチャットメッセージを送信
 							actions.sendSuperchatMessage(
 								values.display_name,
 								values.message || "",
@@ -451,6 +460,7 @@ export function SuperchatForm({
 							form.reset({
 								...default_values,
 								recipient_address: values.recipient_address,
+								display_name: values.display_name,
 							});
 						} else {
 							// トランザクション失敗時の処理
@@ -467,8 +477,67 @@ export function SuperchatForm({
 			toast.error("Payment preparation failed", {
 				description: error instanceof Error ? error.message : String(error),
 			});
-			// 確認モードをリセット
 			set_confirm_mode(false);
+		}
+	}
+
+	/**
+	 * フォーム送信ハンドラー
+	 * @param values - フォームの入力値
+	 */
+	async function on_submit(values: SuperchatFormValues) {
+		// チップ金額が0または非Tip選択状態のチェック
+		const sendTip = has_tip && values.amount > 0;
+
+		// Tipありで金額が0より大きい場合のみウォレット接続チェック
+		if (sendTip && !currentAccount) {
+			toast.error("Wallet Connection Required", {
+				description: (
+					<div className="mt-2 flex flex-col gap-2">
+						<p>Wallet connection is required to send tips.</p>
+						<p>
+							Please connect your wallet using the "Connect Wallet" button at
+							the top.
+						</p>
+						<p>
+							Alternatively, you can disable tipping to send a message without
+							wallet connection.
+						</p>
+						<Button
+							variant="outline"
+							size="sm"
+							className="mt-1"
+							onClick={() => {
+								set_has_tip(false);
+								form.setValue("amount", 0);
+								toast.success("Tip removed", {
+									description:
+										"You can now send your message without wallet connection",
+								});
+							}}
+						>
+							Disable Tip
+						</Button>
+					</div>
+				),
+				duration: 10000,
+			});
+			set_confirm_mode(false);
+			return;
+		}
+
+		if (!confirm_mode) {
+			// 確認モードに切り替え
+			set_confirm_mode(true);
+			return;
+		}
+
+		// Tipなしの場合、WebSocketでチャットメッセージとして直接送信
+		if (!sendTip) {
+			await sendNormalMessage(values);
+		} else {
+			// Tipありの場合、スーパーチャットとして送信
+			await sendSuperchat(values);
 		}
 	}
 
@@ -477,287 +546,219 @@ export function SuperchatForm({
 		set_confirm_mode(false);
 	}
 
+	// ユーザー名を更新する関数
+	function updateUsername(name: string) {
+		if (debouncedNameUpdate.current) {
+			clearTimeout(debouncedNameUpdate.current);
+		}
+		debouncedNameUpdate.current = setTimeout(() => {
+			setUsername(name);
+		}, 1000);
+	}
+
+	// UIは常に統合UIを使用（non-integrated UIは使用されていないため削除）
 	return (
-		<Card className="w-full max-w-md mx-auto">
-			<CardHeader>
-				<CardTitle>Send a Super Chat</CardTitle>
-				<CardDescription>
-					Send a message and optionally SUI directly to the streamer
-				</CardDescription>
-			</CardHeader>
-			<CardContent>
-				<Form {...form}>
-					<form onSubmit={form.handleSubmit(on_submit)} className="space-y-6">
-						<FormField
-							control={form.control}
-							name="amount"
-							render={({ field: { onChange, value, ...field } }) => (
-								<FormItem className="space-y-3">
-									<div className="flex justify-between items-center">
-										<FormLabel>Tip</FormLabel>
-										<Button
-											type="button"
-											variant="ghost"
-											size="sm"
-											onClick={() => {
-												set_has_tip(!has_tip);
-												if (!has_tip) {
-													// Tipを有効にする時、デフォルト値を設定
-													onChange(0);
-												} else {
-													// Tipを無効にする時、金額を0にリセット
-													onChange(0);
-												}
-											}}
-											className="text-xs h-6 px-2"
-										>
-											{has_tip ? "Remove Tip" : "Add Tip"}
-										</Button>
-									</div>
-
-									{has_tip ? (
-										<FormControl>
-											<div className="space-y-4">
-												<div className="flex items-center gap-3">
-													<FormField
-														control={form.control}
-														name="coinTypeArg"
-														render={({ field: coinField }) => (
-															<FormItem className="flex-grow-0">
-																<Select
-																	value={coinField.value}
-																	onValueChange={coinField.onChange}
-																>
-																	<SelectTrigger className="w-24">
-																		<SelectValue placeholder="Coin" />
-																	</SelectTrigger>
-																	<SelectContent>
-																		{SUPPORTED_COINS.map((coin) => (
-																			<SelectItem
-																				key={coin.typeArg}
-																				value={coin.typeArg}
-																			>
-																				{coin.symbol}
-																			</SelectItem>
-																		))}
-																	</SelectContent>
-																</Select>
-																<FormMessage />
-															</FormItem>
-														)}
-													/>
-
-													<FormItem className="flex-grow">
-														<Input
-															type="number"
-															placeholder="Amount"
-															step="any"
-															min="0"
-															{...field}
-															value={value === 0 ? "" : value}
-															onChange={(e) => {
-																const val =
-																	e.target.value === ""
-																		? 0
-																		: Number.parseFloat(e.target.value);
-																onChange(val);
-
-																// 金額変更時のガイダンス表示
-																if (val > 0 && !currentAccount) {
-																	toast.info("Wallet Connection Required", {
-																		description:
-																			"Please connect your wallet using the 'Connect Wallet' button at the top to send tips.",
-																		duration: 5000,
-																	});
-																}
-															}}
-															className="max-w-full"
-														/>
-														<FormMessage />
-													</FormItem>
-												</div>
-											</div>
-										</FormControl>
-									) : (
-										<FormControl>
-											<div className="p-4 border rounded border-dashed text-center">
-												<span className="text-muted-foreground">
-													No tip will be sent (message only)
-												</span>
-											</div>
-										</FormControl>
-									)}
-
-									<FormDescription>
-										{has_tip ? (
-											<span
-												className={
-													!currentAccount ? "text-amber-500 font-medium" : ""
-												}
-											>
-												{!currentAccount
-													? "Wallet connection required for sending tips"
-													: "Tips will be sent with your message"}
-											</span>
-										) : (
-											"Send message only (no wallet connection needed)"
-										)}
-									</FormDescription>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-
-						<FormField
-							control={form.control}
-							name="recipient_address"
-							render={({ field }) => (
-								<FormItem>
-									<FormLabel>Recipient Address</FormLabel>
-									<FormControl>
-										<Input
-											placeholder="Enter streamer's wallet address"
-											{...field}
-											disabled={!!initial_recipient_address}
-											className={
-												initial_recipient_address
-													? "bg-muted cursor-not-allowed"
-													: ""
-											}
-										/>
-									</FormControl>
-									<FormDescription>
-										{initial_recipient_address
-											? "The streamer's wallet address (automatically filled)"
-											: "The wallet address of the streamer"}
-									</FormDescription>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-
+		<div className="h-full flex flex-col justify-end">
+			<Form {...form}>
+				<form
+					ref={formRef}
+					onSubmit={form.handleSubmit(on_submit)}
+					className={cn(
+						has_tip ? "p-1 pb-2 space-y-1" : "px-1 py-1.5 space-y-0",
+					)}
+				>
+					<div
+						className={cn(
+							"flex items-center justify-between",
+							has_tip ? "mb-0.5" : "",
+						)}
+					>
 						<FormField
 							control={form.control}
 							name="display_name"
 							render={({ field }) => (
-								<FormItem>
-									<FormLabel>Display Name</FormLabel>
-									<FormControl>
-										<Input
-											placeholder="Your display name"
-											{...field}
-											onChange={(e) => {
-												field.onChange(e);
-												// ユーザー名の更新（debounce処理）
-												if (debouncedNameUpdate.current) {
-													clearTimeout(debouncedNameUpdate.current);
-												}
-												debouncedNameUpdate.current = setTimeout(() => {
-													setUsername(e.target.value);
-													toast.success("Display name saved", {
-														description:
-															"This name will be used for your future messages",
-														duration: 2000,
-													});
-												}, 1000);
-											}}
-										/>
-									</FormControl>
-									<FormDescription>
-										This name will be displayed with your message. Changes will
-										be automatically saved.
-									</FormDescription>
+								<FormItem className="flex-grow mr-1">
+									<Input
+										placeholder="表示名"
+										{...field}
+										className="text-xs h-6"
+										onChange={(e) => {
+											field.onChange(e);
+											updateUsername(e.target.value);
+										}}
+									/>
 									<FormMessage />
 								</FormItem>
 							)}
 						/>
 
+						<div className="flex items-center space-x-0.5 bg-secondary rounded-lg p-0.5">
+							<button
+								type="button"
+								onClick={() => set_has_tip(false)}
+								className={`px-1.5 py-0.5 text-xs rounded-md transition-colors ${
+									!has_tip
+										? "bg-card shadow-sm"
+										: "text-muted-foreground hover:bg-secondary/80"
+								}`}
+							>
+								NoTip
+							</button>
+							<button
+								type="button"
+								onClick={() => set_has_tip(true)}
+								className={`px-1.5 py-0.5 text-xs rounded-md transition-colors ${
+									has_tip
+										? "bg-card shadow-sm"
+										: "text-muted-foreground hover:bg-secondary/80"
+								}`}
+							>
+								SuperChat
+							</button>
+						</div>
+					</div>
+
+					{has_tip && (
+						<div className="flex items-center gap-1 mb-0.5">
+							<FormField
+								control={form.control}
+								name="coinTypeArg"
+								render={({ field: coinField }) => (
+									<FormItem className="flex-grow-0">
+										<Select
+											value={coinField.value}
+											onValueChange={coinField.onChange}
+										>
+											<SelectTrigger className="w-16 text-xs h-6">
+												<SelectValue placeholder="Coin" />
+											</SelectTrigger>
+											<SelectContent>
+												{SUPPORTED_COINS.map((coin) => (
+													<SelectItem key={coin.typeArg} value={coin.typeArg}>
+														{coin.symbol}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
+
+							<FormField
+								control={form.control}
+								name="amount"
+								render={({ field: { onChange, value, ...field } }) => (
+									<FormItem className="flex-grow">
+										<Input
+											type="number"
+											placeholder="金額"
+											step="any"
+											min="0"
+											{...field}
+											value={value === 0 ? "" : value}
+											onChange={(e) => {
+												const val =
+													e.target.value === ""
+														? 0
+														: Number.parseFloat(e.target.value);
+												onChange(val);
+											}}
+											className="text-xs h-6"
+										/>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
+						</div>
+					)}
+
+					<FormField
+						control={form.control}
+						name="recipient_address"
+						render={({ field }) => (
+							<FormItem className="hidden">
+								<Input {...field} type="hidden" />
+							</FormItem>
+						)}
+					/>
+
+					<div className="flex items-start">
 						<FormField
 							control={form.control}
 							name="message"
 							render={({ field }) => (
-								<FormItem>
-									<FormLabel>Message (Optional)</FormLabel>
-									<FormControl>
-										<Input placeholder="Message to the streamer" {...field} />
-									</FormControl>
-									<FormDescription>
-										Message shown on stream (up to 100 characters)
-									</FormDescription>
+								<FormItem className="flex-grow">
+									<Textarea
+										placeholder="メッセージを入力..."
+										{...field}
+										className="text-xs min-h-6 max-h-24 py-1 px-3 resize-none overflow-hidden"
+										style={{ height: "auto" }}
+										onInput={handleTextareaResize}
+									/>
 									<FormMessage />
 								</FormItem>
 							)}
 						/>
+						<Button
+							type="submit"
+							className="ml-1 h-6"
+							disabled={isPending}
+							size="sm"
+						>
+							{confirm_mode ? (isPending ? "送信中..." : "送信") : "送信"}
+						</Button>
+					</div>
 
-						{confirm_mode && (
-							<div className="p-4 border rounded-md bg-secondary">
-								<h4 className="font-medium mb-2">Confirm</h4>
-								<p className="text-sm mb-4">
-									Are you sure you want to send the following?
-								</p>
-
-								<div className="grid grid-cols-3 gap-2 text-sm mb-1">
+					{confirm_mode && (
+						<div className="p-1 border rounded-md bg-secondary/50 text-xs mb-0.5">
+							<p className="font-medium mb-0.5 text-[10px]">送信内容を確認</p>
+							{has_tip && (
+								<div className="flex gap-1 mb-0.5 text-[10px]">
 									<span className="font-medium">Tip:</span>
-									<span className="col-span-2">
-										{has_tip
-											? `${form.getValues("amount")} ${
-													SUPPORTED_COINS.find(
-														(c) => c.typeArg === form.getValues("coinTypeArg"),
-													)?.symbol || ""
-												}`
-											: "No tip"}
+									<span>
+										{form.getValues("amount")}{" "}
+										{SUPPORTED_COINS.find(
+											(c) => c.typeArg === form.getValues("coinTypeArg"),
+										)?.symbol || ""}
 									</span>
 								</div>
-
-								<div className="grid grid-cols-3 gap-2 text-sm mb-1">
-									<span className="font-medium">To:</span>
-									<span className="col-span-2 font-mono text-xs break-all">
-										{form.getValues("recipient_address")}
-									</span>
-								</div>
-
-								<div className="grid grid-cols-3 gap-2 text-sm mb-1">
-									<span className="font-medium">Display Name:</span>
-									<span className="col-span-2">
-										{form.getValues("display_name")}
-									</span>
-								</div>
-
-								{form.getValues("message") && (
-									<div className="grid grid-cols-3 gap-2 text-sm">
-										<span className="font-medium">Message:</span>
-										<span className="col-span-2">
-											{form.getValues("message")}
-										</span>
-									</div>
-								)}
-							</div>
-						)}
-
-						<div className="flex gap-2">
-							{confirm_mode ? (
-								<>
-									<Button
-										type="button"
-										variant="outline"
-										onClick={handle_cancel}
-										className="flex-1"
-									>
-										Cancel
-									</Button>
-									<Button type="submit" className="flex-1" disabled={isPending}>
-										{isPending ? "Sending..." : "Send"}
-									</Button>
-								</>
-							) : (
-								<Button type="submit" className="w-full">
-									Confirm
-								</Button>
 							)}
+							<div className="flex gap-1 mb-0.5 text-[10px]">
+								<span className="font-medium">名前:</span>
+								<span>{form.getValues("display_name")}</span>
+							</div>
+							{form.getValues("message") && (
+								<div className="flex gap-1 mb-0.5 text-[10px]">
+									<span className="font-medium">メッセージ:</span>
+									<span className="break-words">
+										{form.getValues("message")}
+									</span>
+								</div>
+							)}
+							<div className="flex gap-1 mt-0.5">
+								<Button
+									type="button"
+									variant="outline"
+									onClick={handle_cancel}
+									className="text-[10px] h-5 flex-1"
+									size="sm"
+								>
+									キャンセル
+								</Button>
+								<Button
+									type="submit"
+									className="text-[10px] h-5 flex-1"
+									disabled={isPending}
+									size="sm"
+								>
+									{isPending ? "送信中..." : "確定"}
+								</Button>
+							</div>
 						</div>
-					</form>
-				</Form>
-			</CardContent>
-		</Card>
+					)}
+				</form>
+			</Form>
+		</div>
 	);
 }
