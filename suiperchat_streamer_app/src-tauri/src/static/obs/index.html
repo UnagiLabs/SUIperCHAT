@@ -34,6 +34,11 @@
             transition: opacity 0.3s;
         }
 
+        /* 接続済みの場合は透明にする */
+        .connection-indicator.connected {
+            opacity: 0;
+        }
+
         .connection-indicator:hover {
             opacity: 1;
         }

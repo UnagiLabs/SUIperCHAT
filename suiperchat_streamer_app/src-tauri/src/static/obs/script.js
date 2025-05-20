@@ -134,6 +134,7 @@ function setupWebSocketEventHandlers() {
 function updateConnectionStatus(status, statusClass) {
     const statusElement = document.getElementById('connection-status');
     const dotElement = document.getElementById('status-dot');
+    const indicatorElement = document.querySelector('.connection-indicator');
     
     if (statusElement) {
         statusElement.textContent = status;
@@ -144,6 +145,14 @@ function updateConnectionStatus(status, statusClass) {
         dotElement.classList.remove('connected', 'connecting', 'error');
         // 新しいクラスを追加
         dotElement.classList.add(statusClass);
+    }
+    
+    // 接続インジケーター全体にもクラスを適用
+    if (indicatorElement) {
+        // すべてのステータスクラスをリセット
+        indicatorElement.classList.remove('connected', 'connecting', 'error');
+        // 現在のステータスクラスを追加
+        indicatorElement.classList.add(statusClass);
     }
 }
 
