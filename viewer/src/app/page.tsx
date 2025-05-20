@@ -19,9 +19,8 @@ import { ViewerLayout } from "@/components/layout/viewer-layout";
 import { Superchat } from "@/components/superchat/superchat";
 import { VideoPlayer } from "@/components/video/video-player";
 import WebSocketUrlHandler from "@/components/websocket/websocket-url-handler";
-import { useAspectRatio } from "@/hooks/useAspectRatio";
 import { getServerConfig } from "@/lib/server-config";
-import { cn } from "@/lib/utils";
+import { Suspense } from "react";
 
 /**
  * 視聴者向けホームページコンポーネント
@@ -35,7 +34,9 @@ export default async function HomePage() {
 	return (
 		<>
 			{/* WebSocketのURL処理用コンポーネント (URLパラメータからWS接続) */}
-			<WebSocketUrlHandler />
+			<Suspense fallback={null}>
+				<WebSocketUrlHandler />
+			</Suspense>
 
 			<ViewerHeader />
 			<main className="container max-w-screen-xl mx-auto p-0.5 md:p-1">
