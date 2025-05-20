@@ -1,158 +1,484 @@
 /**
- * SUIperCHAT OBS表示用スタイルシート v1.0.3
+ * SUIperCHAT OBS表示用スタイルシート v1.0.8
  * 
- * OBSブラウザソースで使用するスーパーチャット表示のスタイルを定義します。
- * 配信画面に表示されるスーパーチャットやチャットメッセージの見た目を制御します。
+ * OBSブラウザソースで使用するYouTubeスタイルのチャット表示のスタイルを定義します。
+ * 配信画面に表示されるスーパーチャットやチャットメッセージのYouTubeライクな見た目を実現します。
+ * このCSSはYouTubeスタイルをベースにカスタマイズ可能です。
+ * すべてのユーザーは通常リスナーとして表示されます。
  */
+ 
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;700&family=Noto+Sans:wght@400;500;700&display=swap");
 
+/* ---------------------------------------------------- 
+  カスタマイズ可能な変数
+---------------------------------------------------- */
 :root {
-    --superchat-bg-1: rgba(255, 180, 0, 0.9);  /* 1SUI */
-    --superchat-bg-3: rgba(255, 140, 0, 0.9);  /* 3SUI */
-    --superchat-bg-5: rgba(255, 100, 0, 0.9);  /* 5SUI */
-    --superchat-bg-10: rgba(255, 50, 0, 0.9);  /* 10SUI */
-    --chat-bg: rgba(44, 44, 44, 0.8);          /* 通常チャット */
-    --text-color: #ffffff;
-    --border-radius: 8px;
+  /* リスナー(一般ユーザー)のスタイル */
+  --listener-name: #ffffff;
+  --listener-name-bg: #8ccce3;
+  --listener-comment: #333333;
+  --listener-comment-bg: #ffffff;
+  --listener-comment-border: #8ccce3;
+  
+  /* スーパーチャットのスタイル */
+  --superchat-name: #ffffff;
+  --superchat-name-bg: #62c1de;
+  --superchat-comment: #ffffff;
+  --superchat-comment-bg: #62c1de;
+  --superchat-amount: #ffffff;
+  --superchat-header-height: 48px;
+  
+  /* アニメーションとタイミング */
+  --animation-duration: 0.3s;
+  --animation-delay: 0.1s;
+  
+  /* サイズと間隔 */
+  --border-radius: 24px;
+  --message-padding: 12px 20px;
+  --container-gap: 16px;
 }
 
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+/* ---------------------------------------------------- 
+  ベースフォントとスタイル
+---------------------------------------------------- */
+ytd-sponsorships-live-chat-header-renderer *,
+yt-live-chat-paid-sticker-renderer *,
+yt-live-chat-paid-message-renderer *,
+yt-live-chat-text-message-renderer * {
+  font-family: "Noto Sans JP";
+  font-size: 16px !important;
+  font-style: normal !important;
+  font-weight: 700 !important;
+  line-height: 1.5 !important;
+  letter-spacing: 0.5px !important;
 }
 
+ytd-sponsorships-live-chat-header-renderer #message,
+yt-live-chat-paid-sticker-renderer #message,
+yt-live-chat-paid-message-renderer #message,
+yt-live-chat-text-message-renderer #message {
+  font-weight: 500 !important;
+} 
+
+/* ---------------------------------------------------- 
+  アニメーション
+---------------------------------------------------- */
+ytd-sponsorships-live-chat-header-renderer,
+yt-live-chat-paid-sticker-renderer,
+yt-live-chat-paid-message-renderer,
+yt-live-chat-text-message-renderer {
+  animation: popInLeft var(--animation-duration) ease-out forwards;
+}
+
+@keyframes popInLeft {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes popInRight {
+  0% {
+    opacity: 0;
+    transform: translate(50%, -50%) scale(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+/* ---------------------------------------------------- 
+  コンテナとレイアウト
+---------------------------------------------------- */
+ytd-sponsorships-live-chat-gift-purchase-announcement-renderer,
+yt-live-chat-paid-sticker-renderer,
+yt-live-chat-paid-message-renderer,
+yt-live-chat-text-message-renderer {
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+  margin-bottom: var(--container-gap) !important;
+}
+
+yt-live-chat-text-message-renderer {
+  flex-direction: row !important;
+  grid-gap: 8px;
+}
+
+#content.yt-live-chat-text-message-renderer {
+  position: relative;
+  overflow: visible !important;
+  display: block;
+}
+
+/* ---------------------------------------------------- 
+  ユーザー名表示
+---------------------------------------------------- */
+yt-live-chat-author-chip.yt-live-chat-text-message-renderer {
+  justify-content: start !important;
+  width: 100%;
+  margin: auto;
+}
+
+/* リスナー名 */
+yt-live-chat-text-message-renderer[author-type="owner"] #author-name,
+yt-live-chat-text-message-renderer[author-type="moderator"] #author-name,
+yt-live-chat-text-message-renderer #author-name {
+  display: block;
+  width: fit-content;
+  padding: 4px 12px !important;
+  border-radius: 18px !important;
+  background-color: var(--listener-name-bg) !important;
+  color: var(--listener-name) !important;
+  font-size: 16px !important;
+  margin-bottom: 8px;
+}
+
+/* アイコン非表示 */
+yt-img-shadow#author-photo.yt-live-chat-text-message-renderer {
+  margin-right: 0px;
+  display: none;
+}
+
+#chat-badges.yt-live-chat-author-chip {
+  display: flex;
+  align-items: center;
+}
+
+/* ---------------------------------------------------- 
+  メッセージ表示
+---------------------------------------------------- */
+/* リスナーメッセージ */
+#message.yt-live-chat-text-message-renderer {
+  background-color: var(--listener-comment-bg) !important;
+  color: var(--listener-comment) !important;
+  border-radius: var(--border-radius);
+  border: 3px solid var(--listener-comment-border);
+  display: block !important;
+  padding: var(--message-padding);
+  width: fit-content !important;
+  position: relative;
+  overflow: visible;
+  margin-right: auto;
+  margin-bottom: 8px;
+}
+
+/* 吹き出しの装飾（左上の角部分） */
+#message.yt-live-chat-text-message-renderer::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: -3px; right: auto;
+  width: 21px;
+  height: 21px;
+  transform: rotate(-20deg) skew(20deg, 20deg);
+  background-color: var(--listener-comment-border);
+  border-top-left-radius: 7px;
+  border-bottom-right-radius: 6px;
+  z-index: -1;
+}
+
+#message.yt-live-chat-text-message-renderer::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 1px; right: auto;
+  width: 18px;
+  height: 18px;
+  transform: rotate(-20deg) skew(20deg, 20deg);
+  background-color: var(--listener-comment-bg);
+  border-top-left-radius: 4px;
+  border-bottom-right-radius: 20px;
+  z-index: 0;
+}
+
+/* ---------------------------------------------------- 
+  スーパーチャット
+---------------------------------------------------- */
+/* カード全体 */
+yt-live-chat-paid-message-renderer #card.yt-live-chat-paid-message-renderer {
+  background-color: var(--superchat-comment-bg);
+  border-radius: 13px;
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* ヘッダー部分 */
+yt-live-chat-paid-message-renderer #header.yt-live-chat-paid-message-renderer {
+  background-color: var(--superchat-name-bg);
+  color: var(--superchat-name);
+  padding: 12px 20px;
+  border-radius: 10px 10px 0 0;
+  position: relative;
+  min-height: var(--superchat-header-height);
+  display: flex;
+  align-items: center;
+}
+
+/* 名前 */
+yt-live-chat-author-chip[disable-highlighting] #author-name.yt-live-chat-author-chip {
+  color: var(--superchat-name);
+  font-size: 18px !important;
+}
+
+/* 金額表示 */
+#purchase-amount-column.yt-live-chat-paid-message-renderer {
+  text-wrap: nowrap;
+  font-size: 22px !important;
+  font-weight: bold !important;
+  color: var(--superchat-amount);
+  position: absolute;
+  right: 20px;
+}
+
+yt-live-chat-paid-message-renderer #purchase-amount {
+  font-size: 22px !important;
+  font-weight: bold !important;
+}
+
+/* ヘッダーのみ表示時 */
+yt-live-chat-paid-message-renderer[show-only-header] #header.yt-live-chat-paid-message-renderer {
+  border-radius: 10px;
+}
+
+yt-live-chat-paid-message-renderer[show-only-header] #content.yt-live-chat-paid-message-renderer {
+  padding: 0;
+}
+
+/* ユーザー情報行 */
+yt-live-chat-paid-message-renderer #single-line.yt-live-chat-paid-message-renderer {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+yt-live-chat-paid-message-renderer #single-line.yt-live-chat-paid-message-renderer span#chat-badges {
+  display: flex;
+  align-items: center;
+}
+
+/* メッセージ部分 */
+yt-live-chat-paid-message-renderer #content.yt-live-chat-paid-message-renderer {
+  background-color: var(--superchat-comment-bg);
+  color: var(--superchat-comment);
+  border-radius: 0 0 10px 10px;
+  padding: 12px 20px;
+  font-size: 16px !important;
+}
+
+/* ボタン等の非表示 */
+#creator-heart-button.yt-live-chat-paid-message-renderer,
+#gradient-container.yt-live-chat-paid-message-renderer,
+#action-buttons.yt-live-chat-paid-message-renderer,
+#before-content-buttons.yt-live-chat-text-message-renderer {
+  display: none !important;
+}
+
+yt-live-chat-paid-message-renderer[has-heart-button] #menu.yt-live-chat-paid-message-renderer {
+  display: none !important;
+}
+
+/* ---------------------------------------------------- 
+  スーパーステッカー
+---------------------------------------------------- */
+/* ステッカー画像 */
+#sticker img {
+  width: 56px !important;
+  height: 56px !important;
+}
+
+/* カード全体 */
+yt-live-chat-paid-sticker-renderer:not([dashboard-money-feed]) #card.yt-live-chat-paid-sticker-renderer {
+  display: block;
+  padding: 0;
+  border-radius: 10px;
+  box-shadow: none;
+  overflow: visible;
+  position: relative;
+}
+
+/* ヘッダー部分 */
+yt-live-chat-paid-sticker-renderer:not([dashboard-money-feed]) #author-info.yt-live-chat-paid-sticker-renderer {
+  background-color: var(--superchat-name-bg);
+  color: var(--superchat-name);
+  border-radius: 10px 10px 0 0;
+  display: block;
+  padding: 12px 20px !important;
+}
+
+/* アイコン非表示 */
+#author-photo.yt-live-chat-paid-sticker-renderer,
+#author-photo.yt-live-chat-paid-message-renderer {
+  display: none !important;
+}
+
+/* ユーザー情報と金額 */
+#content-primary-column.yt-live-chat-paid-sticker-renderer {
+  display: flex;
+  justify-content: space-between;
+}
+
+yt-live-chat-paid-sticker-renderer:not([dashboard-money-feed]) #purchase-amount-chip.yt-live-chat-paid-sticker-renderer {
+  padding: 0;
+  color: var(--superchat-name);
+}
+
+/* ステッカーコンテナ */
+yt-live-chat-paid-sticker-renderer:not([dashboard-money-feed]) #sticker-container {
+  background-color: var(--superchat-comment-bg) !important;
+  display: block;
+  padding: 12px 20px;
+  border-radius: 0 0 10px 10px;
+}
+
+/* ---------------------------------------------------- 
+  その他の要素
+---------------------------------------------------- */
+/* 絵文字サイズ */
+#content.yt-live-chat-paid-message-renderer img.yt-live-chat-paid-message-renderer {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+/* バッジサイズ */
+.yt-live-chat-author-badge-renderer {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* 不要な要素を非表示 */
+yt-live-chat-author-badge-renderer[type=moderator],
+yt-live-chat-author-badge-renderer[type=verified],
+yt-live-chat-text-message-renderer #timestamp,
+yt-live-chat-ticker-renderer,
+div#action-panel.style-scope.yt-live-chat-renderer,
+yt-live-chat-upsell-dialog-renderer,
+div#reaction-control-panel-overlay.yt-live-chat-renderer,
+div#separator.yt-live-chat-renderer,
+div#lower-bumper.yt-live-chat-paid-message-renderer,
+ytd-sponsorships-live-chat-gift-redemption-announcement-renderer,
+yt-live-chat-text-message-renderer[is-deleted],
+yt-live-chat-moderation-message-renderer,
+yt-live-chat-auto-mod-message-renderer,
+yt-live-chat-mode-change-message-renderer,
+yt-live-chat-viewer-engagement-message-renderer,
+yt-live-chat-server-error-message,
+yt-live-chat-banner-manager,
+yt-live-chat-restricted-participation-renderer,
+#panel-pages,
+yt-live-chat-message-input-renderer,
+yt-live-chat-header-renderer {
+  display: none !important;
+}
+
+/* 背景透明化 */
+yt-live-chat-renderer {
+  visibility: hidden !important;
+}
+
+yt-live-chat-renderer * {
+  visibility: initial !important;
+}
+
+yt-live-chat-item-list-renderer #items,
+yt-live-chat-item-list-renderer #item-scroller {
+  overflow: hidden !important;
+}
+
+/* 背景を透明に */
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: transparent;
-    overflow: hidden;
+  overflow: hidden;
+  background-color: rgba(0, 0, 0, 0);
 }
 
+/* リンクスタイル */
+yt-live-chat-text-message-renderer a {
+  text-decoration: none !important;
+}
+
+/* 背景を透明に */
+yt-live-chat-text-message-renderer,
+yt-live-chat-text-message-renderer[is-highlighted],
+yt-live-chat-text-message-renderer[author-type="owner"],
+yt-live-chat-text-message-renderer[author-type="owner"][is-highlighted],
+yt-live-chat-text-message-renderer[author-type="moderator"],
+yt-live-chat-text-message-renderer[author-type="moderator"][is-highlighted] {
+  background-color: transparent !important;
+}
+
+/* その他スタイル調整 */
+.mention.style-scope {
+  background-color: unset;
+}
+
+/* YouTubeのセレクタをサポートするための設定（メンバー関連は削除） */
+yt-live-chat-text-message-renderer[author-type="member"],
+yt-live-chat-text-message-renderer[author-type="member"][is-highlighted] {
+  background-color: transparent !important;
+}
+
+/* ---------------------------------------------------- 
+  SUIperCHAT OBS固有のスタイル
+---------------------------------------------------- */
 .container {
-    width: 100%;
-    max-width: 800px;
-    height: 100vh;
-    margin: 0 auto;
-    padding: 20px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column-reverse; /* 新しいメッセージを下に表示 */
-    scrollbar-width: thin;          /* Firefox */
-}
-
-/* Chrome/Edge/Safari用スクロールバースタイル */
-.container::-webkit-scrollbar {
-    width: 6px;
-}
-
-.container::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.container::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
+  width: 100%;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 10px;
 }
 
 .superchat-container {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--container-gap);
 }
 
-.superchat-message {
-    border-radius: var(--border-radius);
-    padding: 16px;
-    color: var(--text-color);
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    animation: fadeIn 0.5s ease-in-out;
-    max-width: 100%;
-    margin-bottom: 10px;
+/* 接続インジケータのスタイル */
+.connection-indicator {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  font-size: 12px;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  z-index: 1000;
+  opacity: 0.7;
+  transition: opacity 0.3s;
 }
 
-.superchat-message:hover {
-    transform: scale(1.02);
-    transition: transform 0.2s ease;
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+  background-color: gray;
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
-.superchat-message.amount-1 {
-    background-color: var(--superchat-bg-1);
+.status-dot.connected {
+  background-color: #4CAF50;
 }
 
-.superchat-message.amount-3 {
-    background-color: var(--superchat-bg-3);
+.status-dot.connecting {
+  background-color: orange;
+  animation: blink 1s infinite;
 }
 
-.superchat-message.amount-5 {
-    background-color: var(--superchat-bg-5);
+.status-dot.error {
+  background-color: #F44336;
 }
 
-.superchat-message.amount-10 {
-    background-color: var(--superchat-bg-10);
-}
-
-.superchat-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-
-.display-name {
-    font-weight: bold;
-    font-size: 1.2em;
-}
-
-.amount {
-    font-weight: bold;
-}
-
-.message-content {
-    font-size: 1.1em;
-    word-break: break-word;
-}
-
-/* アニメーション定義 */
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-/* 通常チャットメッセージのスタイル */
-.chat-message {
-    border-radius: var(--border-radius);
-    padding: 12px;
-    color: var(--text-color);
-    background-color: var(--chat-bg);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    animation: fadeIn 0.5s ease-in-out;
-    max-width: 100%;
-    margin-bottom: 10px;
-}
-
-.chat-message:hover {
-    transform: scale(1.01);
-    transition: transform 0.2s ease;
-}
-
-.chat-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 6px;
-}
-
-.chat-message .display-name {
-    font-weight: bold;
-    font-size: 1.1em;
-    color: #ffcc00;
-}
-
-.chat-message .timestamp {
-    font-size: 0.8em;
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.chat-message .message-content {
-    font-size: 1em;
-    word-break: break-word;
+@keyframes blink {
+  0% { opacity: 0.3; }
+  50% { opacity: 1; }
+  100% { opacity: 0.3; }
 } 

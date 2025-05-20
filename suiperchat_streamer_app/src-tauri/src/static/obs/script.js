@@ -1,8 +1,9 @@
 /**
- * SUIperCHAT OBS表示用JavaScriptファイル (v1.0.3)
+ * SUIperCHAT OBS表示用JavaScriptファイル (v1.0.5)
  * 
  * WebSocketでスーパーチャットメッセージを受信し、OBS画面に表示する機能を実装します。
  * URLパラメータからWebSocketのアドレスを取得し、自動的に接続します。
+ * YouTubeライクな表示スタイルに対応するためのDOM構造を生成します。
  */
 
 // グローバル変数
@@ -148,24 +149,58 @@ function updateConnectionStatus(status, statusClass) {
 
 /**
  * 通常チャットメッセージを表示する
+ * YouTube風のDOM構造を模倣して表示します
  * 
  * @param {Object} data - チャットデータ
  */
 function displayChatMessage(data) {
     const container = document.getElementById('superchat-container');
     
-    // 新しいチャットメッセージ要素を作成
-    const chatElement = document.createElement('div');
-    chatElement.className = 'chat-message';
+    // データチェック - 必須項目がない場合はエラーログを出力
+    if (!data || !data.display_name) {
+        console.error('Invalid chat data received:', data);
+        // 元のデータは変更せず、表示用のデータを作成
+        const fallbackData = {
+            display_name: 'Unknown User', 
+            message: data?.message || 'No message content',
+            timestamp: Date.now()
+        };
+        
+        // 安全な表示用データを使用
+        renderChatMessage(container, fallbackData);
+        return;
+    }
     
-    // チャットメッセージの内容を設定
+    // 正常なデータの場合は表示処理を行う
+    renderChatMessage(container, data);
+}
+
+/**
+ * チャットメッセージのレンダリング処理
+ * 
+ * @param {HTMLElement} container - メッセージを追加する親要素
+ * @param {Object} chatData - レンダリングするチャットデータ
+ */
+function renderChatMessage(container, chatData) {
+    // 新しいチャットメッセージ要素を作成 - YouTube風の構造
+    const chatElement = document.createElement('div');
+    chatElement.className = 'chat-message yt-live-chat-text-message-renderer';
+    
+    // メンバー機能は不要なので、すべて通常リスナー扱いにする
+    // author-type属性は設定しない
+    
+    // チャットメッセージの内容を設定 - YouTube風の構造
     chatElement.innerHTML = `
-        <div class="chat-header">
-            <span class="display-name">${escapeHtml(data.display_name)}</span>
-            <span class="timestamp">${formatTimestamp(data.timestamp)}</span>
-        </div>
-        <div class="message-content">${escapeHtml(data.message)}</div>
+        <yt-live-chat-author-chip class="yt-live-chat-text-message-renderer">
+            <span id="author-name">${escapeHtml(chatData.display_name)}</span>
+            <span id="chat-badges" class="yt-live-chat-author-chip"></span>
+        </yt-live-chat-author-chip>
+        <div id="message" class="yt-live-chat-text-message-renderer">${escapeHtml(chatData.message || '')}</div>
+        <span id="timestamp">${formatTimestamp(chatData.timestamp)}</span>
     `;
+    
+    // ユーザー名とメッセージの検証を行い、コンソールに表示（デバッグ用）
+    console.log(`Chat message added - User: ${chatData.display_name}, Message: ${chatData.message || '[empty]'}`);
     
     // 要素を追加
     container.appendChild(chatElement);
@@ -179,26 +214,60 @@ function displayChatMessage(data) {
 
 /**
  * スーパーチャットメッセージを表示する
+ * YouTube風のDOM構造を模倣して表示します
  * 
  * @param {Object} data - スーパーチャットデータ
  */
 function displaySuperchatMessage(data) {
     const container = document.getElementById('superchat-container');
     
-    // 新しいスーパーチャット要素を作成
-    const superchatElement = document.createElement('div');
-    superchatElement.className = `superchat-message amount-${getAmountClass(data.superchat.amount)}`;
+    // データチェック - 必須項目がない場合はエラーログを出力
+    if (!data || !data.display_name) {
+        console.error('Invalid superchat data received:', data);
+        return;
+    }
     
-    // スーパーチャットの内容を設定
+    // 新しいスーパーチャット要素を作成 - YouTube風の構造
+    const superchatElement = document.createElement('div');
+    superchatElement.className = 'yt-live-chat-paid-message-renderer';
+    
+    // メッセージの有無に応じてヘッダーのみ表示かを決定
+    if (!data.message || data.message.trim() === '') {
+        superchatElement.setAttribute('show-only-header', '');
+    }
+    
+    // スーパーチャット金額を整形
+    const amount = data.superchat?.amount || 0;
+    const coin = data.superchat?.coin || 'SUI';
+    const formattedAmount = `¥${amount.toLocaleString()}`;
+    
+    // スーパーチャットの内容を設定 - YouTube風の構造
     superchatElement.innerHTML = `
-        <div class="superchat-header">
-            <span class="display-name">${escapeHtml(data.display_name)}</span>
-            <span class="amount">
-                ${data.superchat.amount} 
-                ${data.superchat.coin ?? '<Error: No currency information>'}
-            </span>
+        <div id="card" class="yt-live-chat-paid-message-renderer">
+            <div id="header" class="yt-live-chat-paid-message-renderer">
+                <div id="header-content">
+                    <div id="header-content-primary-column" class="yt-live-chat-paid-message-renderer">
+                        <div id="single-line" class="yt-live-chat-paid-message-renderer">
+                            <yt-live-chat-author-chip disable-highlighting class="yt-live-chat-paid-message-renderer">
+                                <span id="author-name" class="yt-live-chat-author-chip">
+                                    ${escapeHtml(data.display_name)}
+                                </span>
+                                <span id="chat-badges"></span>
+                            </yt-live-chat-author-chip>
+                            <div id="purchase-amount-column" class="yt-live-chat-paid-message-renderer">
+                                <span id="purchase-amount">${formattedAmount}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            ${data.message && data.message.trim() !== '' ? 
+                `<div id="content" class="yt-live-chat-paid-message-renderer">
+                    <div id="message" dir="auto" class="yt-live-chat-paid-message-renderer">
+                        ${escapeHtml(data.message)}
+                    </div>
+                </div>` : ''}
         </div>
-        <div class="message-content">${escapeHtml(data.message)}</div>
     `;
     
     // 要素を追加
