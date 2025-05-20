@@ -183,20 +183,37 @@ function displayChatMessage(data) {
  */
 function renderChatMessage(container, chatData) {
     // 新しいチャットメッセージ要素を作成 - YouTube風の構造
-    const chatElement = document.createElement('div');
-    chatElement.className = 'chat-message yt-live-chat-text-message-renderer';
-    
+    // 実際のYouTubeのHTML構造を参考に、yt-live-chat-text-message-renderer 要素を直接作成
+    const chatElement = document.createElement('yt-live-chat-text-message-renderer');
+    chatElement.className = 'style-scope yt-live-chat-item-list-renderer'; // Add necessary classes
+    chatElement.setAttribute('use-opacity-for-context-menu-visibility', '');
+    chatElement.setAttribute('modern', '');
+    // chatElement.id = `message-${chatData.timestamp}`; // Optional: Add a unique ID
+
     // メンバー機能は不要なので、すべて通常リスナー扱いにする
-    // author-type属性は設定しない
+    // author-type属性は設定しない (実際のHTMLにはauthor-type属性が存在)
+    // if (chatData.author_type) {
+    //     chatElement.setAttribute('author-type', chatData.author_type);
+    // }
     
-    // チャットメッセージの内容を設定 - YouTube風の構造
+    // チャットメッセージの内容を設定 - 実際のYouTubeのHTML構造を模倣
     chatElement.innerHTML = `
-        <yt-live-chat-author-chip class="yt-live-chat-text-message-renderer">
-            <span id="author-name">${escapeHtml(chatData.display_name)}</span>
-            <span id="chat-badges" class="yt-live-chat-author-chip"></span>
-        </yt-live-chat-author-chip>
-        <div id="message" class="yt-live-chat-text-message-renderer">${escapeHtml(chatData.message || '')}</div>
-        <span id="timestamp">${formatTimestamp(chatData.timestamp)}</span>
+        <yt-img-shadow id="author-photo" class="no-transition style-scope yt-live-chat-text-message-renderer" height="24" width="24" style="background-color: transparent;" loaded="">
+            <!-- ユーザーアイコンはデータに含まれていないため、srcは空またはプレースホルダー -->
+            <img id="img" draggable="false" class="style-scope yt-img-shadow" alt="" height="24" width="24" src="">
+        </yt-img-shadow>
+        <div id="content" class="style-scope yt-live-chat-text-message-renderer">
+            <span id="timestamp" class="style-scope yt-live-chat-text-message-renderer">${formatTimestamp(chatData.timestamp)}</span>
+            <yt-live-chat-author-chip class="style-scope yt-live-chat-text-message-renderer">
+                <span id="prepend-chat-badges" class="style-scope yt-live-chat-author-chip"></span>
+                <span id="author-name" dir="auto" class=" style-scope yt-live-chat-author-chip style-scope yt-live-chat-author-chip">${escapeHtml(chatData.display_name)}<span id="chip-badges" class="style-scope yt-live-chat-author-chip"></span></span>
+                <span id="chat-badges" class="style-scope yt-live-chat-author-chip"></span>
+            </yt-live-chat-author-chip>
+            <span id="message" dir="auto" class="style-scope yt-live-chat-text-message-renderer">${escapeHtml(chatData.message || '')}</span>
+        </div>
+        <!-- メニューやアクションボタンはOBS表示では不要なため省略 -->
+        <!-- <div id="menu" class="style-scope yt-live-chat-text-message-renderer">...</div> -->
+        <!-- <div id="inline-action-button-container" class="style-scope yt-live-chat-text-message-renderer">...</div> -->
     `;
     
     // ユーザー名とメッセージの検証を行い、コンソールに表示（デバッグ用）
@@ -351,4 +368,4 @@ function blinkConnectionIndicator() {
         dotElement.style.opacity = '';
         dotElement.style.transform = '';
     }, 300);
-} 
+}
