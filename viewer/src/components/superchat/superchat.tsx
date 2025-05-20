@@ -11,7 +11,9 @@
  */
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
+import { useState } from "react";
 import { SuperchatForm } from "./superchat-form";
 
 /**
@@ -85,6 +87,27 @@ export function Superchat({
 }
 
 /**
+ * URLパラメータを取得するコンポーネント
+ * useSearchParamsを使用するため、このコンポーネントは個別に分離
+ */
+function UrlParamReader({
+	onStreamerAddressChange,
+}: {
+	onStreamerAddressChange: (address: string) => void;
+}) {
+	// URLパラメータから配信者のウォレットアドレスを取得
+	const search_params = useSearchParams();
+	const streamer_address = search_params.get("streamerAddress") || "";
+
+	// アドレスが変更されたら親コンポーネントに通知
+	useEffect(() => {
+		onStreamerAddressChange(streamer_address);
+	}, [streamer_address, onStreamerAddressChange]);
+
+	return null; // このコンポーネントはUIをレンダリングしない
+}
+
+/**
  * useSearchParamsを使用するスーパーチャットの内部コンポーネント
  */
 function SuperchatContent({
@@ -95,12 +118,10 @@ function SuperchatContent({
 	on_tip_mode_change,
 	on_height_change,
 }: SuperchatProps) {
-	// URLパラメータから配信者のウォレットアドレスを取得
-	const search_params = useSearchParams();
-	const streamer_address = search_params.get("streamerAddress") || "";
-
 	// Tipモード状態
 	const [has_tip, set_has_tip] = useState<boolean>(false);
+	// URLから取得した配信者アドレス
+	const [streamer_address, set_streamer_address] = useState<string>("");
 
 	// Tipモード変更を親コンポーネントに通知
 	useEffect(() => {
@@ -122,6 +143,11 @@ function SuperchatContent({
 			className={className}
 			style={{ height: "100%", display: "flex", flexDirection: "column" }}
 		>
+			{/* URLパラメータを読み取るコンポーネント */}
+			<Suspense fallback={null}>
+				<UrlParamReader onStreamerAddressChange={set_streamer_address} />
+			</Suspense>
+
 			<SuperchatForm
 				on_send_success={on_send_success}
 				initial_recipient_address={
@@ -135,7 +161,3 @@ function SuperchatContent({
 		</div>
 	);
 }
-
-// 不足しているインポートを追加
-import { useSearchParams } from "next/navigation";
-import { useState } from "react";
