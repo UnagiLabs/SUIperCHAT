@@ -8,12 +8,12 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>SUIperCHAT OBS Display</title>
-    <link rel="stylesheet" href="styles.css?v=1.0.4">
+    <link rel="stylesheet" href="styles.css?v=1.0.8">
     <style>
         body {
             background-color: transparent;
             color: #ffffff;
-            font-family: sans-serif;
+            font-family: "Noto Sans JP", sans-serif;
             overflow: hidden;
         }
 
@@ -32,6 +32,11 @@
             z-index: 1000;
             opacity: 0.7;
             transition: opacity 0.3s;
+        }
+
+        /* 接続済みの場合は透明にする */
+        .connection-indicator.connected {
+            opacity: 0;
         }
 
         .connection-indicator:hover {
@@ -98,7 +103,7 @@
             <!-- チャットメッセージとスーパーチャットメッセージはここに動的に追加されます -->
         </div>
     </div>
-    <script src="script.js?v=1.0.4"></script>
+    <script src="script.js?v=1.0.5"></script>
 </body>
 
 </html>
