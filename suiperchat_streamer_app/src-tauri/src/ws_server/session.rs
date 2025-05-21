@@ -149,66 +149,13 @@ impl WsSession {
         }
     }
 
-    /// ## メッセージをブロードキャストする
+    /// ## メッセージをDBに保存する
     ///
-    /// 受信したメッセージを適切に処理してブロードキャストします。
-    /// 現在はエコーバック（元のクライアントにのみ送信）のみ実装しています。
-    ///
-    /// ### Arguments
-    /// - `message`: 受信したクライアントメッセージ
-    /// - `ctx`: アクターコンテキスト
-    fn broadcast_message(&self, message: ClientMessage, ctx: &mut ws::WebsocketContext<Self>) {
-        // クライアント情報とマネージャーが設定されている場合、メッセージカウンターを更新
-        if let (Some(client_info), Some(manager)) = (&self.client_info, &self.connection_manager) {
-            manager.update_client(&client_info.id, |info| {
-                info.update_activity();
-                info.increment_messages();
-            });
-        }
-
-        let json_result = match message {
-            ClientMessage::Chat(chat_msg) => {
-                println!(
-                    "Normal chat message from {}: {}",
-                    chat_msg.display_name, chat_msg.content
-                );
-                serde_json::to_string(&chat_msg)
-            }
-            ClientMessage::Superchat(superchat_msg) => {
-                println!(
-                    "Super chat message from {}: {}, Amount: {} {}, TX: {}",
-                    superchat_msg.display_name,
-                    superchat_msg.content,
-                    superchat_msg.superchat.amount,
-                    superchat_msg.superchat.coin,
-                    superchat_msg.superchat.tx_hash
-                );
-                // スパチャの検証ロジックを将来的に実装
-                // self.verify_transaction(&superchat_msg.superchat);
-                serde_json::to_string(&superchat_msg)
-            }
-        };
-
-        match json_result {
-            Ok(json) => {
-                // 全クライアントにメッセージをブロードキャスト
-                if let Some(manager) = &self.connection_manager {
-                    manager.broadcast(&json);
-                }
-            }
-            Err(e) => {
-                eprintln!("メッセージのシリアライズに失敗: {}", e);
-                ctx.text(self.create_error_response(&format!("メッセージ処理エラー: {}", e)));
-            }
-        }
-    }
-
-    /// ## メッセージをデータベースに保存する
-    ///
-    /// 受信したメッセージをデータベースに非同期で保存します。
+    /// 受信したクライアントメッセージをデータベースに保存します。
+    /// チャットとスーパーチャットのみ保存対象とし、システムメッセージは保存しません。
     ///
     /// ### Arguments
-    /// - `client_msg`: クライアントから受信したメッセージ
+    /// - `client_msg`: 保存するクライアントメッセージ (`&ClientMessage`)
     fn save_message_to_db(&self, client_msg: &ClientMessage) {
         // DB接続プールが設定されているか確認
         let db_pool_option = match self.db_pool.lock() {
@@ -249,6 +196,7 @@ impl WsSession {
                 "スーパーチャット from {}, 金額:{} {}",
                 msg.display_name, msg.superchat.amount, msg.superchat.coin
             ),
+            ClientMessage::GetHistory { .. } => "履歴取得リクエスト".to_string(),
         };
         println!("メッセージをデータベースに保存準備中: {}", msg_type);
 
@@ -276,6 +224,11 @@ impl WsSession {
                 wallet_address: Some(superchat_msg.superchat.wallet_address.clone()),
                 session_id,
             },
+            ClientMessage::GetHistory { .. } => {
+                // 履歴取得リクエストはDBに保存しない
+                println!("履歴取得リクエストはDBに保存しません");
+                return;
+            }
         };
 
         // 非同期タスクでDBに保存
@@ -294,6 +247,203 @@ impl WsSession {
                 ),
             }
         });
+    }
+
+    /// ## メッセージをブロードキャストする
+    ///
+    /// 受信したメッセージを、接続されているすべてのクライアントに送信します。
+    /// また、メッセージに追加情報（タイムスタンプ）を付与します。
+    ///
+    /// ### Arguments
+    /// - `client_msg`: ブロードキャストするクライアントメッセージ (`ClientMessage`)
+    /// - `ctx`: WebSocketコンテキスト (`&mut ws::WebsocketContext<Self>`)
+    fn broadcast_message(&self, client_msg: ClientMessage, ctx: &mut ws::WebsocketContext<Self>) {
+        match client_msg {
+            ClientMessage::Chat(chat_msg) => {
+                // クライアント情報とマネージャーが設定されている場合、メッセージカウンターを更新
+                if let (Some(client_info), Some(manager)) =
+                    (&self.client_info, &self.connection_manager)
+                {
+                    manager.update_client(&client_info.id, |info| {
+                        info.update_activity();
+                        info.increment_messages();
+                    });
+                }
+
+                let json_result = serde_json::to_string(&chat_msg);
+
+                match json_result {
+                    Ok(json) => {
+                        // 全クライアントにメッセージをブロードキャスト
+                        if let Some(manager) = &self.connection_manager {
+                            manager.broadcast(&json);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("メッセージのシリアライズに失敗: {}", e);
+                        ctx.text(
+                            self.create_error_response(&format!("メッセージ処理エラー: {}", e)),
+                        );
+                    }
+                }
+            }
+            ClientMessage::Superchat(superchat_msg) => {
+                // クライアント情報とマネージャーが設定されている場合、メッセージカウンターを更新
+                if let (Some(client_info), Some(manager)) =
+                    (&self.client_info, &self.connection_manager)
+                {
+                    manager.update_client(&client_info.id, |info| {
+                        info.update_activity();
+                        info.increment_messages();
+                    });
+                }
+
+                let json_result = serde_json::to_string(&superchat_msg);
+
+                match json_result {
+                    Ok(json) => {
+                        // 全クライアントにメッセージをブロードキャスト
+                        if let Some(manager) = &self.connection_manager {
+                            manager.broadcast(&json);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("メッセージのシリアライズに失敗: {}", e);
+                        ctx.text(
+                            self.create_error_response(&format!("メッセージ処理エラー: {}", e)),
+                        );
+                    }
+                }
+            }
+            ClientMessage::GetHistory { .. } => {
+                // 履歴取得リクエストはブロードキャストしない
+                println!("履歴取得リクエストはブロードキャストしません");
+            }
+        }
+    }
+
+    /// 履歴取得リクエストを処理する
+    ///
+    /// クライアントからの過去ログ取得リクエストを処理し、
+    /// データベースから該当するメッセージを取得して返します。
+    ///
+    /// ### Arguments
+    /// - `limit`: 取得するメッセージの最大数（オプション、デフォルト50）
+    /// - `before_timestamp`: このタイムスタンプより前のメッセージのみを取得（オプション）
+    /// - `ctx`: WebSocketコンテキスト
+    fn handle_get_history(
+        &self,
+        limit: Option<i64>,
+        before_timestamp: Option<i64>,
+        ctx: &mut ws::WebsocketContext<Self>,
+    ) {
+        // セッションIDを確認
+        let session_id = match &self.current_session_id {
+            Some(id) => id.clone(),
+            None => {
+                println!("履歴取得エラー: セッションIDが設定されていません");
+                let error_msg = self.create_error_response(
+                    "セッションIDが設定されていません。履歴を取得できません。",
+                );
+                ctx.text(error_msg);
+                return;
+            }
+        };
+
+        // DB接続プールを取得
+        let db_pool = {
+            let pool_guard = match self.db_pool.lock() {
+                Ok(guard) => guard,
+                Err(e) => {
+                    println!("履歴取得エラー: DBプールのロックに失敗: {}", e);
+                    let error_msg = self.create_error_response("データベース接続エラー");
+                    ctx.text(error_msg);
+                    return;
+                }
+            };
+
+            match &*pool_guard {
+                Some(pool) => pool.clone(),
+                None => {
+                    println!("履歴取得エラー: DBプールが初期化されていません");
+                    let error_msg =
+                        self.create_error_response("データベース接続が初期化されていません");
+                    ctx.text(error_msg);
+                    return;
+                }
+            }
+        };
+
+        // 非同期処理でDBからメッセージを取得
+        let safe_limit = limit.unwrap_or(50);
+        let session_id_clone = session_id.clone();
+        let fut = async move {
+            // DBからメッセージを取得
+            match crate::database::get_messages_by_session_id(
+                &db_pool,
+                &session_id_clone,
+                safe_limit,
+                before_timestamp,
+            )
+            .await
+            {
+                Ok(messages) => {
+                    // さらに古いメッセージがあるかのフラグ
+                    let has_more = messages.len() as i64 > safe_limit;
+
+                    // 実際に返す件数をlimitに制限
+                    let limited_messages = if has_more {
+                        messages[..messages.len() - 1].to_vec()
+                    } else {
+                        messages
+                    };
+
+                    // DB-Modelを送信用のSerializableMessageに変換
+                    let serializable_messages: Vec<crate::types::SerializableMessage> =
+                        limited_messages.into_iter().map(|msg| msg.into()).collect();
+
+                    // 長さを先に取得しておく
+                    let messages_len = serializable_messages.len();
+
+                    // レスポンスを構築
+                    let history_data = crate::types::OutgoingMessage::HistoryData {
+                        messages: serializable_messages,
+                        has_more,
+                    };
+
+                    // JSONに変換
+                    match serde_json::to_string(&history_data) {
+                        Ok(json) => {
+                            println!(
+                                "履歴データを送信: {} 件 (has_more: {})",
+                                messages_len, has_more
+                            );
+                            Ok(json)
+                        }
+                        Err(e) => {
+                            println!("履歴データのJSONシリアライズに失敗: {}", e);
+                            Err(format!("JSONシリアライズエラー: {}", e))
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("履歴取得時のデータベースエラー: {}", e);
+                    Err(format!("データベースエラー: {}", e))
+                }
+            }
+        };
+
+        // 非同期処理を実行
+        let fut = actix::fut::wrap_future::<_, Self>(fut);
+
+        // 非同期処理の結果を処理
+        ctx.spawn(fut.map(|result, _actor, ctx| match result {
+            Ok(json) => ctx.text(json),
+            Err(e) => {
+                let error_response = _actor.create_error_response(&e);
+                ctx.text(error_response);
+            }
+        }));
     }
 }
 
@@ -404,22 +554,8 @@ impl Actor for WsSession {
 ///
 /// WebSocket 接続からのメッセージ (`ws::Message`) を処理します。
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
-    /// ## メッセージ受信時の処理
-    ///
-    /// WebSocket クライアントからメッセージを受信したときに呼び出されます。
-    /// Ping/Pong、テキスト、バイナリメッセージなどを処理します。
-    ///
-    /// ### Arguments
-    /// - `msg`: 受信したメッセージ (`Result<ws::Message, ws::ProtocolError>`)
-    /// - `ctx`: アクターコンテキスト (`ws::WebsocketContext<Self>`)
+    /// WebSocketメッセージを処理するハンドラーメソッド
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        // クライアントのアクティビティを更新
-        if let (Some(client_info), Some(manager)) = (&self.client_info, &self.connection_manager) {
-            manager.update_client(&client_info.id, |info| {
-                info.update_activity();
-            });
-        }
-
         match msg {
             // Pong メッセージ受信: ハートビート時刻を更新
             Ok(ws::Message::Pong(_)) => {
@@ -434,23 +570,38 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
             }
             // テキストメッセージ受信: JSONパースしてメッセージ処理
             Ok(ws::Message::Text(text)) => {
-                println!("WS Received: {}", text);
-
-                // JSONメッセージのパース処理
+                // JSONメッセージのパース
                 match serde_json::from_str::<ClientMessage>(&text) {
                     Ok(client_msg) => {
-                        // DBへのメッセージ保存処理
-                        self.save_message_to_db(&client_msg);
+                        // メッセージタイプごとに処理
+                        match client_msg {
+                            // 履歴取得リクエスト
+                            ClientMessage::GetHistory {
+                                message_type: _,
+                                limit,
+                                before_timestamp,
+                            } => {
+                                println!(
+                                    "履歴取得リクエストを受信: limit={:?}, before_timestamp={:?}",
+                                    limit, before_timestamp
+                                );
+                                self.handle_get_history(limit, before_timestamp, ctx);
+                            }
+                            // 既存のチャットとスーパーチャットの処理
+                            _ => {
+                                // メッセージをDBに保存
+                                self.save_message_to_db(&client_msg);
 
-                        // メッセージを処理してブロードキャスト
-                        self.broadcast_message(client_msg, ctx);
+                                // メッセージをブロードキャスト
+                                self.broadcast_message(client_msg, ctx);
+                            }
+                        }
                     }
                     Err(e) => {
-                        // JSONパースエラー
-                        eprintln!("メッセージのパースに失敗: {}, 受信内容: {}", e, text);
-                        ctx.text(
-                            self.create_error_response(&format!("無効なメッセージ形式: {}", e)),
-                        );
+                        println!("無効なJSONメッセージを受信: {}", e);
+                        let error_response =
+                            self.create_error_response(&format!("Invalid message format: {}", e));
+                        ctx.text(error_response);
                     }
                 }
             }
