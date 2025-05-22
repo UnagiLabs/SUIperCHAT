@@ -80,8 +80,31 @@ export function CommentList({
 	const estimateItemSize = useCallback(
 		(index: number) => {
 			const message = sortedMessages[index];
-			if (!message) return 40; // デフォルト値
-			return message.type === MessageType.SUPERCHAT ? 80 : 40;
+			// メッセージが存在しない場合はデフォルト値を返す
+			if (!message) return 22;
+
+			// メッセージの種類に応じて基本高さを設定
+			const baseHeight = message.type === MessageType.SUPERCHAT ? 40 : 22;
+
+			// メッセージの長さから追加の高さを計算
+			const messageText = message.message || "";
+			const messageLength = messageText.length;
+
+			// スーパーチャットと通常メッセージで異なる計算を適用
+			if (message.type === MessageType.SUPERCHAT) {
+				// スーパーチャットは1行あたり約30文字として計算
+				const estimatedLines = Math.ceil(messageLength / 30);
+				// 基本高さに各行の高さを加算（1行目は基本高さに含まれる）
+				return baseHeight + Math.max(0, estimatedLines - 1) * 16; // 追加の各行に16px
+			}
+
+			// 通常コメントは1行あたり約40文字として計算
+			// 改行コードも考慮
+			const newlineCount = (messageText.match(/\n/g) || []).length;
+			const textLines = Math.ceil(messageLength / 40) + newlineCount;
+
+			// 通常は1行で収まるように設計されているため、追加行がある場合のみ高さを増加
+			return baseHeight + Math.max(0, textLines - 1) * 16;
 		},
 		[sortedMessages],
 	);
@@ -92,6 +115,7 @@ export function CommentList({
 		getScrollElement: () => parentElement,
 		estimateSize: estimateItemSize,
 		overscan: 10, // スクロール時により多くのアイテムを事前に描画
+		gap: 0, // アイテム間のギャップを0に設定
 	});
 
 	// 親要素の設定
@@ -195,7 +219,7 @@ export function CommentList({
 			>
 				{/* 過去ログ読み込み中の表示 */}
 				{isLoadingHistory && (
-					<div className="flex items-center justify-center py-2 border-b">
+					<div className="flex items-center justify-center py-1 border-b">
 						<Loader2 className="h-4 w-4 animate-spin mr-2" />
 						<span className="text-sm text-muted-foreground">
 							過去のコメントを読み込み中...
@@ -205,7 +229,7 @@ export function CommentList({
 
 				{/* エラー表示 */}
 				{historyError && (
-					<div className="flex items-center justify-center py-2 border-b">
+					<div className="flex items-center justify-center py-1 border-b">
 						<span className="text-sm text-red-500 mr-2">
 							エラー: {historyError}
 						</span>
@@ -247,7 +271,7 @@ export function CommentList({
 
 				{/* メッセージがない場合の表示 */}
 				{sortedMessages.length === 0 && !isLoadingHistory && (
-					<div className="text-center py-2 text-muted-foreground text-sm">
+					<div className="text-center py-1 text-muted-foreground text-sm">
 						コメントはまだありません
 					</div>
 				)}
@@ -281,45 +305,52 @@ function CommentItem({ comment }: CommentItemProps) {
 
 		const amount = (comment as SuperchatMessage).superchat.amount;
 
-		if (amount >= 50) return "bg-gradient-to-r from-amber-500 to-amber-700";
-		if (amount >= 20) return "bg-gradient-to-r from-red-500 to-red-700";
-		if (amount >= 10) return "bg-gradient-to-r from-blue-500 to-blue-700";
-		if (amount >= 5) return "bg-gradient-to-r from-green-500 to-green-700";
-		return "bg-gradient-to-r from-purple-500 to-purple-700";
+		// 金額に応じてグラデーションカラーを返す
+		if (amount >= 50)
+			return "bg-gradient-to-r from-yellow-500 to-amber-600 shadow-[0_1px_3px_rgba(255,215,0,0.3)]";
+		if (amount >= 20)
+			return "bg-gradient-to-r from-red-500 to-red-600 shadow-[0_1px_3px_rgba(255,0,0,0.3)]";
+		if (amount >= 10)
+			return "bg-gradient-to-r from-blue-500 to-blue-600 shadow-[0_1px_3px_rgba(0,0,255,0.3)]";
+		if (amount >= 5)
+			return "bg-gradient-to-r from-green-500 to-green-600 shadow-[0_1px_3px_rgba(0,255,0,0.3)]";
+		return "bg-gradient-to-r from-purple-500 to-purple-600 shadow-[0_1px_3px_rgba(128,0,128,0.3)]";
 	};
 
 	return (
 		<div
 			className={cn(
-				"py-1 px-2 text-sm border-b border-border/20 last:border-b-0",
 				is_superchat
-					? cn(getSuperchatBgColor(), "text-white shadow-md")
-					: "hover:bg-secondary/10 transition-colors",
+					? "py-0.1 px-1.5 text-sm h-full shadow-sm border-b border-border/5"
+					: "py-0 px-1 text-xs h-full hover:bg-secondary/5 transition-colors border-b border-border/5",
+				is_superchat ? `${getSuperchatBgColor()} text-white` : "",
 			)}
 		>
 			{is_superchat ? (
 				// スーパーチャット表示
 				<>
-					<div className="flex items-center justify-between gap-2 mb-1">
-						<span className="font-semibold text-white text-sm">
+					<div className="flex items-center justify-between gap-0.5 mb-0">
+						<span className="font-semibold text-white text-xs leading-tight">
 							{comment.display_name}
 						</span>
-						<span className="px-2 py-0.5 rounded-full bg-black/50 text-white font-medium text-sm flex-shrink-0">
+						<span className="px-1 py-0 rounded-full bg-black/40 text-white font-medium text-xs flex-shrink-0 leading-none">
 							{(comment as SuperchatMessage).superchat.amount} SUI
 						</span>
 					</div>
-					<div className="font-medium text-white text-sm">
+					<div className="font-medium text-white text-xs mt-0.5 leading-tight whitespace-pre-wrap break-words break-all overflow-hidden w-full">
 						{comment.message}
 					</div>
 				</>
 			) : (
 				// 通常コメント表示
-				<div className="flex items-start">
+				<div className="flex items-start leading-none py-0 w-full">
 					<div className="flex-grow">
-						<span className="font-semibold mr-1 text-sm">
-							{comment.display_name}
+						<span className="font-semibold mr-0.5 text-xs">
+							{comment.display_name}:
 						</span>
-						<span className="break-words text-sm">{comment.message}</span>
+						<span className="text-xs whitespace-pre-wrap break-words break-all overflow-hidden">
+							{comment.message}
+						</span>
 					</div>
 				</div>
 			)}
