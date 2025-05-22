@@ -265,9 +265,8 @@ function displaySuperchatMessage(data) {
 	console.log("Superchat data structure:", JSON.stringify(data.superchat || {}));
 
 	// 新しいスーパーチャット要素を作成 - YouTube風の構造
-	const superchatElement = document.createElement("div");
-	superchatElement.className = "yt-live-chat-paid-message-renderer";
-
+	const superchatElement = document.createElement("yt-live-chat-paid-message-renderer");
+	
 	// メッセージの有無に応じてヘッダーのみ表示かを決定
 	if (!data.message || data.message.trim() === "") {
 		superchatElement.setAttribute("show-only-header", "");
@@ -293,10 +292,13 @@ function displaySuperchatMessage(data) {
 	// 金額と通貨を表示（ユーザーが選択したコイン種別を表示）
 	const formattedAmount = `${amount} ${coin}`;
 
-	// スーパーチャットの内容を設定 - YouTube風の構造
+	// スーパーチャットの内容を設定 - YouTube風の構造に完全準拠
 	superchatElement.innerHTML = `
         <div id="card" class="yt-live-chat-paid-message-renderer">
             <div id="header" class="yt-live-chat-paid-message-renderer">
+                <div id="author-photo" class="yt-live-chat-paid-message-renderer">
+                    <!-- 非表示だがCSS構造のため残す -->
+                </div>
                 <div id="header-content">
                     <div id="header-content-primary-column" class="yt-live-chat-paid-message-renderer">
                         <div id="single-line" class="yt-live-chat-paid-message-renderer">
@@ -306,12 +308,13 @@ function displaySuperchatMessage(data) {
                                 </span>
                                 <span id="chat-badges"></span>
                             </yt-live-chat-author-chip>
-                            <div id="purchase-amount-column" class="yt-live-chat-paid-message-renderer">
-                                <span id="purchase-amount">${formattedAmount}</span>
-                            </div>
                         </div>
                     </div>
                 </div>
+                <div id="purchase-amount-column" class="yt-live-chat-paid-message-renderer">
+                    <span id="purchase-amount">${formattedAmount}</span>
+                </div>
+                <div id="menu" class="yt-live-chat-paid-message-renderer"></div>
             </div>
             ${
 				data.message && data.message.trim() !== ""
@@ -322,6 +325,10 @@ function displaySuperchatMessage(data) {
                 </div>`
 					: ""
 			}
+            <div id="lower-bumper" class="yt-live-chat-paid-message-renderer"></div>
+            <div id="action-buttons" class="yt-live-chat-paid-message-renderer"></div>
+            <div id="creator-heart-button" class="yt-live-chat-paid-message-renderer"></div>
+            <div id="gradient-container" class="yt-live-chat-paid-message-renderer"></div>
         </div>
     `;
 
