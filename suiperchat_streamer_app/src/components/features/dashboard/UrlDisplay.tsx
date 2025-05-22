@@ -21,6 +21,7 @@ interface StreamerInfo {
 	ws_url: string;
 	obs_url: string;
 	wallet_address: string;
+	youtube_video_id?: string | null;
 }
 
 /**
@@ -173,6 +174,7 @@ export default function UrlDisplay() {
 			ws_url,
 			obs_url: streamerInfoObsUrl,
 			wallet_address,
+			youtube_video_id,
 		} = streamerInfo;
 		try {
 			const encodedWalletAddress = encodeURIComponent(wallet_address);
@@ -202,6 +204,9 @@ export default function UrlDisplay() {
 			// 視聴者 URL - こちらもwsUrlを状態から直接取得可能
 			const wsUrlToUse = wsUrl || ws_url;
 			viewer_url = `${VIEWER_APP_BASE_URL}?wsUrl=${encodeURIComponent(wsUrlToUse)}&streamerAddress=${encodedWalletAddress}`;
+			if (youtube_video_id) {
+				viewer_url += `&videoId=${encodeURIComponent(youtube_video_id)}`;
+			}
 		} catch (encodeError) {
 			console.error("Failed to encode URL parameters:", encodeError);
 			setError("Failed to encode URL parameters.");

@@ -63,20 +63,32 @@ export default function ServerControl() {
 	const handle_start_server = async () => {
 		set_is_loading(true);
 		try {
-			// ウォレットアドレスの存在チェックのみを行う
-			// get_streamer_info を呼び出すとサーバーが起動していないことでエラーになるため、より単純なチェックを行う
+			// ウォレットアドレスの存在チェック
 			const wallet_info = await invoke<{ wallet_address: string | null }>(
 				"get_wallet_address",
 			);
 
-			// ウォレットアドレスが設定されていない場合はエラー
-			if (!wallet_info.wallet_address) {
-				throw new Error(
-					"Wallet address is not set. Please configure it first.",
-				);
+			// YouTube動画IDの存在チェック
+			const youtube_info = await invoke<{ youtube_video_id: string | null }>(
+				"get_youtube_video_id",
+			);
+
+			// 両方の設定が揃っているか確認
+			const wallet_address_set = !!wallet_info.wallet_address;
+			const youtube_id_set = !!youtube_info.youtube_video_id;
+
+			if (!wallet_address_set || !youtube_id_set) {
+				const missing_config = [];
+				if (!wallet_address_set) missing_config.push("Wallet Address");
+				if (!youtube_id_set) missing_config.push("YouTube URL");
+
+				toast.info("Configuration Required", {
+					description: `Please set your ${missing_config.join(" and ")} in the Streamer Configuration section before starting the server.`,
+				});
+				return;
 			}
 
-			// ウォレットアドレスが存在する場合のみサーバー起動コマンドを呼び出す
+			// 両方の設定が存在する場合のみサーバー起動コマンドを呼び出す
 			await invoke("start_websocket_server");
 			// 状態更新はイベントリスナーに任せる
 			// toast通知もイベントリスナー側で行う
@@ -88,22 +100,10 @@ export default function ServerControl() {
 				error_message,
 			);
 
-			// ウォレットアドレス未設定のエラーメッセージをチェック
-			if (
-				error_message.includes(
-					"Wallet address is not set. Please configure it first.",
-				)
-			) {
-				toast.error("Wallet Address Not Set", {
-					description:
-						"Please set your wallet address in the settings to start the server.",
-				});
-			} else {
-				// その他のエラーの場合
-				toast.error("Server Start Command Error", {
-					description: `Failed to invoke start command: ${error_message}`,
-				});
-			}
+			// エラーメッセージの内容に関わらず、一般的なエラーメッセージを表示
+			toast.error("Server Start Error", {
+				description: `Failed to start server: ${error_message}`,
+			});
 		} finally {
 			set_is_loading(false);
 		}

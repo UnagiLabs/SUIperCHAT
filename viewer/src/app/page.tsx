@@ -22,14 +22,34 @@ import WebSocketUrlHandler from "@/components/websocket/websocket-url-handler";
 import { getServerConfig } from "@/lib/server-config";
 import { Suspense } from "react";
 
+type HomePageProps = {
+	searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
 /**
  * 視聴者向けホームページコンポーネント
  *
+ * @param {HomePageProps} props - コンポーネントのプロパティ
  * @returns 視聴者ページのJSXエレメント
  */
-export default async function HomePage() {
+export default async function HomePage({ searchParams }: HomePageProps) {
+	// searchParams を await で解決
+	const resolvedSearchParams = await searchParams;
+
 	// サーバー設定を取得
 	const config = await getServerConfig();
+
+	// URLクエリパラメータから動画IDを取得
+	const videoId = resolvedSearchParams.videoId as string | undefined;
+
+	// YouTube埋め込み用のURLを生成
+	let videoUrl =
+		config?.streamUrl || "https://www.youtube.com/watch?v=jfKfPfyJRdk";
+
+	// 動画IDが指定されている場合はYouTube埋め込みURLを作成
+	if (videoId) {
+		videoUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
+	}
 
 	return (
 		<>
@@ -43,10 +63,7 @@ export default async function HomePage() {
 				<ViewerLayout
 					video_player={
 						<VideoPlayer
-							video_url={
-								config?.streamUrl ||
-								"https://www.youtube.com/watch?v=jfKfPfyJRdk"
-							}
+							video_url={videoUrl}
 							fallback_content={
 								<div className="w-full h-full flex items-center justify-center bg-muted">
 									<p className="text-center p-4">

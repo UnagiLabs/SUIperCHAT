@@ -1,6 +1,6 @@
 import ServerControl from "@/components/features/dashboard/ServerControl";
+import StreamerConfig from "@/components/features/dashboard/StreamerConfig";
 import UrlDisplay from "@/components/features/dashboard/UrlDisplay";
-import WalletAddressConfig from "@/components/features/dashboard/WalletAddressConfig";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner"; // shadcn/uiのsonnerコンポーネント
 /**
  * SUIperCHAT ルートページコンポーネント (配信者ダッシュボード)
@@ -27,8 +27,8 @@ export default function RootPage(): React.ReactNode {
 		<div className="container mx-auto p-4 space-y-6">
 			<h1 className="text-3xl font-bold">SUIperCHAT Streamer</h1>
 
-			{/* ウォレットアドレス設定コンポーネント */}
-			<WalletAddressConfig />
+			{/* 配信者設定コンポーネント（ウォレットアドレスとYouTube URL） */}
+			<StreamerConfig />
 
 			{/* サーバー制御コンポーネント */}
 			<ServerControl />
