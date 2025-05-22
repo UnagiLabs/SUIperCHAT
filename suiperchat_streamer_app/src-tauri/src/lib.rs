@@ -249,6 +249,7 @@ pub fn run() {
             commands::connection::set_connection_limits,
             // 履歴関連コマンド
             commands::history::get_message_history,
+            commands::history::get_current_session_id,
             // YouTube関連コマンド
             commands::youtube::set_youtube_video_id,
             commands::youtube::get_youtube_video_id
