@@ -262,11 +262,16 @@ function displaySuperchatMessage(data) {
 
 	// デバッグ用のログ出力
 	console.log("Displaying superchat message:", data);
-	console.log("Superchat data structure:", JSON.stringify(data.superchat || {}));
+	console.log(
+		"Superchat data structure:",
+		JSON.stringify(data.superchat || {}),
+	);
 
 	// 新しいスーパーチャット要素を作成 - YouTube風の構造
-	const superchatElement = document.createElement("yt-live-chat-paid-message-renderer");
-	
+	const superchatElement = document.createElement(
+		"yt-live-chat-paid-message-renderer",
+	);
+
 	// メッセージの有無に応じてヘッダーのみ表示かを決定
 	if (!data.message || data.message.trim() === "") {
 		superchatElement.setAttribute("show-only-header", "");
@@ -276,14 +281,14 @@ function displaySuperchatMessage(data) {
 	// WebSocketメッセージの型定義に合わせて適切に処理
 	let amount = 0;
 	let coin = "SUI";
-	
+
 	// SuperchatMessageインターフェースに従って処理
 	if (data.superchat) {
 		// 金額を取得（デフォルト0）
 		amount = data.superchat.amount || 0;
 		// コイン種別を取得（デフォルトSUI）
 		coin = data.superchat.coin || "SUI";
-		
+
 		console.log(`Superchat details: Amount=${amount}, Coin=${coin}`);
 	} else {
 		console.warn("Superchat data missing or invalid format");
@@ -317,14 +322,14 @@ function displaySuperchatMessage(data) {
                 <div id="menu" class="yt-live-chat-paid-message-renderer"></div>
             </div>
             ${
-				data.message && data.message.trim() !== ""
-					? `<div id="content" class="yt-live-chat-paid-message-renderer">
+							data.message && data.message.trim() !== ""
+								? `<div id="content" class="yt-live-chat-paid-message-renderer">
                     <div id="message" dir="auto" class="yt-live-chat-paid-message-renderer">
                         ${escapeHtml(data.message)}
                     </div>
                 </div>`
-					: ""
-			}
+								: ""
+						}
             <div id="lower-bumper" class="yt-live-chat-paid-message-renderer"></div>
             <div id="action-buttons" class="yt-live-chat-paid-message-renderer"></div>
             <div id="creator-heart-button" class="yt-live-chat-paid-message-renderer"></div>
