@@ -29,7 +29,7 @@ pub use commands::connection::{disconnect_client, get_connections_info, set_conn
 // 履歴関連コマンドの再エクスポート
 pub use commands::history::get_message_history;
 // YouTube関連コマンドの再エクスポート
-pub use commands::youtube::set_youtube_video_id;
+pub use commands::youtube::{get_youtube_video_id, set_youtube_video_id};
 
 /// ## テーブル作成のためのSQL文
 ///
@@ -250,7 +250,8 @@ pub fn run() {
             // 履歴関連コマンド
             commands::history::get_message_history,
             // YouTube関連コマンド
-            commands::youtube::set_youtube_video_id
+            commands::youtube::set_youtube_video_id,
+            commands::youtube::get_youtube_video_id
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

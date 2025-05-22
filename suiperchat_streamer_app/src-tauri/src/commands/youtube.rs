@@ -3,6 +3,7 @@
 //! YouTube動画IDの設定を行うコマンドを提供します。
 
 use crate::state::AppState;
+use serde_json::json;
 use tauri::{command, Emitter, State};
 
 /// ## YouTube動画IDを設定する Tauri コマンド
@@ -65,4 +66,34 @@ pub fn set_youtube_video_id(
     println!("YouTube video ID saved and event 'youtube_video_id_updated' emitted.");
 
     Ok(())
+}
+
+/// ## YouTube動画IDを取得する Tauri コマンド
+///
+/// 現在設定されているYouTube動画IDを返します。
+///
+/// ### Arguments
+/// - `app_state`: Tauri の管理するアプリケーション状態 (`State<AppState>`)
+///
+/// ### Returns
+/// - `Result<serde_json::Value, String>`: 成功した場合はYouTube動画IDを含むJSON、エラーの場合はエラーメッセージ
+#[command]
+pub fn get_youtube_video_id(app_state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    println!("Getting YouTube video ID...");
+
+    // YouTube動画IDを取得
+    let youtube_id_guard = app_state
+        .youtube_video_id
+        .lock()
+        .map_err(|_| "Failed to lock YouTube video ID mutex".to_string())?;
+
+    // JSONオブジェクトを作成
+    // youtube_video_idが存在する場合はそれを、存在しない場合はnullを返す
+    let json_result = if let Some(id) = youtube_id_guard.as_ref() {
+        json!({ "youtube_video_id": id })
+    } else {
+        json!({ "youtube_video_id": null })
+    };
+
+    Ok(json_result)
 }
