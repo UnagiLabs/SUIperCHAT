@@ -1,9 +1,10 @@
 /**
- * SUIperCHAT OBS表示用JavaScriptファイル (v1.0.5)
+ * SUIperCHAT OBS表示用JavaScriptファイル (v1.0.7)
  *
  * WebSocketでスーパーチャットメッセージを受信し、OBS画面に表示する機能を実装します。
  * URLパラメータからWebSocketのアドレスを取得し、自動的に接続します。
  * YouTubeライクな表示スタイルに対応するためのDOM構造を生成します。
+ * 異なるコイン種別に対応しています。
  */
 
 // グローバル変数
@@ -84,7 +85,7 @@ function setupWebSocketEventHandlers() {
 			// メッセージ受信時には状態を変更せず、受信を視覚的に示す
 			blinkConnectionIndicator();
 
-			// メッセージの種類に応じた処理
+			// メッセージの種類に応じた処理（MessageTypeに合わせる）
 			if (data.type === "superchat") {
 				// スーパーチャットメッセージを表示
 				displaySuperchatMessage(data);
@@ -259,6 +260,10 @@ function displaySuperchatMessage(data) {
 		return;
 	}
 
+	// デバッグ用のログ出力
+	console.log("Displaying superchat message:", data);
+	console.log("Superchat data structure:", JSON.stringify(data.superchat || {}));
+
 	// 新しいスーパーチャット要素を作成 - YouTube風の構造
 	const superchatElement = document.createElement("div");
 	superchatElement.className = "yt-live-chat-paid-message-renderer";
@@ -268,10 +273,25 @@ function displaySuperchatMessage(data) {
 		superchatElement.setAttribute("show-only-header", "");
 	}
 
-	// スーパーチャット金額を整形
-	const amount = data.superchat?.amount || 0;
-	const coin = data.superchat?.coin || "SUI";
-	const formattedAmount = `¥${amount.toLocaleString()}`;
+	// スーパーチャット金額を取得
+	// WebSocketメッセージの型定義に合わせて適切に処理
+	let amount = 0;
+	let coin = "SUI";
+	
+	// SuperchatMessageインターフェースに従って処理
+	if (data.superchat) {
+		// 金額を取得（デフォルト0）
+		amount = data.superchat.amount || 0;
+		// コイン種別を取得（デフォルトSUI）
+		coin = data.superchat.coin || "SUI";
+		
+		console.log(`Superchat details: Amount=${amount}, Coin=${coin}`);
+	} else {
+		console.warn("Superchat data missing or invalid format");
+	}
+
+	// 金額と通貨を表示（ユーザーが選択したコイン種別を表示）
+	const formattedAmount = `${amount} ${coin}`;
 
 	// スーパーチャットの内容を設定 - YouTube風の構造
 	superchatElement.innerHTML = `
@@ -294,14 +314,14 @@ function displaySuperchatMessage(data) {
                 </div>
             </div>
             ${
-							data.message && data.message.trim() !== ""
-								? `<div id="content" class="yt-live-chat-paid-message-renderer">
+				data.message && data.message.trim() !== ""
+					? `<div id="content" class="yt-live-chat-paid-message-renderer">
                     <div id="message" dir="auto" class="yt-live-chat-paid-message-renderer">
                         ${escapeHtml(data.message)}
                     </div>
                 </div>`
-								: ""
-						}
+					: ""
+			}
         </div>
     `;
 
