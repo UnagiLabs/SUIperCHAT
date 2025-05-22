@@ -28,6 +28,8 @@ pub use commands::wallet::{get_streamer_info, get_wallet_address, set_wallet_add
 pub use commands::connection::{disconnect_client, get_connections_info, set_connection_limits};
 // 履歴関連コマンドの再エクスポート
 pub use commands::history::get_message_history;
+// YouTube関連コマンドの再エクスポート
+pub use commands::youtube::set_youtube_video_id;
 
 /// ## テーブル作成のためのSQL文
 ///
@@ -246,7 +248,9 @@ pub fn run() {
             commands::connection::disconnect_client,
             commands::connection::set_connection_limits,
             // 履歴関連コマンド
-            commands::history::get_message_history
+            commands::history::get_message_history,
+            // YouTube関連コマンド
+            commands::youtube::set_youtube_video_id
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

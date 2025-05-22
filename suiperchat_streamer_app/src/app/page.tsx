@@ -1,6 +1,7 @@
 import ServerControl from "@/components/features/dashboard/ServerControl";
 import UrlDisplay from "@/components/features/dashboard/UrlDisplay";
 import WalletAddressConfig from "@/components/features/dashboard/WalletAddressConfig";
+import YouTubeLinkConfig from "@/components/features/dashboard/YouTubeLinkConfig";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner"; // shadcn/uiのsonnerコンポーネント
 /**
  * SUIperCHAT ルートページコンポーネント (配信者ダッシュボード)
@@ -29,6 +30,9 @@ export default function RootPage(): React.ReactNode {
 
 			{/* ウォレットアドレス設定コンポーネント */}
 			<WalletAddressConfig />
+
+			{/* YouTube Live URL設定コンポーネント */}
+			<YouTubeLinkConfig />
 
 			{/* サーバー制御コンポーネント */}
 			<ServerControl />

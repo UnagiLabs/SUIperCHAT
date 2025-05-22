@@ -55,6 +55,11 @@ pub struct AppState {
     ///
     /// トンネルが起動している場合は `Some(Ok(info))`、失敗した場合は `Some(Err(error))`、未起動の場合は `None`
     pub tunnel_info: Arc<Mutex<Option<Result<TunnelInfo, TunnelError>>>>,
+    /// YouTube動画ID
+    ///
+    /// 設定されている場合は `Some(video_id)`、未設定の場合は `None`
+    /// アプリ起動ごとにリセットされる一時的な値
+    pub youtube_video_id: Arc<Mutex<Option<String>>>,
 }
 
 impl AppState {
@@ -76,6 +81,7 @@ impl AppState {
             global_ip_fetch_failed: Arc::new(Mutex::new(false)),
             cgnat_detected: Arc::new(Mutex::new(false)),
             tunnel_info: Arc::new(Mutex::new(None)),
+            youtube_video_id: Arc::new(Mutex::new(None)),
         }
     }
 }

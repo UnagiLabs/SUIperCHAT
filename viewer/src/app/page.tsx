@@ -25,11 +25,29 @@ import { Suspense } from "react";
 /**
  * 視聴者向けホームページコンポーネント
  *
+ * @param {Object} props - コンポーネントのプロパティ
+ * @param {Object} props.searchParams - URLクエリパラメータ
  * @returns 視聴者ページのJSXエレメント
  */
-export default async function HomePage() {
+export default async function HomePage({
+	searchParams,
+}: {
+	searchParams: { [key: string]: string | string[] | undefined };
+}) {
 	// サーバー設定を取得
 	const config = await getServerConfig();
+
+	// URLクエリパラメータから動画IDを取得
+	const videoId = searchParams.videoId as string | undefined;
+
+	// YouTube埋め込み用のURLを生成
+	let videoUrl =
+		config?.streamUrl || "https://www.youtube.com/watch?v=jfKfPfyJRdk";
+
+	// 動画IDが指定されている場合はYouTube埋め込みURLを作成
+	if (videoId) {
+		videoUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
+	}
 
 	return (
 		<>
@@ -43,10 +61,7 @@ export default async function HomePage() {
 				<ViewerLayout
 					video_player={
 						<VideoPlayer
-							video_url={
-								config?.streamUrl ||
-								"https://www.youtube.com/watch?v=jfKfPfyJRdk"
-							}
+							video_url={videoUrl}
 							fallback_content={
 								<div className="w-full h-full flex items-center justify-center bg-muted">
 									<p className="text-center p-4">
