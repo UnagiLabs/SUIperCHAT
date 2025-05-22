@@ -22,23 +22,25 @@ import WebSocketUrlHandler from "@/components/websocket/websocket-url-handler";
 import { getServerConfig } from "@/lib/server-config";
 import { Suspense } from "react";
 
+type HomePageProps = {
+	searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
 /**
  * 視聴者向けホームページコンポーネント
  *
- * @param {Object} props - コンポーネントのプロパティ
- * @param {Object} props.searchParams - URLクエリパラメータ
+ * @param {HomePageProps} props - コンポーネントのプロパティ
  * @returns 視聴者ページのJSXエレメント
  */
-export default async function HomePage({
-	searchParams,
-}: {
-	searchParams: { [key: string]: string | string[] | undefined };
-}) {
+export default async function HomePage({ searchParams }: HomePageProps) {
+	// searchParams を await で解決
+	const resolvedSearchParams = await searchParams;
+
 	// サーバー設定を取得
 	const config = await getServerConfig();
 
 	// URLクエリパラメータから動画IDを取得
-	const videoId = searchParams.videoId as string | undefined;
+	const videoId = resolvedSearchParams.videoId as string | undefined;
 
 	// YouTube埋め込み用のURLを生成
 	let videoUrl =
