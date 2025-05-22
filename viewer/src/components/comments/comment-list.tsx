@@ -275,12 +275,6 @@ interface CommentItemProps {
 function CommentItem({ comment }: CommentItemProps) {
 	const is_superchat = comment.type === MessageType.SUPERCHAT;
 
-	// スーパーチャット用の数値IDを抽出（表示名から数字部分のみを取得）
-	const numeric_id = is_superchat
-		? comment.display_name.replace(/[^\d]/g, "") ||
-			Math.floor(Math.random() * 100).toString()
-		: "";
-
 	return (
 		<div
 			className={cn(
@@ -293,14 +287,14 @@ function CommentItem({ comment }: CommentItemProps) {
 				<>
 					<div className="flex items-center justify-between gap-1 pr-1">
 						<span className="font-semibold text-white text-[10px]">
-							スーパーチャッター{numeric_id}
+							{comment.display_name}
 						</span>
 						<span className="px-1.5 py-0.5 rounded-full bg-zinc-700 text-white font-medium text-[10px] flex-shrink-0">
 							{(comment as SuperchatMessage).superchat.amount} SUI
 						</span>
 					</div>
 					<div className="font-medium text-white text-[10px]">
-						応援メッセージ！ {comment.message}
+						{comment.message}
 					</div>
 				</>
 			) : (
