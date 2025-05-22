@@ -175,7 +175,7 @@ export function CommentList({
 
 	return (
 		<div className={cn("h-full flex flex-col", className)}>
-			<div className="text-xs font-medium py-0.5 px-2 border-b sticky top-0 bg-background z-10">
+			<div className="text-sm font-medium py-0.5 px-2 border-b sticky top-0 bg-background z-10">
 				コメント
 			</div>
 
@@ -197,7 +197,7 @@ export function CommentList({
 				{isLoadingHistory && (
 					<div className="flex items-center justify-center py-2 border-b">
 						<Loader2 className="h-4 w-4 animate-spin mr-2" />
-						<span className="text-xs text-muted-foreground">
+						<span className="text-sm text-muted-foreground">
 							過去のコメントを読み込み中...
 						</span>
 					</div>
@@ -206,13 +206,13 @@ export function CommentList({
 				{/* エラー表示 */}
 				{historyError && (
 					<div className="flex items-center justify-center py-2 border-b">
-						<span className="text-xs text-red-500 mr-2">
+						<span className="text-sm text-red-500 mr-2">
 							エラー: {historyError}
 						</span>
 						<button
 							type="button"
 							onClick={() => actions.requestHistory()}
-							className="text-xs text-primary hover:underline"
+							className="text-sm text-primary hover:underline"
 						>
 							再試行
 						</button>
@@ -247,7 +247,7 @@ export function CommentList({
 
 				{/* メッセージがない場合の表示 */}
 				{sortedMessages.length === 0 && !isLoadingHistory && (
-					<div className="text-center py-2 text-muted-foreground text-xs">
+					<div className="text-center py-2 text-muted-foreground text-sm">
 						コメントはまだありません
 					</div>
 				)}
@@ -275,25 +275,40 @@ interface CommentItemProps {
 function CommentItem({ comment }: CommentItemProps) {
 	const is_superchat = comment.type === MessageType.SUPERCHAT;
 
+	// スーパーチャットの金額に応じた背景色を設定
+	const getSuperchatBgColor = () => {
+		if (!is_superchat) return "";
+
+		const amount = (comment as SuperchatMessage).superchat.amount;
+
+		if (amount >= 50) return "bg-gradient-to-r from-amber-500 to-amber-700";
+		if (amount >= 20) return "bg-gradient-to-r from-red-500 to-red-700";
+		if (amount >= 10) return "bg-gradient-to-r from-blue-500 to-blue-700";
+		if (amount >= 5) return "bg-gradient-to-r from-green-500 to-green-700";
+		return "bg-gradient-to-r from-purple-500 to-purple-700";
+	};
+
 	return (
 		<div
 			className={cn(
-				"py-0.5 px-1.5 text-xs border-b border-border/20 last:border-b-0",
-				is_superchat ? "bg-black" : "hover:bg-secondary/10 transition-colors",
+				"py-1 px-2 text-sm border-b border-border/20 last:border-b-0",
+				is_superchat
+					? cn(getSuperchatBgColor(), "text-white shadow-md")
+					: "hover:bg-secondary/10 transition-colors",
 			)}
 		>
 			{is_superchat ? (
 				// スーパーチャット表示
 				<>
-					<div className="flex items-center justify-between gap-1 pr-1">
-						<span className="font-semibold text-white text-[10px]">
+					<div className="flex items-center justify-between gap-2 mb-1">
+						<span className="font-semibold text-white text-sm">
 							{comment.display_name}
 						</span>
-						<span className="px-1.5 py-0.5 rounded-full bg-zinc-700 text-white font-medium text-[10px] flex-shrink-0">
+						<span className="px-2 py-0.5 rounded-full bg-black/50 text-white font-medium text-sm flex-shrink-0">
 							{(comment as SuperchatMessage).superchat.amount} SUI
 						</span>
 					</div>
-					<div className="font-medium text-white text-[10px]">
+					<div className="font-medium text-white text-sm">
 						{comment.message}
 					</div>
 				</>
@@ -301,10 +316,10 @@ function CommentItem({ comment }: CommentItemProps) {
 				// 通常コメント表示
 				<div className="flex items-start">
 					<div className="flex-grow">
-						<span className="font-semibold mr-1 text-[11px]">
+						<span className="font-semibold mr-1 text-sm">
 							{comment.display_name}
 						</span>
-						<span className="break-words text-[11px]">{comment.message}</span>
+						<span className="break-words text-sm">{comment.message}</span>
 					</div>
 				</div>
 			)}
