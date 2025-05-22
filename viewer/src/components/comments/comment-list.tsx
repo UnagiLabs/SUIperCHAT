@@ -257,7 +257,7 @@ export function CommentList({
 								key={virtualItem.key}
 								data-index={virtualItem.index}
 								ref={virtualizer.measureElement}
-								className="absolute top-0 left-0 w-full"
+								className="absolute top-1.5 left-1 w-full"
 								style={{
 									height: `${virtualItem.size}px`,
 									transform: `translateY(${virtualItem.start}px)`,
@@ -321,7 +321,7 @@ function CommentItem({ comment }: CommentItemProps) {
 		<div
 			className={cn(
 				is_superchat
-					? "py-0.1 px-1.5 text-sm h-full shadow-sm border-b border-border/5"
+					? "py-0.5 px-1.5 text-sm h-full shadow-sm border-b border-border/5"
 					: "py-0 px-1 text-xs h-full hover:bg-secondary/5 transition-colors border-b border-border/5",
 				is_superchat ? `${getSuperchatBgColor()} text-white` : "",
 			)}
