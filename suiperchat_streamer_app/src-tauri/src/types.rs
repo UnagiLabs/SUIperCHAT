@@ -302,6 +302,55 @@ impl From<crate::db_models::Message> for SerializableMessage {
     }
 }
 
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct SerializableSuperchatDataForStreamer {
+    pub amount: Option<f64>,     // Optionalに変更
+    pub coin: Option<String>,    // Optionalに変更
+    pub tx_hash: Option<String>, // Optionalに変更
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct SerializableMessageForStreamer {
+    pub id: String,
+    pub session_id: String,   // セッションIDも返すように
+    pub message_type: String, // "CHAT" or "SUPERCHAT"
+    pub display_name: String,
+    pub content: String, // viewerでは "message" だったが、DBのフィールド名に合わせる
+    pub timestamp: i64,  // Unixミリ秒
+    pub superchat_specific_data: Option<SerializableSuperchatDataForStreamer>, // フィールド名を変更
+}
+
+// DB型からSerializableMessageForStreamerへの変換を実装
+impl From<crate::db_models::Message> for SerializableMessageForStreamer {
+    fn from(db_msg: crate::db_models::Message) -> Self {
+        let message_type = if db_msg.amount.is_some() && db_msg.coin.is_some() {
+            "SUPERCHAT".to_string()
+        } else {
+            "CHAT".to_string()
+        };
+
+        let superchat_specific_data = if message_type == "SUPERCHAT" {
+            Some(SerializableSuperchatDataForStreamer {
+                amount: db_msg.amount,
+                coin: db_msg.coin,
+                tx_hash: db_msg.tx_hash,
+            })
+        } else {
+            None
+        };
+
+        SerializableMessageForStreamer {
+            id: db_msg.id.clone(),
+            session_id: db_msg.session_id.unwrap_or_default(),
+            message_type,
+            display_name: db_msg.display_name.clone(),
+            content: db_msg.content.clone(),
+            timestamp: db_msg.timestamp.timestamp_millis(),
+            superchat_specific_data,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

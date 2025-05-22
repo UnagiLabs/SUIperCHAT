@@ -332,6 +332,60 @@ async fn ensure_message_index(pool: &SqlitePool) -> Result<(), SqlxError> {
     Ok(())
 }
 
+/// 配信者用のセッションごとのメッセージ取得関数（既存の関数を拡張）
+pub async fn get_messages_by_session_id_with_options(
+    pool: &SqlitePool,
+    session_id: &str,
+    limit: i64,
+    offset: Option<i64>,
+    sort_asc: bool,
+) -> Result<Vec<Message>, sqlx::Error> {
+    // ソート順の文字列を決定
+    let order_by = if sort_asc { "ASC" } else { "DESC" };
+
+    // offsetが指定されていれば通常のオフセットベースのページネーション
+    if let Some(offset_value) = offset {
+        let query = format!(
+            "SELECT * FROM messages 
+            WHERE session_id = $1 
+            ORDER BY timestamp {} 
+            LIMIT $2 OFFSET $3",
+            order_by
+        );
+
+        sqlx::query_as::<_, Message>(&query)
+            .bind(session_id)
+            .bind(limit)
+            .bind(offset_value)
+            .fetch_all(pool)
+            .await
+    } else {
+        // offsetが指定されていなければ既存のロジックを活用（before_timestampベース）
+        // この場合は常に昇順とする（既存実装と整合性をとるため）
+        // 一時的な回避策: fetch_messages関数を使用
+        fetch_messages(pool, limit, 0).await.map(|msgs| {
+            // セッションIDでフィルタリング
+            msgs.into_iter()
+                .filter(|msg| msg.session_id.as_deref().unwrap_or("") == session_id)
+                .collect()
+        })
+    }
+}
+
+/// 過去のコメント閲覧用に、データベースに存在する全てのユニークな `session_id` を取得する関数
+pub async fn get_distinct_session_ids(pool: &SqlitePool) -> Result<Vec<String>, sqlx::Error> {
+    let query = "SELECT DISTINCT session_id FROM messages WHERE session_id IS NOT NULL";
+
+    let rows = sqlx::query_as::<_, (String,)>(query)
+        .fetch_all(pool)
+        .await?;
+
+    // タプルの最初の要素を取り出してVec<String>に変換
+    let session_ids = rows.into_iter().map(|(id,)| id).collect();
+
+    Ok(session_ids)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::db_models::{Message, Session};
