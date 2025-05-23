@@ -29,9 +29,9 @@ export default function RootPage(): React.ReactNode {
 		<div className="container mx-auto p-4">
 			<h1 className="text-3xl font-bold mb-6">SUIperCHAT Streamer</h1>
 
-			<div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
+			<div className="flex gap-6">
 				{/* 左側のカラム - 既存のダッシュボードコンポーネント */}
-				<div className="space-y-6">
+				<div className="flex-[2] space-y-6">
 					{/* 配信者設定コンポーネント（ウォレットアドレスとYouTube URL） */}
 					<StreamerConfig />
 
@@ -43,7 +43,7 @@ export default function RootPage(): React.ReactNode {
 				</div>
 
 				{/* 右側のカラム - コメント表示 */}
-				<div className="lg:h-[calc(100vh-120px)] sticky top-4">
+				<div className="flex-[1] h-[calc(100vh-120px)] sticky top-4">
 					<CommentDisplay />
 				</div>
 			</div>
