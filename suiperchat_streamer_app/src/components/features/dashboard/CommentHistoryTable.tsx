@@ -66,7 +66,7 @@ export default function CommentHistoryTable({
 	}
 
 	return (
-		<div className="w-full overflow-auto max-h-[calc(100vh-200px)]">
+		<div className="w-full overflow-auto h-full">
 			<Table>
 				<TableHeader className="sticky top-0 bg-background z-10">
 					<TableRow>
