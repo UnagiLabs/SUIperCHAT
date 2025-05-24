@@ -221,12 +221,12 @@ export default function CommentDisplay() {
 
 	return (
 		<Card className="h-full flex flex-col">
-			<CardHeader className="flex-shrink-0">
-				<CardTitle>コメント履歴</CardTitle>
+			<CardHeader className="flex-shrink-0 py-3">
+				<CardTitle className="text-lg">コメント履歴</CardTitle>
 			</CardHeader>
-			<CardContent className="flex-grow min-h-0 flex flex-col">
+			<CardContent className="flex-grow min-h-0 flex flex-col px-3 pb-3">
 				{error && (
-					<div className="text-red-500 mb-4 p-2 bg-red-50 dark:bg-red-950/20 rounded-md flex-shrink-0">
+					<div className="text-red-500 mb-3 p-2 bg-red-50 dark:bg-red-950/20 rounded-md flex-shrink-0 text-xs">
 						{error}
 					</div>
 				)}
@@ -235,7 +235,7 @@ export default function CommentDisplay() {
 					<CommentHistoryTable comments={comments} isLoading={is_loading} />
 				</div>
 
-				<div className="mt-4 text-xs text-muted-foreground flex-shrink-0">
+				<div className="mt-2 text-xs text-muted-foreground flex-shrink-0">
 					{current_session_id ? (
 						<>表示中のセッション: {current_session_id}</>
 					) : (

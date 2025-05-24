@@ -42,12 +42,12 @@ function formatTimestamp(timestamp: number): string {
 }
 
 /**
- * メッセージを省略して表示する関数
+ * メッセージを省略して表示する関数（長い場合のみ省略）
  * @param message - 元のメッセージ
- * @param maxLength - 最大長さ（デフォルト100文字）
+ * @param maxLength - 最大長さ（デフォルト500文字）
  * @returns 必要に応じて省略されたメッセージ
  */
-function truncateMessage(message: string, maxLength = 100): string {
+function truncateMessage(message: string, maxLength = 500): string {
 	if (message.length <= maxLength) return message;
 	return `${message.substring(0, maxLength)}...`;
 }
@@ -67,21 +67,20 @@ export default function CommentHistoryTable({
 
 	return (
 		<div className="w-full overflow-auto h-full">
-			<Table>
+			<Table className="table-fixed w-full">
 				<TableHeader className="sticky top-0 bg-background z-10">
 					<TableRow>
-						<TableHead className="w-[150px]">タイムスタンプ</TableHead>
-						<TableHead className="w-[120px]">名前</TableHead>
-						<TableHead>メッセージ</TableHead>
-						<TableHead className="w-[80px] text-right">金額</TableHead>
-						<TableHead className="w-[60px]">コイン</TableHead>
-						<TableHead className="w-[80px]">Tx Hash</TableHead>
+						<TableHead className="w-[120px] text-xs">タイムスタンプ</TableHead>
+						<TableHead className="w-[100px] text-xs">名前</TableHead>
+						<TableHead className="min-w-0 text-xs">メッセージ</TableHead>
+						<TableHead className="w-[70px] text-right text-xs">金額</TableHead>
+						<TableHead className="w-[55px] text-xs">コイン</TableHead>
 					</TableRow>
 				</TableHeader>
 				<TableBody>
 					{isLoading ? (
 						<TableRow>
-							<TableCell colSpan={6} className="text-center py-4">
+							<TableCell colSpan={5} className="text-center py-8 text-xs">
 								読み込み中...
 							</TableCell>
 						</TableRow>
@@ -95,42 +94,37 @@ export default function CommentHistoryTable({
 										: ""
 								}
 							>
-								<TableCell className="font-mono text-xs">
+								<TableCell className="font-mono text-xs py-2 align-top">
 									{formatTimestamp(comment.timestamp)}
 								</TableCell>
-								<TableCell className="font-medium truncate max-w-[120px]">
-									{comment.name}
+								<TableCell className="font-medium text-xs py-2 align-top">
+									<div className="truncate" title={comment.name}>
+										{comment.name}
+									</div>
 								</TableCell>
-								<TableCell className="whitespace-pre-wrap break-words">
+								<TableCell className="text-xs py-2 align-top min-w-0">
 									<div
-										className="max-h-[100px] overflow-y-auto"
+										className="max-h-[120px] overflow-y-auto whitespace-pre-wrap break-words overflow-wrap-anywhere"
 										title={comment.message}
 									>
 										{truncateMessage(comment.message)}
 									</div>
 								</TableCell>
-								<TableCell className="text-right">
+								<TableCell className="text-right text-xs py-2 align-top">
 									{comment.superchat?.amount ? (
-										<Badge variant="success">{comment.superchat.amount}</Badge>
+										<Badge variant="success" className="text-xs py-0 px-1">
+											{comment.superchat.amount}
+										</Badge>
 									) : (
 										"-"
 									)}
 								</TableCell>
-								<TableCell>
+								<TableCell className="text-xs py-2 align-top">
 									{comment.superchat?.coin ? (
 										<div className="flex items-center gap-1">
-											<Coins className="h-3 w-3" />
-											<span>{comment.superchat.coin}</span>
+											<Coins className="h-3 w-3 flex-shrink-0" />
+											<span className="truncate">{comment.superchat.coin}</span>
 										</div>
-									) : (
-										"-"
-									)}
-								</TableCell>
-								<TableCell className="font-mono text-xs truncate max-w-[80px]">
-									{comment.superchat?.tx_hash ? (
-										<span title={comment.superchat.tx_hash}>
-											{`${comment.superchat.tx_hash.substring(0, 6)}...`}
-										</span>
 									) : (
 										"-"
 									)}
