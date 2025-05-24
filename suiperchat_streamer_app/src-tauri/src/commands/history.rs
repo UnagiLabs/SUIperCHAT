@@ -5,7 +5,17 @@
 use crate::database;
 use crate::state::AppState;
 use crate::types::SerializableMessageForStreamer;
+use serde::Deserialize;
 use tauri::State;
+
+/// メッセージ履歴取得のパラメータ構造体
+#[derive(Deserialize, Debug)]
+pub struct GetMessageHistoryParams {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub session_id: Option<String>,
+    pub sort_asc: Option<bool>,
+}
 
 /// メッセージ履歴を取得するTauriコマンド
 ///
@@ -28,17 +38,26 @@ use tauri::State;
 /// - ロック関連のエラーが発生した場合
 #[tauri::command]
 pub async fn get_message_history(
-    limit: Option<i64>,
-    offset: Option<i64>,
-    session_id: Option<String>,
-    sort_asc: Option<bool>,
+    params: GetMessageHistoryParams,
     app_state: State<'_, AppState>,
 ) -> Result<Vec<SerializableMessageForStreamer>, String> {
     // 入力値の調整
-    let limit_value = limit.unwrap_or(100);
-    let offset_value = offset.unwrap_or(0);
+    let limit_value = params.limit.unwrap_or(100);
+    let offset_value = params.offset.unwrap_or(0);
+    let sort_asc_value = params.sort_asc.unwrap_or(true);
 
-    let sort_asc_value = sort_asc.unwrap_or(true);
+    // パラメータログを追加
+    println!("get_message_history呼び出し: params={:?}", params);
+    println!(
+        "展開後: limit={:?} -> {}, offset={:?} -> {}, session_id={:?}, sort_asc={:?} -> {}",
+        params.limit,
+        limit_value,
+        params.offset,
+        offset_value,
+        params.session_id,
+        params.sort_asc,
+        sort_asc_value
+    );
 
     // データベース接続プールを取得
     let db_pool = {
@@ -59,7 +78,7 @@ pub async fn get_message_history(
     };
 
     // データベースからメッセージを取得
-    let messages = match session_id {
+    let messages = match params.session_id {
         Some(sid) => {
             // セッションIDが指定されている場合、そのセッションのメッセージのみを取得
             database::get_messages_by_session_id_with_options(
@@ -114,7 +133,9 @@ pub async fn get_current_session_id(
         .current_session_id
         .lock()
         .map_err(|e| e.to_string())?;
-    Ok(lock.clone())
+    let result = lock.clone();
+    println!("get_current_session_id の戻り値: {:?}", result);
+    Ok(result)
 }
 
 /// 全てのユニークなセッションIDを取得するTauriコマンド

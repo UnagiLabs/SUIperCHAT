@@ -270,6 +270,9 @@ pub async fn get_messages_by_session_id_with_options(
     offset: Option<i64>,
     sort_asc: bool,
 ) -> Result<Vec<Message>, sqlx::Error> {
+    println!("get_messages_by_session_id_with_options呼び出し: session_id={}, limit={}, offset={:?}, sort_asc={}", 
+        session_id, limit, offset, sort_asc);
+
     // ソート順の文字列を決定
     let order_by = if sort_asc { "ASC" } else { "DESC" };
 
@@ -283,22 +286,48 @@ pub async fn get_messages_by_session_id_with_options(
             order_by
         );
 
-        sqlx::query_as::<_, Message>(&query)
+        println!("SQLクエリ実行: {}", query);
+        println!(
+            "パラメータ: session_id={}, limit={}, offset={}",
+            session_id, limit, offset_value
+        );
+
+        let result = sqlx::query_as::<_, Message>(&query)
             .bind(session_id)
             .bind(limit)
             .bind(offset_value)
             .fetch_all(pool)
-            .await
+            .await;
+
+        match &result {
+            Ok(messages) => println!("取得されたメッセージ数: {}", messages.len()),
+            Err(e) => println!("SQLクエリエラー: {}", e),
+        }
+
+        result
     } else {
+        println!("offset=Noneのため、fetch_messagesを使用してフィルタリング実行");
         // offsetが指定されていなければ既存のロジックを活用（before_timestampベース）
         // この場合は常に昇順とする（既存実装と整合性をとるため）
         // 一時的な回避策: fetch_messages関数を使用
-        fetch_messages(pool, limit, 0).await.map(|msgs| {
+        let result = fetch_messages(pool, limit, 0).await.map(|msgs| {
+            println!("fetch_messagesで取得したメッセージ数: {}", msgs.len());
             // セッションIDでフィルタリング
-            msgs.into_iter()
-                .filter(|msg| msg.session_id.as_deref().unwrap_or("") == session_id)
-                .collect()
-        })
+            let filtered: Vec<Message> = msgs
+                .into_iter()
+                .filter(|msg| {
+                    let msg_session_id = msg.session_id.as_deref().unwrap_or("");
+                    let matches = msg_session_id == session_id;
+                    if !matches {
+                        println!("フィルタリングで除外: {} != {}", msg_session_id, session_id);
+                    }
+                    matches
+                })
+                .collect();
+            println!("フィルタリング後のメッセージ数: {}", filtered.len());
+            filtered
+        });
+        result
     }
 }
 
