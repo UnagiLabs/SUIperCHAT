@@ -29,7 +29,7 @@ import type React from "react";
 export default function RootPage(): React.ReactNode {
 	return (
 		<div className="min-h-screen max-h-screen overflow-hidden">
-			<div className="container mx-auto p-4 h-screen flex flex-col">
+			<div className="max-w-[1200px] mx-auto p-4 h-screen flex flex-col">
 				<h1 className="text-3xl font-bold mb-4 flex-shrink-0">
 					SUIperCHAT Streamer
 				</h1>
@@ -47,8 +47,8 @@ export default function RootPage(): React.ReactNode {
 						<UrlDisplay />
 					</div>
 
-					{/* 右側のカラム - コメント表示（固定幅742px） */}
-					<div className="w-[742px] flex-shrink-0 min-h-0">
+					{/* 右側のカラム - コメント表示（固定幅680px） */}
+					<div className="w-[680px] flex-shrink-0 min-h-0">
 						<CommentDisplay />
 					</div>
 				</div>
