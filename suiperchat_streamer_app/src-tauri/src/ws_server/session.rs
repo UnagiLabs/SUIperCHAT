@@ -133,7 +133,6 @@ impl WsSession {
                 return;
             }
             // Ping メッセージを送信
-            println!("Sending heartbeat ping");
             ctx.ping(b"");
         });
     }
@@ -520,9 +519,7 @@ impl Actor for WsSession {
         // リクエストからクライアント情報を取得
         if let Some(req) = &self.req {
             if let Some(addr) = req.peer_addr() {
-                println!("Debug: peer_addr obtained: {:?}", addr);
                 let client_info = ClientInfo::new(addr);
-                println!("Debug: ClientInfo created: {:?}", client_info);
                 let client_id = client_info.id.clone();
                 println!(
                     "New client connected: {} from {}",
@@ -531,15 +528,10 @@ impl Actor for WsSession {
 
                 // 接続マネージャーに追加
                 if let Some(manager) = &self.connection_manager {
-                    println!("Debug: ConnectionManager is available.");
                     // セッションアドレスを渡して接続登録
-                    println!("Debug: Attempting to add client to manager.");
                     if manager.add_client(client_info.clone(), ctx.address()) {
-                        println!("Debug: Client added to manager successfully.");
                         self.client_info = Some(client_info);
-                        println!("Debug: self.client_info set (manager available).");
                     } else {
-                        println!("Debug: manager.add_client returned false (max connections?).");
                         // 最大接続数に達している場合、切断
                         ctx.text(self.create_error_response(
                             "Maximum connections reached. Try again later.",
@@ -549,19 +541,12 @@ impl Actor for WsSession {
                         return;
                     }
                 } else {
-                    println!("Debug: ConnectionManager is NOT available.");
                     // 接続マネージャーがない場合でもClientInfoは設定
                     self.client_info = Some(client_info);
-                    println!("Debug: self.client_info set (manager NOT available).");
                 }
-            } else {
-                println!("Debug: peer_addr not available.");
             }
-        } else {
-            println!("Debug: req not available.");
         }
 
-        println!("Debug: Starting heartbeat.");
         self.hb(ctx);
     }
 
@@ -593,12 +578,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
         match msg {
             // Pong メッセージ受信: ハートビート時刻を更新
             Ok(ws::Message::Pong(_)) => {
-                println!("Received pong");
                 self.hb = Instant::now();
             }
             // Ping メッセージ受信: Pong メッセージを返信
             Ok(ws::Message::Ping(msg)) => {
-                println!("Received ping");
                 self.hb = Instant::now();
                 ctx.pong(&msg);
             }

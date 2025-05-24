@@ -95,32 +95,6 @@ export default function CommentDisplay() {
 			const limit = max_display_count;
 			const sort_asc = true; // 古いものから新しいものへ順に表示
 
-			console.log(
-				`コメント取得パラメータ: limit=${limit}, offset=0, session_id=${session_result}, sort_asc=${sort_asc}`,
-			);
-
-			// 引数の順序をRust関数と一致させる
-			const invoke_params = {
-				limit,
-				offset: 0,
-				session_id: session_result,
-				sort_asc,
-			};
-			console.log("invoke に渡すパラメータ:", invoke_params);
-			console.log("各パラメータの型:");
-			console.log(
-				`  limit: ${typeof invoke_params.limit} = ${invoke_params.limit}`,
-			);
-			console.log(
-				`  offset: ${typeof invoke_params.offset} = ${invoke_params.offset}`,
-			);
-			console.log(
-				`  session_id: ${typeof invoke_params.session_id} = ${invoke_params.session_id}`,
-			);
-			console.log(
-				`  sort_asc: ${typeof invoke_params.sort_asc} = ${invoke_params.sort_asc}`,
-			);
-
 			console.log("get_message_history を呼び出し中...");
 			const comments_result = await invoke<MessageData[]>(
 				"get_message_history",

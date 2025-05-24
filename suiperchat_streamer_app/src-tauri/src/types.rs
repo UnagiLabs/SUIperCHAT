@@ -39,17 +39,13 @@ pub struct ConnectionsInfo {
 
 /// 接続カウンターを増加させる
 pub fn increment_connections() -> usize {
-    let new_count = CONNECTIONS_COUNT.fetch_add(1, Ordering::SeqCst) + 1;
-    println!("接続カウンター増加: {}", new_count);
-    new_count
+    CONNECTIONS_COUNT.fetch_add(1, Ordering::SeqCst) + 1
 }
 
 /// 接続カウンターを減少させる
 pub fn decrement_connections() -> usize {
     let prev_count = CONNECTIONS_COUNT.fetch_sub(1, Ordering::SeqCst);
-    let new_count = prev_count - 1;
-    println!("接続カウンター減少: {} -> {}", prev_count, new_count);
-    new_count
+    prev_count - 1
 }
 
 /// 現在の接続数を取得

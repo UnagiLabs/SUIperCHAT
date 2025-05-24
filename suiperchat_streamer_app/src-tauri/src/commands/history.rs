@@ -46,18 +46,15 @@ pub async fn get_message_history(
     let offset_value = params.offset.unwrap_or(0);
     let sort_asc_value = params.sort_asc.unwrap_or(true);
 
-    // パラメータログを追加
-    println!("get_message_history呼び出し: params={:?}", params);
-    println!(
-        "展開後: limit={:?} -> {}, offset={:?} -> {}, session_id={:?}, sort_asc={:?} -> {}",
-        params.limit,
-        limit_value,
-        params.offset,
-        offset_value,
-        params.session_id,
-        params.sort_asc,
-        sort_asc_value
-    );
+    // パラメータログ
+    if params.session_id.is_some() {
+        println!(
+            "メッセージ履歴取得: session_id={:?}, limit={}",
+            params.session_id, limit_value
+        );
+    } else {
+        println!("メッセージ履歴取得: session_id=None");
+    }
 
     // データベース接続プールを取得
     let db_pool = {
