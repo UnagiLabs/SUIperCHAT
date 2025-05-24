@@ -17,7 +17,7 @@ use chrono::Utc;
 use sqlx::sqlite::SqlitePool;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// ## WsSession アクター
 ///
@@ -38,6 +38,8 @@ pub struct WsSession {
     db_pool: Arc<Mutex<Option<SqlitePool>>>,
     /// 現在のセッションID
     current_session_id: Option<String>,
+    /// Tauriアプリハンドル（イベント発火用）
+    app_handle: Option<tauri::AppHandle>,
 }
 
 impl Default for WsSession {
@@ -59,6 +61,7 @@ impl WsSession {
             req: None,
             db_pool: Arc::new(Mutex::new(None)),
             current_session_id: None,
+            app_handle: None,
         }
     }
 
@@ -92,6 +95,17 @@ impl WsSession {
     /// - `db_pool`: データベース接続プール
     pub fn with_db_pool(mut self, db_pool: Arc<Mutex<Option<SqlitePool>>>) -> Self {
         self.db_pool = db_pool;
+        self
+    }
+
+    /// ## Tauriアプリハンドルを設定する
+    ///
+    /// フロントエンドへのイベント発火のためのアプリハンドルを設定します。
+    ///
+    /// ### Arguments
+    /// - `app_handle`: Tauriアプリハンドル
+    pub fn with_app_handle(mut self, app_handle: tauri::AppHandle) -> Self {
+        self.app_handle = Some(app_handle);
         self
     }
 
@@ -234,13 +248,33 @@ impl WsSession {
         // 非同期タスクでDBに保存
         let db_pool_clone = db_pool.clone();
         let message_id = db_message.id.clone(); // エラー報告用にIDをクローン
+        let app_handle_clone = self.app_handle.clone();
+        let db_message_clone = db_message.clone();
 
         tokio::spawn(async move {
             match database::save_message_db(&db_pool_clone, &db_message).await {
-                Ok(_) => println!(
-                    "メッセージをデータベースに正常に保存しました: ID={}",
-                    message_id
-                ),
+                Ok(_) => {
+                    println!(
+                        "メッセージをデータベースに正常に保存しました: ID={}",
+                        message_id
+                    );
+
+                    // フロントエンドに message_saved イベントを発火
+                    if let Some(app_handle) = app_handle_clone {
+                        let serializable_message =
+                            crate::types::SerializableMessageForStreamer::from(db_message_clone);
+                        if let Err(e) = app_handle.emit("message_saved", &serializable_message) {
+                            eprintln!("message_saved イベントの発火に失敗しました: {}", e);
+                        } else {
+                            println!(
+                                "message_saved イベントを正常に発火しました: ID={}",
+                                message_id
+                            );
+                        }
+                    } else {
+                        println!("アプリハンドルが利用できないため、message_saved イベントを発火できませんでした");
+                    }
+                }
                 Err(e) => eprintln!(
                     "メッセージの保存中にエラーが発生しました: ID={}, エラー={}",
                     message_id, e
@@ -653,11 +687,12 @@ pub fn create_ws_session(req: HttpRequest) -> WsSession {
         .with_connection_manager(manager)
         .with_request(req);
 
-    // AppStateからDB接続プールを取得
+    // AppStateからDB接続プールを取得し、アプリハンドルを設定
     if let Some(app_handle) = app_handle {
         if let Some(app_state) = app_handle.try_state::<AppState>() {
             session = session.with_db_pool(Arc::clone(&app_state.db_pool));
         }
+        session = session.with_app_handle(app_handle);
     }
 
     session
