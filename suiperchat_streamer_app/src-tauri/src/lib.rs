@@ -79,6 +79,15 @@ pub fn run() {
                     Target::new(TargetKind::Stdout),
                     Target::new(TargetKind::LogDir { file_name: None }),
                 ])
+                .level(log::LevelFilter::Info) // INFO以上のレベルのみ表示
+                .filter(|metadata| {
+                    // 外部ライブラリの詳細ログを抑制
+                    !metadata.target().starts_with("tao::") &&
+                    !metadata.target().starts_with("mio::") &&
+                    !metadata.target().starts_with("sqlx::query") &&
+                    !metadata.target().starts_with("hyper::") &&
+                    !metadata.target().starts_with("actix_web::")
+                })
                 .build(),
         )
         // --- AppState を Tauri で管理 ---

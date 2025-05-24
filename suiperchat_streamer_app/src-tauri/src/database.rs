@@ -23,10 +23,8 @@ use sqlx::{sqlite::SqlitePool, Error as SqlxError};
 pub async fn create_session(pool: &SqlitePool, session_id: &str) -> Result<(), SqlxError> {
     let now = Utc::now();
 
-    println!(
-        "データベースにセッションを作成: ID={}, 開始時刻={}",
-        session_id, now
-    );
+    // セッション作成をログに記録（重要な操作のため保持）
+    println!("データベースセッション作成: {}", session_id);
 
     sqlx::query(
         r#"
@@ -40,8 +38,6 @@ pub async fn create_session(pool: &SqlitePool, session_id: &str) -> Result<(), S
     .bind(now.to_rfc3339()) // updated_at
     .execute(pool)
     .await?;
-
-    println!("セッション作成完了: {}", session_id);
 
     Ok(())
 }
@@ -64,10 +60,7 @@ pub async fn create_session(pool: &SqlitePool, session_id: &str) -> Result<(), S
 pub async fn end_session(pool: &SqlitePool, session_id: &str) -> Result<(), SqlxError> {
     let now = Utc::now();
 
-    println!(
-        "データベース内のセッションを終了: ID={}, 終了時刻={}",
-        session_id, now
-    );
+    println!("データベースセッション終了: {}", session_id);
 
     let result = sqlx::query(
         r#"
@@ -82,12 +75,7 @@ pub async fn end_session(pool: &SqlitePool, session_id: &str) -> Result<(), Sqlx
     .await?;
 
     if result.rows_affected() == 0 {
-        println!(
-            "警告: セッションID{}の更新に失敗しました（レコードが見つかりません）",
-            session_id
-        );
-    } else {
-        println!("セッション終了処理完了: {}", session_id);
+        eprintln!("警告: セッションID{}が見つかりません", session_id);
     }
 
     Ok(())
@@ -109,23 +97,12 @@ pub async fn end_session(pool: &SqlitePool, session_id: &str) -> Result<(), Sqlx
 /// - SQLクエリ実行エラー
 /// - セッションIDが不足している場合
 pub async fn save_message_db(pool: &SqlitePool, message: &Message) -> Result<(), SqlxError> {
-    // セッションIDのログを改善
-    let session_display = message
-        .session_id
-        .as_deref()
-        .unwrap_or("[セッションID未設定]");
-
-    println!(
-        "メッセージをデータベースに保存: ID={}, 送信者={}, セッションID={}",
-        message.id, message.display_name, session_display
-    );
-
-    // セッションIDの存在確認（オプションだが、実質的に必須）
+    // セッションIDの存在確認（警告のみ表示）
     if message.session_id.is_none() {
-        println!("警告: メッセージにセッションIDが設定されていません。このメッセージの関連付けが不完全になる可能性があります。");
+        eprintln!("警告: メッセージにセッションIDが未設定");
     }
 
-    let result = sqlx::query(
+    let _result = sqlx::query(
         r#"
         INSERT INTO messages (id, timestamp, display_name, message, amount, coin, tx_hash, wallet_address, session_id) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -142,12 +119,6 @@ pub async fn save_message_db(pool: &SqlitePool, message: &Message) -> Result<(),
     .bind(&message.session_id)
     .execute(pool)
     .await?;
-
-    println!(
-        "メッセージ保存完了: {} (影響行数: {})",
-        message.id,
-        result.rows_affected()
-    );
 
     Ok(())
 }
@@ -176,35 +147,14 @@ pub async fn fetch_messages(
 ) -> Result<Vec<Message>, SqlxError> {
     // パラメータの検証と調整
     let safe_limit = if limit <= 0 {
-        println!(
-            "警告: 無効なlimit値({})が指定されました。デフォルト値(100)を使用します。",
-            limit
-        );
         100
     } else if limit > 1000 {
-        println!(
-            "警告: limit値({})が大きすぎます。最大値(1000)に制限します。",
-            limit
-        );
         1000
     } else {
         limit
     };
 
-    let safe_offset = if offset < 0 {
-        println!(
-            "警告: 無効なoffset値({})が指定されました。0を使用します。",
-            offset
-        );
-        0
-    } else {
-        offset
-    };
-
-    println!(
-        "データベースからメッセージを取得: limit={}, offset={}",
-        safe_limit, safe_offset
-    );
+    let safe_offset = if offset < 0 { 0 } else { offset };
 
     let messages = sqlx::query_as::<_, Message>(
         r#"
@@ -228,12 +178,7 @@ pub async fn fetch_messages(
     .fetch_all(pool)
     .await?;
 
-    println!(
-        "メッセージ取得完了: {}件（要求limit: {}, offset: {}）",
-        messages.len(),
-        safe_limit,
-        safe_offset
-    );
+    // 詳細ログは削除
 
     Ok(messages)
 }
@@ -262,16 +207,8 @@ pub async fn get_messages_by_session_id(
 ) -> Result<Vec<Message>, SqlxError> {
     // パラメータの検証と調整
     let safe_limit = if limit <= 0 {
-        println!(
-            "警告: 無効なlimit値({})が指定されました。デフォルト値(50)を使用します。",
-            limit
-        );
         50
     } else if limit > 1000 {
-        println!(
-            "警告: limit値({})が大きすぎます。最大値(1000)に制限します。",
-            limit
-        );
         1000
     } else {
         limit
@@ -300,13 +237,6 @@ pub async fn get_messages_by_session_id(
 
     // timestampの昇順（古い順）にソート
     messages.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
-
-    println!(
-        "セッション {} のメッセージを {} 件取得しました（before_timestamp: {:?}）",
-        session_id,
-        messages.len(),
-        before_timestamp
-    );
 
     // メッセージインデックスの確認と作成
     ensure_message_index(pool).await?;

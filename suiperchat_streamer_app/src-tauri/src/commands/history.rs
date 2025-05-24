@@ -34,27 +34,9 @@ pub async fn get_message_history(
     sort_asc: Option<bool>,
     app_state: State<'_, AppState>,
 ) -> Result<Vec<SerializableMessageForStreamer>, String> {
-    println!(
-        "メッセージ履歴取得コマンドを実行: limit={:?}, offset={:?}, session_id={:?}, sort_asc={:?}",
-        limit, offset, session_id, sort_asc
-    );
-
-    // 無効な入力値のチェック
+    // 入力値の調整
     let limit_value = limit.unwrap_or(100);
-    if limit_value <= 0 || limit_value > 1000 {
-        println!(
-            "警告: 無効なlimit値({})。有効範囲は1-1000です。",
-            limit_value
-        );
-    }
-
     let offset_value = offset.unwrap_or(0);
-    if offset_value < 0 {
-        println!(
-            "警告: 無効なoffset値({})。0以上の値が必要です。",
-            offset_value
-        );
-    }
 
     let sort_asc_value = sort_asc.unwrap_or(true);
 
@@ -67,10 +49,7 @@ pub async fn get_message_history(
         })?;
 
         match &*pool_guard {
-            Some(pool) => {
-                println!("データベース接続プールを取得しました");
-                pool.clone()
-            }
+            Some(pool) => pool.clone(),
             None => {
                 let error_msg = "データベース接続が初期化されていません。アプリケーションを再起動してください。".to_string();
                 eprintln!("エラー: {}", error_msg);
@@ -121,10 +100,6 @@ pub async fn get_message_history(
         .map(SerializableMessageForStreamer::from)
         .collect();
 
-    println!(
-        "メッセージ履歴を正常に取得: {}件",
-        serializable_messages.len()
-    );
     Ok(serializable_messages)
 }
 

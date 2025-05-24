@@ -38,8 +38,6 @@ pub fn set_wallet_address(
     address: String,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    println!("Setting wallet address to: {}", address);
-
     let trimmed_address = address.trim();
 
     // --- SUIウォレットアドレス形式のバリデーション ---
@@ -73,7 +71,6 @@ pub fn set_wallet_address(
         eprintln!("Failed to emit wallet_address_updated event: {}", e);
         "Failed to notify frontend about wallet address update".to_string()
     })?;
-    println!("Wallet address saved and event 'wallet_address_updated' emitted.");
 
     Ok(())
 }
@@ -91,8 +88,6 @@ pub fn set_wallet_address(
 /// - `Result<{ wallet_address: Option<String> }, String>`: 成功した場合はウォレットアドレスを含むオブジェクト
 #[command]
 pub fn get_wallet_address(app_state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("Getting wallet address...");
-
     // ウォレットアドレスを取得
     let wallet_addr_guard = app_state
         .wallet_address
