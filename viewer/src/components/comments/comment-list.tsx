@@ -222,7 +222,10 @@ export function CommentList({
 					<div className="flex items-center justify-center py-1 border-b">
 						<Loader2 className="h-4 w-4 animate-spin mr-2" />
 						<span className="text-sm text-muted-foreground">
-							過去のコメントを読み込み中...
+							{sortedMessages.length === 0 
+								? "コメント履歴を読み込み中..." 
+								: "過去のコメントを読み込み中..."
+							}
 						</span>
 					</div>
 				)}

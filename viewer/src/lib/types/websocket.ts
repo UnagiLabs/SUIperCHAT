@@ -22,9 +22,9 @@ export enum MessageType {
 	CONNECTION_STATUS = "connection_status",
 	DISCONNECTED = "DISCONNECTED",
 	/** 過去のメッセージを要求 */
-	GET_HISTORY = "get_history",
+	GET_HISTORY = "GET_HISTORY",
 	/** 過去のメッセージデータ */
-	HISTORY_DATA = "history_data",
+	HISTORY_DATA = "HISTORY_DATA",
 }
 
 /**

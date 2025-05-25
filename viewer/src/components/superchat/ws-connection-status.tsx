@@ -26,8 +26,8 @@ export function WebSocketConnectionStatus(): React.ReactElement | null {
 	const { state } = useWebSocket();
 	const [visible, set_visible] = useState(true);
 
-	// connected状態では何も表示しない
-	if (state.status === ConnectionStatus.CONNECTED) {
+	// connected状態で履歴読み込み中でなければ何も表示しない
+	if (state.status === ConnectionStatus.CONNECTED && !state.isLoadingHistory) {
 		return null;
 	}
 
@@ -46,7 +46,9 @@ export function WebSocketConnectionStatus(): React.ReactElement | null {
 	 * Sets the text based on the connection status.
 	 */
 	const status_text: { [key in ConnectionStatus]: string } = {
-		[ConnectionStatus.CONNECTED]: "Connected",
+		[ConnectionStatus.CONNECTED]: state.isLoadingHistory
+			? "Loading History"
+			: "Connected",
 		[ConnectionStatus.CONNECTING]: "Connecting",
 		[ConnectionStatus.RECONNECTING]: "Reconnecting",
 		[ConnectionStatus.DISCONNECTED]: "Disconnected",
