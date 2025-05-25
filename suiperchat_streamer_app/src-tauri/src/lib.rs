@@ -259,6 +259,7 @@ pub fn run() {
             // 履歴関連コマンド
             commands::history::get_message_history,
             commands::history::get_current_session_id,
+            commands::history::get_all_session_ids,
             // YouTube関連コマンド
             commands::youtube::set_youtube_video_id,
             commands::youtube::get_youtube_video_id
