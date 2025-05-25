@@ -1,10 +1,11 @@
 /**
- * SUIperCHAT OBS表示用JavaScriptファイル (v1.0.7)
+ * SUIperCHAT OBS表示用JavaScriptファイル (v1.0.8)
  *
  * WebSocketでスーパーチャットメッセージを受信し、OBS画面に表示する機能を実装します。
  * URLパラメータからWebSocketのアドレスを取得し、自動的に接続します。
  * YouTubeライクな表示スタイルに対応するためのDOM構造を生成します。
  * 異なるコイン種別に対応しています。
+ * 過去のメッセージ履歴の取得・表示機能を含みます。
  */
 
 // グローバル変数
@@ -14,9 +15,13 @@ const reconnectInterval = 5000; // 再接続間隔（ミリ秒）
 const maxMessages = 100; // 画面に表示する最大メッセージ数（増やしました）
 const WS_PORT = 8082; // WebSocketサーバーのポート番号（固定）
 
+// メッセージ履歴管理用の変数
+const displayedMessageIds = new Set(); // 表示済みメッセージIDを追跡
+let isLoadingHistory = false; // 履歴読み込み中フラグ
+
 // DOMロード時の初期化処理
 document.addEventListener("DOMContentLoaded", () => {
-	console.log("SUIperCHAT OBS Display initialized v1.0.3");
+	console.log("SUIperCHAT OBS Display initialized v1.0.8");
 	initializeWebSocket();
 });
 
@@ -53,6 +58,10 @@ function initializeWebSocket() {
 		socket.close();
 	}
 
+	// 新しい接続のためにメッセージ履歴をリセット
+	displayedMessageIds.clear();
+	isLoadingHistory = false;
+
 	// 新しいWebSocket接続を作成
 	socket = new WebSocket(wsUrl);
 
@@ -74,6 +83,9 @@ function setupWebSocketEventHandlers() {
 			clearTimeout(reconnectTimeout);
 			reconnectTimeout = null;
 		}
+
+		// 接続完了後、過去のメッセージ履歴を取得
+		requestMessageHistory();
 	});
 
 	// メッセージを受信したとき
@@ -92,6 +104,9 @@ function setupWebSocketEventHandlers() {
 			} else if (data.type === "chat") {
 				// 通常チャットメッセージを表示
 				displayChatMessage(data);
+			} else if (data.type === "HISTORY_DATA") {
+				// 履歴データメッセージを処理
+				handleHistoryData(data);
 			} else {
 				// その他のメッセージタイプの場合
 				console.log("Unknown message type received:", data);
@@ -126,6 +141,89 @@ function setupWebSocketEventHandlers() {
 			}, reconnectInterval);
 		}
 	});
+}
+
+/**
+ * 過去のメッセージ履歴を要求する
+ */
+function requestMessageHistory() {
+	if (!socket || socket.readyState !== WebSocket.OPEN || isLoadingHistory) {
+		console.warn("Cannot request history: WebSocket not ready or already loading");
+		return;
+	}
+
+	console.log("Requesting message history...");
+	isLoadingHistory = true;
+
+	// 履歴取得リクエストを送信
+	const historyRequest = {
+		type: "GET_HISTORY",
+		limit: 50, // 最新50件を取得
+		before_timestamp: null // 最新から取得
+	};
+
+	try {
+		socket.send(JSON.stringify(historyRequest));
+		console.log("History request sent:", historyRequest);
+	} catch (error) {
+		console.error("Failed to send history request:", error);
+		isLoadingHistory = false;
+	}
+}
+
+/**
+ * 履歴データメッセージを処理する
+ *
+ * @param {Object} data - 履歴データメッセージ
+ */
+function handleHistoryData(data) {
+	console.log("Processing history data:", data);
+	isLoadingHistory = false;
+
+	if (!data.messages || !Array.isArray(data.messages)) {
+		console.warn("Invalid history data format:", data);
+		return;
+	}
+
+	const container = document.getElementById("superchat-container");
+	if (!container) {
+		console.error("Superchat container not found");
+		return;
+	}
+
+	// 履歴メッセージを古い順にソート（タイムスタンプ昇順）
+	const sortedMessages = data.messages.sort((a, b) => a.timestamp - b.timestamp);
+
+	console.log(`Displaying ${sortedMessages.length} history messages`);
+
+	// 各履歴メッセージを表示
+	sortedMessages.forEach((message, index) => {
+		// 重複チェック
+		if (displayedMessageIds.has(message.id)) {
+			console.log(`Skipping duplicate message: ${message.id}`);
+			return;
+		}
+
+		// メッセージIDを記録
+		displayedMessageIds.add(message.id);
+
+		// メッセージタイプに応じて表示
+		if (message.type === "superchat") {
+			displaySuperchatMessage(message, true); // 履歴フラグを渡す
+		} else if (message.type === "chat") {
+			displayChatMessage(message, true); // 履歴フラグを渡す
+		}
+
+		// 履歴メッセージの場合はスクロールを抑制（最後のメッセージのみスクロール）
+		if (index === sortedMessages.length - 1) {
+			// 最後の履歴メッセージの後にスクロール
+			setTimeout(() => {
+				container.scrollTop = container.scrollHeight;
+			}, 100);
+		}
+	});
+
+	console.log(`History loading completed. Total displayed messages: ${displayedMessageIds.size}`);
 }
 
 /**
@@ -164,8 +262,9 @@ function updateConnectionStatus(status, statusClass) {
  * YouTube風のDOM構造を模倣して表示します
  *
  * @param {Object} data - チャットデータ
+ * @param {boolean} isHistory - 履歴メッセージかどうか（デフォルト: false）
  */
-function displayChatMessage(data) {
+function displayChatMessage(data, isHistory = false) {
 	const container = document.getElementById("superchat-container");
 
 	// データチェック - 必須項目がない場合はエラーログを出力
@@ -173,18 +272,31 @@ function displayChatMessage(data) {
 		console.error("Invalid chat data received:", data);
 		// 元のデータは変更せず、表示用のデータを作成
 		const fallbackData = {
+			id: data?.id || `fallback-${Date.now()}`,
 			display_name: "Unknown User",
 			message: data?.message || "No message content",
 			timestamp: Date.now(),
 		};
 
 		// 安全な表示用データを使用
-		renderChatMessage(container, fallbackData);
+		renderChatMessage(container, fallbackData, isHistory);
 		return;
 	}
 
+	// リアルタイムメッセージの場合は重複チェック
+	if (!isHistory) {
+		if (data.id && displayedMessageIds.has(data.id)) {
+			console.log(`Skipping duplicate real-time message: ${data.id}`);
+			return;
+		}
+		// メッセージIDを記録
+		if (data.id) {
+			displayedMessageIds.add(data.id);
+		}
+	}
+
 	// 正常なデータの場合は表示処理を行う
-	renderChatMessage(container, data);
+	renderChatMessage(container, data, isHistory);
 }
 
 /**
@@ -192,8 +304,9 @@ function displayChatMessage(data) {
  *
  * @param {HTMLElement} container - メッセージを追加する親要素
  * @param {Object} chatData - レンダリングするチャットデータ
+ * @param {boolean} isHistory - 履歴メッセージかどうか（デフォルト: false）
  */
-function renderChatMessage(container, chatData) {
+function renderChatMessage(container, chatData, isHistory = false) {
 	// 新しいチャットメッセージ要素を作成 - YouTube風の構造
 	// 実際のYouTubeのHTML構造を参考に、yt-live-chat-text-message-renderer 要素を直接作成
 	const chatElement = document.createElement(
@@ -241,8 +354,11 @@ function renderChatMessage(container, chatData) {
 	// 最大表示数を超えた場合、古いメッセージを削除
 	cleanupOldMessages();
 
-	// メッセージ要素を表示領域内に自動スクロール
-	chatElement.scrollIntoView({ behavior: "smooth", block: "end" });
+	// 履歴メッセージの場合はスクロールを抑制
+	if (!isHistory) {
+		// メッセージ要素を表示領域内に自動スクロール
+		chatElement.scrollIntoView({ behavior: "smooth", block: "end" });
+	}
 }
 
 /**
@@ -250,14 +366,27 @@ function renderChatMessage(container, chatData) {
  * YouTube風のDOM構造を模倣して表示します
  *
  * @param {Object} data - スーパーチャットデータ
+ * @param {boolean} isHistory - 履歴メッセージかどうか（デフォルト: false）
  */
-function displaySuperchatMessage(data) {
+function displaySuperchatMessage(data, isHistory = false) {
 	const container = document.getElementById("superchat-container");
 
 	// データチェック - 必須項目がない場合はエラーログを出力
 	if (!data || !data.display_name) {
 		console.error("Invalid superchat data received:", data);
 		return;
+	}
+
+	// リアルタイムメッセージの場合は重複チェック
+	if (!isHistory) {
+		if (data.id && displayedMessageIds.has(data.id)) {
+			console.log(`Skipping duplicate real-time superchat: ${data.id}`);
+			return;
+		}
+		// メッセージIDを記録
+		if (data.id) {
+			displayedMessageIds.add(data.id);
+		}
 	}
 
 	// デバッグ用のログ出力
@@ -343,8 +472,11 @@ function displaySuperchatMessage(data) {
 	// 最大表示数を超えた場合、古いメッセージを削除
 	cleanupOldMessages();
 
-	// メッセージ要素を表示領域内に自動スクロール
-	superchatElement.scrollIntoView({ behavior: "smooth", block: "end" });
+	// 履歴メッセージの場合はスクロールを抑制
+	if (!isHistory) {
+		// メッセージ要素を表示領域内に自動スクロール
+		superchatElement.scrollIntoView({ behavior: "smooth", block: "end" });
+	}
 }
 
 /**
