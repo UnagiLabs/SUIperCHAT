@@ -41,4 +41,16 @@ export interface FormattedComment {
 	timestamp: number;
 	/** スーパーチャットの場合の詳細情報 */
 	superchat?: FormattedSuperchatData;
+}
+
+/**
+ * セッション情報
+ */
+export interface SessionInfo {
+	/** セッションID */
+	id: string;
+	/** セッション開始日時（ISO 8601形式の文字列） */
+	started_at: string;
+	/** セッション終了日時（ISO 8601形式の文字列、終了していない場合はnull） */
+	ended_at: string | null;
 } 

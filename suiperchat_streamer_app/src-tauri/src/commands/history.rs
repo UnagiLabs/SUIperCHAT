@@ -5,7 +5,7 @@
 use crate::database;
 use crate::state::AppState;
 use crate::types::SerializableMessageForStreamer;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 /// メッセージ履歴取得のパラメータ構造体
@@ -135,6 +135,19 @@ pub async fn get_current_session_id(
     Ok(result)
 }
 
+/// セッション情報を表すシリアライズ可能な構造体
+///
+/// フロントエンドに送信するためのセッション情報を格納します。
+#[derive(Serialize, Debug, Clone)]
+pub struct SessionInfo {
+    /// セッションID
+    pub id: String,
+    /// セッション開始日時（ISO 8601形式の文字列）
+    pub started_at: String,
+    /// セッション終了日時（ISO 8601形式の文字列、終了していない場合はNone）
+    pub ended_at: Option<String>,
+}
+
 /// 全てのユニークなセッションIDを取得するTauriコマンド
 ///
 /// @return 過去のセッションIDのリスト
@@ -164,4 +177,68 @@ pub async fn get_all_session_ids(app_state: State<'_, AppState>) -> Result<Vec<S
                 e
             )
         })
+}
+
+/// 全てのセッション情報（ID、開始日時、終了日時）を取得するTauriコマンド
+///
+/// セッション一覧を日時と共に表示するために使用されます。
+/// 結果は開始日時の降順（新しいものから古いものへ）でソートされます。
+///
+/// # 戻り値
+/// * `Result<Vec<SessionInfo>, String>` - 成功時はセッション情報のベクター、エラー時はエラーメッセージ
+///
+/// # エラー
+/// - データベース接続が初期化されていない場合
+/// - データベース操作中にエラーが発生した場合
+/// - ロック関連のエラーが発生した場合
+#[tauri::command]
+pub async fn get_all_sessions_info(
+    app_state: State<'_, AppState>,
+) -> Result<Vec<SessionInfo>, String> {
+    println!("セッション情報一覧取得を開始します");
+
+    // データベース接続プールを取得
+    let db_pool = {
+        let pool_guard = app_state.db_pool.lock().map_err(|e| {
+            let error_msg = format!("データベース接続プールのロックに失敗しました: {}", e);
+            eprintln!("エラー: {}", error_msg);
+            error_msg
+        })?;
+
+        match &*pool_guard {
+            Some(pool) => pool.clone(),
+            None => {
+                let error_msg = "データベース接続が初期化されていません。アプリケーションを再起動してください。".to_string();
+                eprintln!("エラー: {}", error_msg);
+                return Err(error_msg);
+            }
+        }
+    };
+
+    // データベースから全セッション情報を取得
+    match database::get_all_sessions(&db_pool).await {
+        Ok(sessions) => {
+            println!("取得されたセッション数: {}", sessions.len());
+
+            // Session型からSessionInfo型に変換
+            let session_infos: Vec<SessionInfo> = sessions
+                .into_iter()
+                .map(|session| SessionInfo {
+                    id: session.id,
+                    started_at: session.started_at,
+                    ended_at: session.ended_at,
+                })
+                .collect();
+
+            Ok(session_infos)
+        }
+        Err(e) => {
+            let error_msg = format!(
+                "セッション情報取得中にデータベースエラーが発生しました: {}",
+                e
+            );
+            eprintln!("エラー: {}", error_msg);
+            Err(error_msg)
+        }
+    }
 }

@@ -40,11 +40,15 @@ pub struct Message {
 ///
 /// # フィールド
 /// * `id` - セッションの一意識別子（UUID）
-/// * `started_at` - セッション開始時刻
-/// * `ended_at` - セッション終了時刻（セッション中はNone）
+/// * `started_at` - セッション開始時刻（ISO 8601形式の文字列）
+/// * `ended_at` - セッション終了時刻（ISO 8601形式の文字列、セッション中はNone）
+/// * `created_at` - レコード作成時刻（ISO 8601形式の文字列）
+/// * `updated_at` - レコード更新時刻（ISO 8601形式の文字列）
 #[derive(FromRow, Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Session {
-    pub id: String, // UUID
-    pub started_at: DateTime<Utc>,
-    pub ended_at: Option<DateTime<Utc>>,
+    pub id: String,               // UUID
+    pub started_at: String,       // ISO 8601形式の文字列
+    pub ended_at: Option<String>, // ISO 8601形式の文字列
+    pub created_at: String,       // ISO 8601形式の文字列
+    pub updated_at: String,       // ISO 8601形式の文字列
 }

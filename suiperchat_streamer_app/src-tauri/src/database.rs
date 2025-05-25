@@ -345,6 +345,38 @@ pub async fn get_distinct_session_ids(pool: &SqlitePool) -> Result<Vec<String>, 
     Ok(session_ids)
 }
 
+/// 全てのセッション情報を取得する関数
+///
+/// セッション一覧を日時と共に表示するために使用されます。
+/// 結果は開始日時の降順（新しいものから古いものへ）でソートされます。
+///
+/// # 引数
+/// * `pool` - SQLiteデータベース接続プール
+///
+/// # 戻り値
+/// * `Result<Vec<Session>, sqlx::Error>` - 成功時はセッション情報のベクター、エラー時はSQLエラー
+///
+/// # エラー
+/// - データベース接続エラー
+/// - SQLクエリ実行エラー
+pub async fn get_all_sessions(pool: &SqlitePool) -> Result<Vec<crate::db_models::Session>, sqlx::Error> {
+    println!("データベースから全セッション情報を取得中...");
+
+    let query = r#"
+        SELECT id, started_at, ended_at, created_at, updated_at 
+        FROM sessions 
+        ORDER BY started_at DESC
+    "#;
+
+    let sessions = sqlx::query_as::<_, crate::db_models::Session>(query)
+        .fetch_all(pool)
+        .await?;
+
+    println!("データベースから{}件のセッションを取得しました", sessions.len());
+
+    Ok(sessions)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::db_models::{Message, Session};

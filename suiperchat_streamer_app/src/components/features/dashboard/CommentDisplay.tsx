@@ -18,7 +18,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import type { FormattedComment } from "@/lib/types";
+import type { FormattedComment, SessionInfo } from "@/lib/types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
@@ -61,7 +61,7 @@ export default function CommentDisplay() {
 	const [selected_session_id, set_selected_session_id] = useState<
 		string | null
 	>(null);
-	const [available_session_ids, set_available_session_ids] = useState<string[]>(
+	const [available_sessions, set_available_sessions] = useState<SessionInfo[]>(
 		[],
 	);
 	const [is_loading, set_is_loading] = useState(true);
@@ -69,17 +69,17 @@ export default function CommentDisplay() {
 	const [max_display_count] = useState<number>(100); // 表示上限件数
 
 	/**
-	 * 利用可能なセッションIDリストを取得する関数
+	 * 利用可能なセッション情報リストを取得する関数
 	 */
-	const fetch_available_session_ids = useCallback(async () => {
+	const fetch_available_sessions = useCallback(async () => {
 		try {
-			console.log("=== セッションIDリスト取得開始 ===");
-			const session_ids = await invoke<string[]>("get_all_session_ids");
-			console.log("取得されたセッションID:", session_ids);
-			set_available_session_ids(session_ids);
+			console.log("=== セッション情報リスト取得開始 ===");
+			const sessions = await invoke<SessionInfo[]>("get_all_sessions_info");
+			console.log("取得されたセッション情報:", sessions);
+			set_available_sessions(sessions);
 		} catch (err) {
 			const error_message = err instanceof Error ? err.message : String(err);
-			console.error("セッションIDリスト取得エラー:", error_message);
+			console.error("セッション情報リスト取得エラー:", error_message);
 			// エラーが発生してもコメント表示機能は継続
 		}
 	}, []);
@@ -208,9 +208,9 @@ export default function CommentDisplay() {
 	 * コンポーネントマウント時にデータを初期ロード
 	 */
 	useEffect(() => {
-		fetch_available_session_ids();
+		fetch_available_sessions();
 		fetch_comments();
-	}, [fetch_available_session_ids, fetch_comments]);
+	}, [fetch_available_sessions, fetch_comments]);
 
 	/**
 	 * サーバー状態変更時に再取得
@@ -292,7 +292,7 @@ export default function CommentDisplay() {
 						<label htmlFor="session-select" className="text-sm font-medium">
 							セッション選択:
 						</label>
-						{available_session_ids.length > 0 ? (
+						{available_sessions.length > 0 ? (
 							<Select
 								value={selected_session_id || ""}
 								onValueChange={handle_session_select}
@@ -301,14 +301,30 @@ export default function CommentDisplay() {
 									<SelectValue placeholder="セッションを選択してください" />
 								</SelectTrigger>
 								<SelectContent>
-									{available_session_ids.map((session_id) => (
-										<SelectItem key={session_id} value={session_id}>
-											{session_id}
-											{session_id === current_session_id && (
-												<span className="ml-2 text-xs text-green-600 dark:text-green-400">
-													(現在のセッション)
+									{available_sessions.map((session) => (
+										<SelectItem key={session.id} value={session.id}>
+											<div className="flex flex-col">
+												<span className="font-medium">
+													{new Date(session.started_at).toLocaleString(
+														"ja-JP",
+														{
+															year: "numeric",
+															month: "2-digit",
+															day: "2-digit",
+															hour: "2-digit",
+															minute: "2-digit",
+														},
+													)}
 												</span>
-											)}
+												<span className="text-xs text-muted-foreground">
+													{session.id}
+													{session.id === current_session_id && (
+														<span className="ml-1 text-green-600 dark:text-green-400">
+															(現在のセッション)
+														</span>
+													)}
+												</span>
+											</div>
 										</SelectItem>
 									))}
 								</SelectContent>
