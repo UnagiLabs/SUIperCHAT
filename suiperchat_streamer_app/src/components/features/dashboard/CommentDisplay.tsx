@@ -297,8 +297,11 @@ export default function CommentDisplay() {
 								value={selected_session_id || ""}
 								onValueChange={handle_session_select}
 							>
-								<SelectTrigger id="session-select" className="w-full">
-									<SelectValue placeholder="セッションを選択してください" />
+								<SelectTrigger id="session-select" className="w-full text-left">
+									<SelectValue
+										placeholder="セッションを選択してください"
+										className="text-left"
+									/>
 								</SelectTrigger>
 								<SelectContent>
 									{available_sessions.map((session) => (
