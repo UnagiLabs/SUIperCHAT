@@ -23,10 +23,8 @@ use sqlx::{sqlite::SqlitePool, Error as SqlxError};
 pub async fn create_session(pool: &SqlitePool, session_id: &str) -> Result<(), SqlxError> {
     let now = Utc::now();
 
-    println!(
-        "データベースにセッションを作成: ID={}, 開始時刻={}",
-        session_id, now
-    );
+    // セッション作成をログに記録（重要な操作のため保持）
+    println!("データベースセッション作成: {}", session_id);
 
     sqlx::query(
         r#"
@@ -40,8 +38,6 @@ pub async fn create_session(pool: &SqlitePool, session_id: &str) -> Result<(), S
     .bind(now.to_rfc3339()) // updated_at
     .execute(pool)
     .await?;
-
-    println!("セッション作成完了: {}", session_id);
 
     Ok(())
 }
@@ -64,10 +60,7 @@ pub async fn create_session(pool: &SqlitePool, session_id: &str) -> Result<(), S
 pub async fn end_session(pool: &SqlitePool, session_id: &str) -> Result<(), SqlxError> {
     let now = Utc::now();
 
-    println!(
-        "データベース内のセッションを終了: ID={}, 終了時刻={}",
-        session_id, now
-    );
+    println!("データベースセッション終了: {}", session_id);
 
     let result = sqlx::query(
         r#"
@@ -82,12 +75,7 @@ pub async fn end_session(pool: &SqlitePool, session_id: &str) -> Result<(), Sqlx
     .await?;
 
     if result.rows_affected() == 0 {
-        println!(
-            "警告: セッションID{}の更新に失敗しました（レコードが見つかりません）",
-            session_id
-        );
-    } else {
-        println!("セッション終了処理完了: {}", session_id);
+        eprintln!("警告: セッションID{}が見つかりません", session_id);
     }
 
     Ok(())
@@ -109,23 +97,12 @@ pub async fn end_session(pool: &SqlitePool, session_id: &str) -> Result<(), Sqlx
 /// - SQLクエリ実行エラー
 /// - セッションIDが不足している場合
 pub async fn save_message_db(pool: &SqlitePool, message: &Message) -> Result<(), SqlxError> {
-    // セッションIDのログを改善
-    let session_display = message
-        .session_id
-        .as_deref()
-        .unwrap_or("[セッションID未設定]");
-
-    println!(
-        "メッセージをデータベースに保存: ID={}, 送信者={}, セッションID={}",
-        message.id, message.display_name, session_display
-    );
-
-    // セッションIDの存在確認（オプションだが、実質的に必須）
+    // セッションIDの存在確認（警告のみ表示）
     if message.session_id.is_none() {
-        println!("警告: メッセージにセッションIDが設定されていません。このメッセージの関連付けが不完全になる可能性があります。");
+        eprintln!("警告: メッセージにセッションIDが未設定");
     }
 
-    let result = sqlx::query(
+    let _result = sqlx::query(
         r#"
         INSERT INTO messages (id, timestamp, display_name, message, amount, coin, tx_hash, wallet_address, session_id) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -142,12 +119,6 @@ pub async fn save_message_db(pool: &SqlitePool, message: &Message) -> Result<(),
     .bind(&message.session_id)
     .execute(pool)
     .await?;
-
-    println!(
-        "メッセージ保存完了: {} (影響行数: {})",
-        message.id,
-        result.rows_affected()
-    );
 
     Ok(())
 }
@@ -176,35 +147,14 @@ pub async fn fetch_messages(
 ) -> Result<Vec<Message>, SqlxError> {
     // パラメータの検証と調整
     let safe_limit = if limit <= 0 {
-        println!(
-            "警告: 無効なlimit値({})が指定されました。デフォルト値(100)を使用します。",
-            limit
-        );
         100
     } else if limit > 1000 {
-        println!(
-            "警告: limit値({})が大きすぎます。最大値(1000)に制限します。",
-            limit
-        );
         1000
     } else {
         limit
     };
 
-    let safe_offset = if offset < 0 {
-        println!(
-            "警告: 無効なoffset値({})が指定されました。0を使用します。",
-            offset
-        );
-        0
-    } else {
-        offset
-    };
-
-    println!(
-        "データベースからメッセージを取得: limit={}, offset={}",
-        safe_limit, safe_offset
-    );
+    let safe_offset = if offset < 0 { 0 } else { offset };
 
     let messages = sqlx::query_as::<_, Message>(
         r#"
@@ -228,12 +178,7 @@ pub async fn fetch_messages(
     .fetch_all(pool)
     .await?;
 
-    println!(
-        "メッセージ取得完了: {}件（要求limit: {}, offset: {}）",
-        messages.len(),
-        safe_limit,
-        safe_offset
-    );
+    // 詳細ログは削除
 
     Ok(messages)
 }
@@ -262,16 +207,8 @@ pub async fn get_messages_by_session_id(
 ) -> Result<Vec<Message>, SqlxError> {
     // パラメータの検証と調整
     let safe_limit = if limit <= 0 {
-        println!(
-            "警告: 無効なlimit値({})が指定されました。デフォルト値(50)を使用します。",
-            limit
-        );
         50
     } else if limit > 1000 {
-        println!(
-            "警告: limit値({})が大きすぎます。最大値(1000)に制限します。",
-            limit
-        );
         1000
     } else {
         limit
@@ -301,13 +238,6 @@ pub async fn get_messages_by_session_id(
     // timestampの昇順（古い順）にソート
     messages.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
 
-    println!(
-        "セッション {} のメッセージを {} 件取得しました（before_timestamp: {:?}）",
-        session_id,
-        messages.len(),
-        before_timestamp
-    );
-
     // メッセージインデックスの確認と作成
     ensure_message_index(pool).await?;
 
@@ -330,6 +260,121 @@ async fn ensure_message_index(pool: &SqlitePool) -> Result<(), SqlxError> {
     .await?;
 
     Ok(())
+}
+
+/// 配信者用のセッションごとのメッセージ取得関数（既存の関数を拡張）
+pub async fn get_messages_by_session_id_with_options(
+    pool: &SqlitePool,
+    session_id: &str,
+    limit: i64,
+    offset: Option<i64>,
+    sort_asc: bool,
+) -> Result<Vec<Message>, sqlx::Error> {
+    println!("get_messages_by_session_id_with_options呼び出し: session_id={}, limit={}, offset={:?}, sort_asc={}", 
+        session_id, limit, offset, sort_asc);
+
+    // ソート順の文字列を決定
+    let order_by = if sort_asc { "ASC" } else { "DESC" };
+
+    // offsetが指定されていれば通常のオフセットベースのページネーション
+    if let Some(offset_value) = offset {
+        let query = format!(
+            "SELECT * FROM messages 
+            WHERE session_id = $1 
+            ORDER BY timestamp {} 
+            LIMIT $2 OFFSET $3",
+            order_by
+        );
+
+        println!("SQLクエリ実行: {}", query);
+        println!(
+            "パラメータ: session_id={}, limit={}, offset={}",
+            session_id, limit, offset_value
+        );
+
+        let result = sqlx::query_as::<_, Message>(&query)
+            .bind(session_id)
+            .bind(limit)
+            .bind(offset_value)
+            .fetch_all(pool)
+            .await;
+
+        match &result {
+            Ok(messages) => println!("取得されたメッセージ数: {}", messages.len()),
+            Err(e) => println!("SQLクエリエラー: {}", e),
+        }
+
+        result
+    } else {
+        println!("offset=Noneのため、fetch_messagesを使用してフィルタリング実行");
+        // offsetが指定されていなければ既存のロジックを活用（before_timestampベース）
+        // この場合は常に昇順とする（既存実装と整合性をとるため）
+        // 一時的な回避策: fetch_messages関数を使用
+        let result = fetch_messages(pool, limit, 0).await.map(|msgs| {
+            println!("fetch_messagesで取得したメッセージ数: {}", msgs.len());
+            // セッションIDでフィルタリング
+            let filtered: Vec<Message> = msgs
+                .into_iter()
+                .filter(|msg| {
+                    let msg_session_id = msg.session_id.as_deref().unwrap_or("");
+                    let matches = msg_session_id == session_id;
+                    if !matches {
+                        println!("フィルタリングで除外: {} != {}", msg_session_id, session_id);
+                    }
+                    matches
+                })
+                .collect();
+            println!("フィルタリング後のメッセージ数: {}", filtered.len());
+            filtered
+        });
+        result
+    }
+}
+
+/// 過去のコメント閲覧用に、データベースに存在する全てのユニークな `session_id` を取得する関数
+pub async fn get_distinct_session_ids(pool: &SqlitePool) -> Result<Vec<String>, sqlx::Error> {
+    let query = "SELECT DISTINCT session_id FROM messages WHERE session_id IS NOT NULL";
+
+    let rows = sqlx::query_as::<_, (String,)>(query)
+        .fetch_all(pool)
+        .await?;
+
+    // タプルの最初の要素を取り出してVec<String>に変換
+    let session_ids = rows.into_iter().map(|(id,)| id).collect();
+
+    Ok(session_ids)
+}
+
+/// 全てのセッション情報を取得する関数
+///
+/// セッション一覧を日時と共に表示するために使用されます。
+/// 結果は開始日時の降順（新しいものから古いものへ）でソートされます。
+///
+/// # 引数
+/// * `pool` - SQLiteデータベース接続プール
+///
+/// # 戻り値
+/// * `Result<Vec<Session>, sqlx::Error>` - 成功時はセッション情報のベクター、エラー時はSQLエラー
+///
+/// # エラー
+/// - データベース接続エラー
+/// - SQLクエリ実行エラー
+pub async fn get_all_sessions(pool: &SqlitePool) -> Result<Vec<crate::db_models::Session>, sqlx::Error> {
+    println!("データベースから全セッション情報を取得中...");
+
+    let query = r#"
+        SELECT id, started_at, ended_at, created_at, updated_at 
+        FROM sessions 
+        ORDER BY started_at DESC
+    "#;
+
+    let sessions = sqlx::query_as::<_, crate::db_models::Session>(query)
+        .fetch_all(pool)
+        .await?;
+
+    println!("データベースから{}件のセッションを取得しました", sessions.len());
+
+    Ok(sessions)
 }
 
 #[cfg(test)]

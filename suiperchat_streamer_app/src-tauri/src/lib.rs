@@ -79,6 +79,15 @@ pub fn run() {
                     Target::new(TargetKind::Stdout),
                     Target::new(TargetKind::LogDir { file_name: None }),
                 ])
+                .level(log::LevelFilter::Info) // INFO以上のレベルのみ表示
+                .filter(|metadata| {
+                    // 外部ライブラリの詳細ログを抑制
+                    !metadata.target().starts_with("tao::") &&
+                    !metadata.target().starts_with("mio::") &&
+                    !metadata.target().starts_with("sqlx::query") &&
+                    !metadata.target().starts_with("hyper::") &&
+                    !metadata.target().starts_with("actix_web::")
+                })
                 .build(),
         )
         // --- AppState を Tauri で管理 ---
@@ -249,6 +258,9 @@ pub fn run() {
             commands::connection::set_connection_limits,
             // 履歴関連コマンド
             commands::history::get_message_history,
+            commands::history::get_current_session_id,
+            commands::history::get_all_session_ids,
+            commands::history::get_all_sessions_info,
             // YouTube関連コマンド
             commands::youtube::set_youtube_video_id,
             commands::youtube::get_youtube_video_id

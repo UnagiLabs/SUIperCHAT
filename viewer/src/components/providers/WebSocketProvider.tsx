@@ -10,8 +10,10 @@ import { useWebSocketConnectionManager } from "@/hooks/useWebSocketConnect"; // 
 import { useWebSocketMessageHandler } from "@/hooks/useWebSocketMessage"; // メッセージ処理ロジック
 import {
 	ConnectionStatus,
+	type ChatMessage,
 	type HistoryDataMessage,
 	MessageType,
+	type SuperchatMessage,
 	type WebSocketContextType,
 	type WebSocketState,
 } from "@/lib/types/websocket";
@@ -84,16 +86,20 @@ export function WebSocketProvider({
 	});
 
 	// WebSocketメッセージハンドラの拡張 (過去ログ処理用)
-	const handleHistoryMessage = useCallback((data: HistoryDataMessage) => {
-		console.debug(`履歴データ受信: ${data.payload.messages.length}件`);
+	const handleHistoryMessage = useCallback((data: { messages?: (ChatMessage | SuperchatMessage)[]; has_more?: boolean }) => {
+		console.debug(`履歴データ受信: ${data.messages?.length || 0}件`);
 
 		setState((prev) => {
+			// サーバーからのレスポンス形式に対応
+			const messages = data.messages || [];
+			const hasMore = data.has_more || false;
+
 			// 既存メッセージのIDを取得
 			const existingMessageIds = new Set(prev.messages.map((msg) => msg.id));
 
 			// 重複を除外して新しいメッセージを追加
 			const newMessages = [
-				...data.payload.messages.filter(
+				...messages.filter(
 					(msg) => !existingMessageIds.has(msg.id),
 				),
 				...prev.messages,
@@ -110,7 +116,7 @@ export function WebSocketProvider({
 				...prev,
 				messages: newMessages,
 				isLoadingHistory: false,
-				hasMoreHistory: data.payload.has_more,
+				hasMoreHistory: hasMore,
 				historyError: null,
 				oldestMessageTimestamp: oldestTimestamp,
 			};
@@ -135,6 +141,7 @@ export function WebSocketProvider({
 				}
 			} catch (err) {
 				console.error("WebSocketメッセージ処理エラー:", err);
+				console.error("受信データ:", event.data);
 			}
 		},
 		[handleHistoryMessage, standardMessageHandler],
@@ -206,6 +213,52 @@ export function WebSocketProvider({
 		connectWebSocketInstance,
 		closeWebSocketInstance,
 	});
+
+	// 接続完了時に自動で履歴を取得
+	useEffect(() => {
+		if (state.status === ConnectionStatus.CONNECTED) {
+			// 接続完了時にメッセージ履歴をクリア（新しい接続で新鮮な履歴を取得）
+			setState((prev) => ({
+				...prev,
+				messages: [],
+				oldestMessageTimestamp: null,
+				hasMoreHistory: true,
+			}));
+
+			// 接続完了後、少し待ってから履歴を取得（サーバーの準備完了を待つ）
+			const timer = setTimeout(() => {
+				if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+					try {
+						setState((prev) => ({
+							...prev,
+							isLoadingHistory: true,
+							historyError: null,
+						}));
+
+						const request = {
+							type: MessageType.GET_HISTORY,
+							limit: 50, // 初回は50件取得
+							before_timestamp: null, // 最新から取得
+						};
+
+						console.debug("接続完了時の履歴取得リクエスト送信:", request);
+						wsRef.current.send(JSON.stringify(request));
+					} catch (error) {
+						console.error("接続時の履歴取得リクエスト送信エラー:", error);
+						setState((prev) => ({
+							...prev,
+							isLoadingHistory: false,
+							historyError: `履歴の取得に失敗しました: ${
+								error instanceof Error ? error.message : String(error)
+							}`,
+						}));
+					}
+				}
+			}, 1000); // 1秒待機
+
+			return () => clearTimeout(timer);
+		}
+	}, [state.status]);
 
 	// 循環参照を解決するためにconnectWebSocketInstanceを更新
 	useEffect(() => {
