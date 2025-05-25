@@ -36,7 +36,7 @@ function formatTimestamp(timestamp: number): string {
 	try {
 		return format(new Date(timestamp), "yyyy/MM/dd HH:mm:ss");
 	} catch (error) {
-		console.error("タイムスタンプのフォーマットに失敗:", error);
+		console.error("Failed to format timestamp:", error);
 		return "Invalid date";
 	}
 }
@@ -60,7 +60,7 @@ export default function CommentHistoryTable({
 	if (!isLoading && (!comments || comments.length === 0)) {
 		return (
 			<div className="text-center py-8 text-muted-foreground">
-				まだコメントはありません
+				No comments yet
 			</div>
 		);
 	}
@@ -70,18 +70,20 @@ export default function CommentHistoryTable({
 			<Table className="table-fixed w-full">
 				<TableHeader className="sticky top-0 bg-background z-10">
 					<TableRow>
-						<TableHead className="w-[120px] text-xs">タイムスタンプ</TableHead>
-						<TableHead className="w-[100px] text-xs">名前</TableHead>
-						<TableHead className="min-w-0 text-xs">メッセージ</TableHead>
-						<TableHead className="w-[70px] text-right text-xs">金額</TableHead>
-						<TableHead className="w-[55px] text-xs">コイン</TableHead>
+						<TableHead className="w-[120px] text-xs">Timestamp</TableHead>
+						<TableHead className="w-[100px] text-xs">Name</TableHead>
+						<TableHead className="min-w-0 text-xs">Message</TableHead>
+						<TableHead className="w-[70px] text-right text-xs">
+							Amount
+						</TableHead>
+						<TableHead className="w-[55px] text-xs">Coin</TableHead>
 					</TableRow>
 				</TableHeader>
 				<TableBody>
 					{isLoading ? (
 						<TableRow>
 							<TableCell colSpan={5} className="text-center py-8 text-xs">
-								読み込み中...
+								Loading...
 							</TableCell>
 						</TableRow>
 					) : (

@@ -285,12 +285,12 @@ export default function CommentDisplay() {
 	return (
 		<Card className="h-full flex flex-col">
 			<CardHeader className="flex-shrink-0">
-				<CardTitle>コメント履歴</CardTitle>
+				<CardTitle>Comment History</CardTitle>
 				<div className="space-y-2">
 					{/* セッション選択プルダウン */}
 					<div className="flex items-center gap-2">
 						<label htmlFor="session-select" className="text-sm font-medium">
-							セッション選択:
+							Session:
 						</label>
 						{available_sessions.length > 0 ? (
 							<Select
@@ -299,7 +299,7 @@ export default function CommentDisplay() {
 							>
 								<SelectTrigger id="session-select" className="w-full text-left">
 									<SelectValue
-										placeholder="セッションを選択してください"
+										placeholder="Please select a session"
 										className="text-left"
 									/>
 								</SelectTrigger>
@@ -323,7 +323,7 @@ export default function CommentDisplay() {
 													{session.id}
 													{session.id === current_session_id && (
 														<span className="ml-1 text-green-600 dark:text-green-400">
-															(現在のセッション)
+															(Current Session)
 														</span>
 													)}
 												</span>
@@ -334,7 +334,7 @@ export default function CommentDisplay() {
 							</Select>
 						) : (
 							<div className="flex-1 px-3 py-2 text-sm text-muted-foreground border rounded-md bg-muted/50">
-								利用可能なセッションがありません
+								No available sessions
 							</div>
 						)}
 					</div>
@@ -354,16 +354,17 @@ export default function CommentDisplay() {
 				<div className="mt-4 text-xs text-muted-foreground flex-shrink-0">
 					{selected_session_id ? (
 						<>
-							表示中のセッション: {selected_session_id}
+							Displaying session: {selected_session_id}
 							{selected_session_id === current_session_id && (
 								<span className="ml-2 text-green-600 dark:text-green-400">
-									(現在のアクティブセッション)
+									(Current Active Session)
 								</span>
 							)}
 						</>
 					) : (
 						<>
-							セッションを選択してください。サーバーを起動すると現在のセッションが自動選択されます。
+							Please select a session. The current session will be automatically
+							selected when the server starts.
 						</>
 					)}
 				</div>
