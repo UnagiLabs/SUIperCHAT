@@ -19,6 +19,8 @@ SuiperCHAT Streamer App は、SuiperCHAT サービスを利用するストリー
 
 - パソコン (Windows または macOS)
 - インターネット接続
+- Windows では Visual Studio Build Tools（C++ Build Tools）をインストール
+- macOS では Xcode Command Line Tools をインストール
 
 ## セットアップ (使い方)
 
