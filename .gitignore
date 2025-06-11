@@ -7,3 +7,6 @@ suiperchat_streamer_app/dev.db
 
 docs/
 .DS_Store
+
+# YoYo AI version control directory
+.yoyo/
