@@ -1,6 +1,6 @@
 /**
  * コメント関連の型定義
- * 
+ *
  * コメント表示機能で使用する型を定義します。
  */
 
@@ -32,7 +32,7 @@ export interface FormattedComment {
 	/** セッションID */
 	session_id: string;
 	/** メッセージタイプ (通常チャットかスーパーチャットか) */
-	message_type: 'CHAT' | 'SUPERCHAT';
+	message_type: "CHAT" | "SUPERCHAT";
 	/** 送信者の表示名 */
 	name: string;
 	/** メッセージ内容 */
@@ -53,4 +53,4 @@ export interface SessionInfo {
 	started_at: string;
 	/** セッション終了日時（ISO 8601形式の文字列、終了していない場合はnull） */
 	ended_at: string | null;
-} 
+}

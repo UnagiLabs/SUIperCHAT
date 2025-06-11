@@ -1,12 +1,14 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::sync::{Arc, Mutex};
+use std::process::Stdio;
 use tauri::AppHandle;
-use tauri_plugin_shell::process::{CommandChild, CommandEvent};
-use tauri_plugin_shell::ShellExt;
 use thiserror::Error;
 use tokio::time::{timeout, Duration};
+use tokio::process::{Child, Command as TokioCommand};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tracing::{error, info, warn};
+use crate::cloudflared_manager::{CloudflaredManager, CloudflaredManagerError};
 
 /// Cloudflaredが出力するURLを検出するための正規表現
 static URL_REGEX: Lazy<Regex> =
@@ -22,9 +24,9 @@ const TUNNEL_START_TIMEOUT_SECS: u64 = 15;
  */
 #[derive(Debug, Clone)]
 pub struct TunnelInfo {
-    /// cloudflaredプロセスへの参照（Option<CommandChild>型）
+    /// cloudflaredプロセスへの参照（Option<Child>型）
     /// Option型でラップすることでtake()メソッドを使用可能に
-    pub process: Arc<Mutex<Option<CommandChild>>>,
+    pub process: Arc<Mutex<Option<Child>>>,
 
     /// 生成されたCloudflare Tunnelの一時URL
     /// 例: https://xxxx-xxxx-xxxx-xxxx.trycloudflare.com
@@ -36,13 +38,13 @@ pub struct TunnelInfo {
  */
 #[derive(Error, Debug)]
 pub enum TunnelError {
-    /// このプラットフォーム用のcloudflaredバイナリ選択に失敗
-    #[error("Failed to select cloudflared binary for this platform")]
-    BinarySelectionFailed,
+    /// Cloudflaredマネージャーのエラー
+    #[error("Cloudflared manager error: {0}")]
+    ManagerError(#[from] CloudflaredManagerError),
 
     /// プロセスの起動に失敗
     #[error("Failed to spawn cloudflared process: {0}")]
-    SpawnFailed(#[from] tauri_plugin_shell::Error),
+    SpawnFailed(#[from] std::io::Error),
 
     /// 標準入出力の操作中にエラー発生
     #[error("Failed to read cloudflared stdout")]
@@ -55,21 +57,17 @@ pub enum TunnelError {
     /// タイムアウト発生
     #[error("Timed out waiting for cloudflared URL")]
     Timeout,
-
-    /// サポートされていないプラットフォーム
-    #[error("Unsupported platform")]
-    UnsupportedPlatform,
 }
 
 impl TunnelInfo {
     /**
      * 新しいTunnelInfoインスタンスを作成
      *
-     * @param {CommandChild} process - cloudflaredプロセス
+     * @param {Child} process - cloudflaredプロセス
      * @param {String} url - Cloudflare Tunnelの一時URL
      * @returns {TunnelInfo} 作成されたTunnelInfoインスタンス
      */
-    pub fn new(process: CommandChild, url: String) -> Self {
+    pub fn new(process: Child, url: String) -> Self {
         Self {
             process: Arc::new(Mutex::new(Some(process))),
             url,
@@ -80,7 +78,7 @@ impl TunnelInfo {
 /// トンネルを起動し、WebSocketサーバーをインターネットに公開する
 ///
 /// Cloudflare Quick Tunnelを使用して、ローカルで実行されているWebSocketサーバーを
-/// インターネットに安全に公開します。cloudflaredプロセスをサイドカーとして実行し、
+/// インターネットに安全に公開します。動的にダウンロードしたcloudflaredバイナリを使用し、
 /// 生成された一時的なURL（https://*.trycloudflare.com）を取得します。
 ///
 /// # Arguments
@@ -91,6 +89,13 @@ impl TunnelInfo {
 /// * `Result<TunnelInfo, TunnelError>` - 成功時はTunnelInfo、失敗時はエラー
 pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, TunnelError> {
     info!("Starting Cloudflare Tunnel for WebSocket port {}", ws_port);
+
+    // cloudflaredマネージャーを初期化
+    let manager = CloudflaredManager::new(app.clone())?;
+    
+    // cloudflaredバイナリを確保（存在しない場合はダウンロード）
+    let binary_path = manager.ensure_cloudflared().await?;
+    info!("Using cloudflared binary at: {:?}", binary_path);
 
     // cloudflaredコマンドの引数を構築
     let mut args = vec![
@@ -120,64 +125,74 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
         args.join(" ")
     );
 
-    // Tauriのsidecar機能を使用してcloudflaredプロセスを起動
-    // sidecar()にはベース名のみを渡す（Tauriがプラットフォームに応じたバイナリを選択）
-    let (mut rx, child) = app
-        .shell()
-        .sidecar("cloudflared")
-        .map_err(TunnelError::SpawnFailed)?
+    // tokioプロセスを使用してcloudflaredを起動
+    let mut child = TokioCommand::new(&binary_path)
         .args(&args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()?;
 
-    // プロセスのためのArc<Mutex<Option<CommandChild>>>を作成
+    // 標準出力と標準エラー出力を非同期で読み取り
+    let stdout = child.stdout.take().ok_or(TunnelError::StdioError)?;
+    let stderr = child.stderr.take().ok_or(TunnelError::StdioError)?;
+
+    let mut stdout_reader = BufReader::new(stdout).lines();
+    let mut stderr_reader = BufReader::new(stderr).lines();
+
+    // プロセスのためのArc<Mutex<Option<Child>>>を作成
     let child_arc = Arc::new(Mutex::new(Some(child)));
 
     // URL抽出ロジック（タイムアウト付き）
     let url_extraction = async {
-        while let Some(event) = rx.recv().await {
-            match event {
-                CommandEvent::Stdout(line) => {
-                    let line_str = String::from_utf8_lossy(&line);
-                    info!("cloudflared stdout: {}", line_str);
-
-                    // 標準出力からTunnelのURLを検索
-                    if let Some(mat) = URL_REGEX.find(&line_str) {
-                        let url = mat.as_str().to_string();
-                        info!("Cloudflare Tunnel URL found: {}", url);
-                        return Ok(url); // URLが見つかったら返す
+        loop {
+            tokio::select! {
+                line = stdout_reader.next_line() => {
+                    match line {
+                        Ok(Some(line_str)) => {
+                            info!("cloudflared stdout: {}", line_str);
+                            
+                            // 標準出力からTunnelのURLを検索
+                            if let Some(mat) = URL_REGEX.find(&line_str) {
+                                let url = mat.as_str().to_string();
+                                info!("Cloudflare Tunnel URL found: {}", url);
+                                return Ok(url);
+                            }
+                        }
+                        Ok(None) => {
+                            warn!("cloudflared stdout stream ended");
+                            break;
+                        }
+                        Err(e) => {
+                            error!("Error reading cloudflared stdout: {}", e);
+                            return Err(TunnelError::StdioError);
+                        }
                     }
                 }
-                CommandEvent::Stderr(line) => {
-                    let line_str = String::from_utf8_lossy(&line);
-                    warn!("cloudflared stderr: {}", line_str);
-
-                    // 標準エラー出力からもURLを検索（エラーメッセージにURLが含まれる場合がある）
-                    if let Some(mat) = URL_REGEX.find(&line_str) {
-                        let url = mat.as_str().to_string();
-                        info!("Cloudflare Tunnel URL found in stderr: {}", url);
-                        return Ok(url);
+                line = stderr_reader.next_line() => {
+                    match line {
+                        Ok(Some(line_str)) => {
+                            warn!("cloudflared stderr: {}", line_str);
+                            
+                            // 標準エラー出力からもURLを検索
+                            if let Some(mat) = URL_REGEX.find(&line_str) {
+                                let url = mat.as_str().to_string();
+                                info!("Cloudflare Tunnel URL found in stderr: {}", url);
+                                return Ok(url);
+                            }
+                        }
+                        Ok(None) => {
+                            warn!("cloudflared stderr stream ended");
+                            break;
+                        }
+                        Err(e) => {
+                            error!("Error reading cloudflared stderr: {}", e);
+                            return Err(TunnelError::StdioError);
+                        }
                     }
                 }
-                CommandEvent::Error(err) => {
-                    error!("cloudflared process error: {}", err);
-                    return Err(TunnelError::StdioError);
-                }
-                CommandEvent::Terminated(status) => {
-                    if let Some(code) = status.code {
-                        warn!(
-                            "cloudflared process terminated unexpectedly with code: {}",
-                            code
-                        );
-                    } else {
-                        warn!("cloudflared process terminated unexpectedly without exit code");
-                    }
-                    return Err(TunnelError::UrlNotFound);
-                }
-                _ => {} // 他のイベント（Runningなど）は無視
             }
         }
-
-        // ループを抜けた場合はURLが見つからなかった
+        
         Err(TunnelError::UrlNotFound)
     };
 
@@ -199,9 +214,12 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
         Ok(Err(e)) => {
             // URL抽出中のエラー: プロセスは起動しているので終了処理
             error!("Error while extracting URL: {}", e);
-            let mut child_guard = child_arc.lock().unwrap();
-            if let Some(child_to_kill) = child_guard.take() {
-                if let Err(kill_err) = child_to_kill.kill() {
+            let child_to_kill = {
+                let mut child_guard = child_arc.lock().unwrap();
+                child_guard.take()
+            };
+            if let Some(mut child) = child_to_kill {
+                if let Err(kill_err) = child.kill().await {
                     error!(
                         "Failed to kill cloudflared process after URL extraction error: {}",
                         kill_err
@@ -218,9 +236,12 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
                 "Timed out waiting for cloudflared URL (timeout: {}s)",
                 TUNNEL_START_TIMEOUT_SECS
             );
-            let mut child_guard = child_arc.lock().unwrap();
-            if let Some(child_to_kill) = child_guard.take() {
-                if let Err(kill_err) = child_to_kill.kill() {
+            let child_to_kill = {
+                let mut child_guard = child_arc.lock().unwrap();
+                child_guard.take()
+            };
+            if let Some(mut child) = child_to_kill {
+                if let Err(kill_err) = child.kill().await {
                     error!("Failed to kill timed out cloudflared process: {}", kill_err);
                 } else {
                     info!("Killed cloudflared process due to timeout");
@@ -244,12 +265,12 @@ pub async fn stop_tunnel(tunnel_info: &TunnelInfo) {
     // Mutexからプロセスのオプションを取り出す
     let maybe_child = tunnel_info.process.lock().unwrap().take();
 
-    if let Some(child) = maybe_child {
+    if let Some(mut child) = maybe_child {
         info!(
             "Stopping cloudflared tunnel process for URL: {}",
             tunnel_info.url
         );
-        match child.kill() {
+        match child.kill().await {
             Ok(_) => info!("Cloudflared tunnel process stopped successfully."),
             Err(e) => error!("Failed to stop cloudflared tunnel process: {}", e),
         }

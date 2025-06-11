@@ -17,6 +17,7 @@ pub mod db_models; // データベースモデル定義モジュール
 pub mod state; // 状態管理モジュール
 pub mod types; // 型定義モジュール
 pub mod ws_server; // WebSocket サーバーロジック
+pub mod cloudflared_manager; // Cloudflaredダウンロード管理モジュール
 
 // モジュールの再エクスポート
 pub use state::AppState;
