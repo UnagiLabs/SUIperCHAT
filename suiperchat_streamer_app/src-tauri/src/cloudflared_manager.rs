@@ -153,16 +153,17 @@ impl CloudflaredManager {
         let filename = if cfg!(target_os = "windows") {
             if cfg!(target_arch = "x86_64") {
                 "cloudflared-windows-amd64.exe"
-            } else if cfg!(target_arch = "aarch64") {
-                "cloudflared-windows-arm64.exe"
+            } else if cfg!(target_arch = "x86") {
+                "cloudflared-windows-386.exe"
             } else {
-                return Err(CloudflaredManagerError::UnsupportedPlatform);
+                // Windows ARM64は公式リリースが存在しないため、AMD64版を使用
+                "cloudflared-windows-amd64.exe"
             }
         } else if cfg!(target_os = "macos") {
             if cfg!(target_arch = "x86_64") {
                 "cloudflared-darwin-amd64.tgz"
             } else if cfg!(target_arch = "aarch64") {
-                "cloudflared-darwin-amd64.tgz" // ARM64版がない場合はAMD64を使用
+                "cloudflared-darwin-arm64.tgz"
             } else {
                 return Err(CloudflaredManagerError::UnsupportedPlatform);
             }
