@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::{self, Write};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use thiserror::Error;
-use tracing::{info, warn, error};
+use tracing::{info, error};
 
 #[derive(Error, Debug)]
 pub enum CloudflaredManagerError {
@@ -24,6 +24,7 @@ pub enum CloudflaredManagerError {
 }
 
 pub struct CloudflaredManager {
+    #[allow(dead_code)]
     app_handle: AppHandle,
     binary_path: PathBuf,
 }

@@ -1,7 +1,7 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::sync::{Arc, Mutex};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use tauri::AppHandle;
 use thiserror::Error;
 use tokio::time::{timeout, Duration};
@@ -143,8 +143,7 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
     let child_arc = Arc::new(Mutex::new(Some(child)));
 
     // URL抽出ロジック（タイムアウト付き）
-    let child_arc_clone = child_arc.clone();
-    let url_extraction = async move {
+    let url_extraction = async {
         loop {
             tokio::select! {
                 line = stdout_reader.next_line() => {
@@ -215,9 +214,12 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
         Ok(Err(e)) => {
             // URL抽出中のエラー: プロセスは起動しているので終了処理
             error!("Error while extracting URL: {}", e);
-            let mut child_guard = child_arc.lock().unwrap();
-            if let Some(mut child_to_kill) = child_guard.take() {
-                if let Err(kill_err) = child_to_kill.kill().await {
+            let child_to_kill = {
+                let mut child_guard = child_arc.lock().unwrap();
+                child_guard.take()
+            };
+            if let Some(mut child) = child_to_kill {
+                if let Err(kill_err) = child.kill().await {
                     error!(
                         "Failed to kill cloudflared process after URL extraction error: {}",
                         kill_err
@@ -234,9 +236,12 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
                 "Timed out waiting for cloudflared URL (timeout: {}s)",
                 TUNNEL_START_TIMEOUT_SECS
             );
-            let mut child_guard = child_arc.lock().unwrap();
-            if let Some(mut child_to_kill) = child_guard.take() {
-                if let Err(kill_err) = child_to_kill.kill().await {
+            let child_to_kill = {
+                let mut child_guard = child_arc.lock().unwrap();
+                child_guard.take()
+            };
+            if let Some(mut child) = child_to_kill {
+                if let Err(kill_err) = child.kill().await {
                     error!("Failed to kill timed out cloudflared process: {}", kill_err);
                 } else {
                     info!("Killed cloudflared process due to timeout");
