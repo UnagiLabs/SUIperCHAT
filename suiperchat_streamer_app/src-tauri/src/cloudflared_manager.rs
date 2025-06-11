@@ -4,6 +4,8 @@ use std::io::{self, Write};
 use tauri::{AppHandle, Manager};
 use thiserror::Error;
 use tracing::{info, error};
+use flate2::read::GzDecoder;
+use tar::Archive;
 
 #[derive(Error, Debug)]
 pub enum CloudflaredManagerError {
@@ -92,9 +94,14 @@ impl CloudflaredManager {
             .await
             .map_err(|e| CloudflaredManagerError::DownloadFailed(e.to_string()))?;
         
-        // ファイルに書き込み
-        let mut file = fs::File::create(&self.binary_path)?;
-        file.write_all(&bytes)?;
+        // macOSの場合はtar.gzを展開、その他は直接保存
+        if cfg!(target_os = "macos") && download_url.ends_with(".tgz") {
+            self.extract_tar_gz(&bytes)?;
+        } else {
+            // ファイルに直接書き込み
+            let mut file = fs::File::create(&self.binary_path)?;
+            file.write_all(&bytes)?;
+        }
         
         // Unix系OSでは実行権限を設定
         #[cfg(unix)]
@@ -108,6 +115,36 @@ impl CloudflaredManager {
         
         info!("Cloudflared downloaded successfully to: {:?}", self.binary_path);
         Ok(())
+    }
+    
+    fn extract_tar_gz(&self, bytes: &[u8]) -> Result<(), CloudflaredManagerError> {
+        info!("Extracting cloudflared tar.gz file...");
+        
+        let decoder = GzDecoder::new(bytes);
+        let mut archive = Archive::new(decoder);
+        
+        let _parent_dir = self.binary_path.parent()
+            .ok_or_else(|| CloudflaredManagerError::DownloadFailed("Invalid binary path".to_string()))?;
+        
+        // アーカイブからバイナリファイルを探して展開
+        for entry in archive.entries().map_err(|e| CloudflaredManagerError::DownloadFailed(e.to_string()))? {
+            let mut entry = entry.map_err(|e| CloudflaredManagerError::DownloadFailed(e.to_string()))?;
+            let path = entry.path().map_err(|e| CloudflaredManagerError::DownloadFailed(e.to_string()))?;
+            
+            // cloudflaredバイナリファイルを探す
+            if let Some(filename) = path.file_name() {
+                if filename == "cloudflared" {
+                    info!("Found cloudflared binary in archive, extracting...");
+                    entry.unpack(&self.binary_path)
+                        .map_err(|e| CloudflaredManagerError::DownloadFailed(e.to_string()))?;
+                    return Ok(());
+                }
+            }
+        }
+        
+        Err(CloudflaredManagerError::DownloadFailed(
+            "cloudflared binary not found in tar.gz archive".to_string()
+        ))
     }
     
     fn get_download_url(&self) -> Result<String, CloudflaredManagerError> {
