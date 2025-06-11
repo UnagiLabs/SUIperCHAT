@@ -189,3 +189,12 @@ When making changes, always test in both development (`npm run tauri dev`) and p
 
 ### (任意) スクリーンショットや動作確認
 UIの変更や動作確認が必要な場合は、スクリーンショットや確認手順を記述してください。
+
+## 重要な注意事項
+
+### コミット作成時の禁止事項
+- コミットメッセージに `🤖 Generated with [Claude Code]` や `Co-Authored-By: Claude` などの自動生成署名を**絶対に追加しない**
+- 上記のCommit Message Guidelinesに厳密に従い、余計な署名や注釈は一切含めない
+
+### コミット後の必須作業
+- コミット作成後は必ず `git push` を実行してリモートリポジトリに反映する
