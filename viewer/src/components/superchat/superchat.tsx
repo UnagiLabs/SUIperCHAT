@@ -12,26 +12,9 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect } from "react";
 import { useState } from "react";
-import { Toaster } from "sonner";
-
-import { SuperchatComplete } from "./superchat-complete";
 import { SuperchatForm } from "./superchat-form";
-
-/**
- * 送信状態を表す型
- */
-type SendState = "form" | "complete";
-
-/**
- * 完了情報を表す型
- */
-interface CompleteInfo {
-	amount: number;
-	display_name: string;
-	message: string;
-	transaction_id?: string;
-}
 
 /**
  * スーパーチャットコンポーネントのプロパティ
@@ -50,85 +33,131 @@ interface SuperchatProps {
 		message: string,
 		transaction_id?: string,
 	) => void;
+	/**
+	 * 初期受取人ウォレットアドレス
+	 */
+	initial_recipient_address?: string;
+	/**
+	 * コンパクトモードを有効にするかどうか
+	 * レイアウト調整用
+	 */
+	compact_mode?: boolean;
+	/**
+	 * Tipモードの変更通知コールバック
+	 */
+	on_tip_mode_change?: (has_tip: boolean) => void;
+	/**
+	 * 高さ変更通知コールバック
+	 */
+	on_height_change?: (height: number) => void;
 }
 
 /**
  * スーパーチャットコンポーネント
  *
  * @param props - コンポーネントのプロパティ
- * @returns スーパーチャットコンポーネントのJSXエレメント
+ * @returns スーパーチャットコンポーネント
  */
-export function Superchat({ className = "", on_send_success }: SuperchatProps) {
+export function Superchat({
+	className,
+	on_send_success,
+	initial_recipient_address,
+	compact_mode = false,
+	on_tip_mode_change,
+	on_height_change,
+}: SuperchatProps) {
+	return (
+		<Suspense
+			fallback={
+				<div className="h-full flex items-center justify-center">
+					読み込み中...
+				</div>
+			}
+		>
+			<SuperchatContent
+				className={className}
+				on_send_success={on_send_success}
+				initial_recipient_address={initial_recipient_address}
+				compact_mode={compact_mode}
+				on_tip_mode_change={on_tip_mode_change}
+				on_height_change={on_height_change}
+			/>
+		</Suspense>
+	);
+}
+
+/**
+ * URLパラメータを取得するコンポーネント
+ * useSearchParamsを使用するため、このコンポーネントは個別に分離
+ */
+function UrlParamReader({
+	onStreamerAddressChange,
+}: {
+	onStreamerAddressChange: (address: string) => void;
+}) {
 	// URLパラメータから配信者のウォレットアドレスを取得
 	const search_params = useSearchParams();
 	const streamer_address = search_params.get("streamerAddress") || "";
 
-	// 現在の表示状態
-	const [send_state, set_send_state] = useState<SendState>("form");
-	// 完了情報
-	const [complete_info, set_complete_info] = useState<CompleteInfo>({
-		amount: 0,
-		display_name: "",
-		message: "",
-	});
+	// アドレスが変更されたら親コンポーネントに通知
+	useEffect(() => {
+		onStreamerAddressChange(streamer_address);
+	}, [streamer_address, onStreamerAddressChange]);
 
-	/**
-	 * 送信成功時のハンドラー
-	 *
-	 * @param amount - 送信金額
-	 * @param display_name - 表示名
-	 * @param message - メッセージ内容
-	 * @param transaction_id - トランザクションID
-	 */
-	function handle_send_success(
-		amount: number,
-		display_name: string,
-		message: string,
-		transaction_id?: string,
-	) {
-		set_complete_info({
-			amount,
-			display_name,
-			message,
-			transaction_id,
-		});
-		set_send_state("complete");
+	return null; // このコンポーネントはUIをレンダリングしない
+}
 
-		// 親コンポーネントのコールバックがあれば呼び出す
-		if (on_send_success) {
-			on_send_success(amount, display_name, message, transaction_id);
+/**
+ * useSearchParamsを使用するスーパーチャットの内部コンポーネント
+ */
+function SuperchatContent({
+	className,
+	on_send_success,
+	initial_recipient_address,
+	compact_mode = false,
+	on_tip_mode_change,
+	on_height_change,
+}: SuperchatProps) {
+	// Tipモード状態
+	const [has_tip, set_has_tip] = useState<boolean>(false);
+	// URLから取得した配信者アドレス
+	const [streamer_address, set_streamer_address] = useState<string>("");
+
+	// Tipモード変更を親コンポーネントに通知
+	useEffect(() => {
+		if (on_tip_mode_change) {
+			on_tip_mode_change(has_tip);
 		}
-	}
+	}, [has_tip, on_tip_mode_change]);
 
 	/**
-	 * 完了画面を閉じるハンドラー
+	 * Tipモード変更ハンドラー
 	 */
-	function handle_close_complete() {
-		set_send_state("form");
+	function handle_tip_mode_change(has_tip: boolean) {
+		set_has_tip(has_tip);
 	}
 
+	// 通常はフォームを表示
 	return (
-		<div className={`superchat ${className}`}>
-			<Toaster richColors position="top-center" />
+		<div
+			className={className}
+			style={{ height: "100%", display: "flex", flexDirection: "column" }}
+		>
+			{/* URLパラメータを読み取るコンポーネント */}
+			<Suspense fallback={null}>
+				<UrlParamReader onStreamerAddressChange={set_streamer_address} />
+			</Suspense>
 
-			<>
-				{send_state === "form" && (
-					<SuperchatForm
-						on_send_success={handle_send_success}
-						initial_recipient_address={streamer_address}
-					/>
-				)}
-
-				{send_state === "complete" && (
-					<SuperchatComplete
-						amount={complete_info.amount}
-						display_name={complete_info.display_name}
-						message={complete_info.message}
-						transaction_id={complete_info.transaction_id}
-						on_close={handle_close_complete}
-					/>
-				)}
-			</>
+			<SuperchatForm
+				on_send_success={on_send_success}
+				initial_recipient_address={
+					initial_recipient_address || streamer_address
+				}
+				compact_mode={true}
+				integrated_ui={true}
+				on_tip_mode_change={handle_tip_mode_change}
+				on_height_change={on_height_change}
+			/>
 		</div>
 	);
 }

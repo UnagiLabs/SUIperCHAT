@@ -5,6 +5,7 @@
  *
  * 画面の目立たない位置にWebSocket接続状態と接続先URLを表示します。
  * このコンポーネントは、開発時やデバッグ時に接続状態を確認するのに役立ちます。
+ * 接続状態が「connected」の場合は非表示となり、問題がある場合のみ表示されます。
  *
  * @module components/ui/ws-connection-status
  */
@@ -17,11 +18,18 @@ import type React from "react";
 /**
  * WebSocket接続状態表示コンポーネント
  *
- * @returns {React.ReactElement} WebSocket接続状態を表示するコンポーネント
+ * 「connected」状態では非表示となり、その他の状態（connecting, disconnected等）でのみ表示されます。
+ *
+ * @returns {React.ReactElement | null} WebSocket接続状態を表示するコンポーネントまたはnull
  */
-export function WebSocketConnectionStatus(): React.ReactElement {
+export function WebSocketConnectionStatus(): React.ReactElement | null {
 	const { state } = useWebSocket();
 	const [visible, set_visible] = useState(true);
+
+	// connected状態で履歴読み込み中でなければ何も表示しない
+	if (state.status === ConnectionStatus.CONNECTED && !state.isLoadingHistory) {
+		return null;
+	}
 
 	// 接続状態に応じたスタイルを設定
 	const status_style = {
@@ -38,7 +46,9 @@ export function WebSocketConnectionStatus(): React.ReactElement {
 	 * Sets the text based on the connection status.
 	 */
 	const status_text: { [key in ConnectionStatus]: string } = {
-		[ConnectionStatus.CONNECTED]: "Connected",
+		[ConnectionStatus.CONNECTED]: state.isLoadingHistory
+			? "Loading History"
+			: "Connected",
 		[ConnectionStatus.CONNECTING]: "Connecting",
 		[ConnectionStatus.RECONNECTING]: "Reconnecting",
 		[ConnectionStatus.DISCONNECTED]: "Disconnected",

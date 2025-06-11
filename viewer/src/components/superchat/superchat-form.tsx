@@ -4,7 +4,7 @@
  * 視聴者が配信者にスーパーチャットを送信するためのフォームコンポーネント
  *
  * @remarks
- * - 金額選択UI（0/1/3/5/10 SUI）
+ * - 任意の金額と通貨タイプを選択可能
  * - 送付先アドレス入力フィールド
  * - メッセージ入力フィールド
  * - 表示名入力フィールド
@@ -16,50 +16,50 @@
 
 import { useUser } from "@/context/UserContext";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Coins } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
 import { useWebSocket } from "@/components/providers/WebSocketProvider";
 import { Button } from "@/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import {
-	Form,
-	FormControl,
-	FormDescription,
-	FormField,
-	FormItem,
-	FormLabel,
-	FormMessage,
-} from "@/components/ui/form";
+import { Form, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
 import {
 	DEFAULT_GAS_BUDGET,
 	PACKAGE_ID,
 	PAYMENT_CONFIG_ID,
-	SUI_TYPE_ARG,
+	SUPPORTED_COINS,
 } from "@/lib/constants"; // 定数をインポート
-import { mistToSui, suiToMist } from "@/lib/utils"; // ユーティリティをインポート
+import { fromContractValue, toContractValue } from "@/lib/utils"; // ユーティリティをインポート
+import { cn } from "@/lib/utils";
 // Sui SDK インポート
 import {
 	useCurrentAccount,
 	useSignAndExecuteTransaction,
 	useSuiClient, // useSuiClient をインポート
 } from "@mysten/dapp-kit";
-import { Transaction } from "@mysten/sui/transactions"; // Transaction をインポート
+import { Transaction, coinWithBalance } from "@mysten/sui/transactions"; // Transaction とcoinWithBalanceをインポート
 
 // フォームのバリデーションスキーマ
 const superchat_form_schema = z.object({
-	amount: z.number().min(0).max(10),
+	amount: z
+		.number()
+		.nonnegative({ message: "Amount must be a non-negative number." }),
+	coinTypeArg: z
+		.string()
+		.refine((value) => SUPPORTED_COINS.some((coin) => coin.typeArg === value), {
+			message: "Please select a supported coin type.",
+		}),
 	recipient_address: z
 		.string()
 		.min(42, {
@@ -93,18 +93,10 @@ interface WalletError extends Error {
 	name: string;
 }
 
-// スーパーチャット金額のオプション
-const amount_options = [
-	{ value: 0, label: "No tips", color: "bg-yellow-500" },
-	{ value: 1, label: "1 SUI", color: "bg-yellow-500" },
-	{ value: 3, label: "3 SUI", color: "bg-yellow-500" },
-	{ value: 5, label: "5 SUI", color: "bg-yellow-500" },
-	{ value: 10, label: "10 SUI", color: "bg-yellow-500" },
-];
-
 // デフォルトのフォーム値
 const default_values: Partial<SuperchatFormValues> = {
 	amount: 0,
+	coinTypeArg: SUPPORTED_COINS[0].typeArg, // デフォルトはSUI
 	recipient_address: "",
 	display_name: "",
 	message: "",
@@ -128,6 +120,28 @@ interface SuperchatFormProps {
 	 * 初期受取人ウォレットアドレス
 	 */
 	initial_recipient_address?: string;
+
+	/**
+	 * コンパクトモードを有効にするかどうか
+	 * (レイアウト調整用)
+	 */
+	compact_mode?: boolean;
+
+	/**
+	 * 統合UIモードを有効にするかどうか
+	 * コメントリストと統合表示する場合はtrue
+	 */
+	integrated_ui?: boolean;
+
+	/**
+	 * Tipモード変更時のコールバック関数
+	 */
+	on_tip_mode_change?: (has_tip: boolean) => void;
+
+	/**
+	 * 高さ変更時のコールバック関数
+	 */
+	on_height_change?: (height: number) => void;
 }
 
 /**
@@ -139,9 +153,14 @@ interface SuperchatFormProps {
 export function SuperchatForm({
 	on_send_success,
 	initial_recipient_address = "",
+	compact_mode = false,
+	integrated_ui = false,
+	on_tip_mode_change,
+	on_height_change,
 }: SuperchatFormProps = {}) {
-	// 確認モード状態管理
-	const [confirm_mode, set_confirm_mode] = useState(false);
+	// 確認モード状態管理は不要になったため削除
+	// Tipの有無を管理するステート
+	const [has_tip, set_has_tip] = useState(false);
 
 	// WebSocketコンテキストを取得
 	const { actions } = useWebSocket();
@@ -150,6 +169,8 @@ export function SuperchatForm({
 	const { username, setUsername } = useUser();
 	// 名前入力後の自動保存用タイマー参照
 	const debouncedNameUpdate = useRef<NodeJS.Timeout | null>(null);
+	// フォーム全体の参照
+	const formRef = useRef<HTMLFormElement>(null);
 
 	// Suiクライアントとウォレット接続ステータスを取得
 	const suiClient = useSuiClient(); // suiClient を取得
@@ -181,298 +202,259 @@ export function SuperchatForm({
 		}
 	}, [username, form]);
 
+	// Tipモード変更通知
+	useEffect(() => {
+		if (on_tip_mode_change) {
+			on_tip_mode_change(has_tip);
+		}
+	}, [has_tip, on_tip_mode_change]);
+
+	// 高さ変更を通知する関数
+	const notifyHeightChange = useCallback(() => {
+		if (on_height_change && formRef.current) {
+			on_height_change(formRef.current.offsetHeight);
+		}
+	}, [on_height_change]);
+
+	// テキストエリアの高さが変更されたときに親コンポーネントに通知
+	const handleTextareaResize = useCallback(
+		(e: React.FormEvent<HTMLTextAreaElement>) => {
+			const target = e.target as HTMLTextAreaElement;
+			// 高さをリセットしてスクロールの高さに合わせる
+			target.style.height = "auto";
+			const newHeight = Math.min(target.scrollHeight, 96); // 最大高さを96pxに制限
+			target.style.height = `${newHeight}px`;
+
+			// 少し遅延させて高さ変更を通知（DOM更新後に実行）
+			setTimeout(notifyHeightChange, 0);
+		},
+		[notifyHeightChange],
+	);
+
+	// Tipモード変更時に高さ変更を通知
+	useEffect(() => {
+		notifyHeightChange();
+	}, [notifyHeightChange]);
+
+	// Tipモードが変更されたときにも高さを通知
+	useEffect(() => {
+		if (on_tip_mode_change) {
+			on_tip_mode_change(has_tip);
+		}
+		// Tipモードが変わったら高さも変わるので通知
+		notifyHeightChange();
+	}, [has_tip, on_tip_mode_change, notifyHeightChange]);
+
 	/**
-	 * フォーム送信ハンドラー
+	 * Tipmodeなしで通常メッセージを送信する処理
 	 *
 	 * @param values - フォームの入力値
 	 */
-	async function on_submit(values: SuperchatFormValues) {
-		// チップ金額が0より大きい場合のみウォレット接続チェック
-		if (values.amount > 0 && !currentAccount) {
-			toast.error("Wallet Connection Required", {
-				description: (
-					<div className="mt-2 flex flex-col gap-2">
-						<p>Wallet connection is required to send SUI tips.</p>
-						<p>
-							Please connect your wallet using the "Connect Wallet" button at
-							the top.
-						</p>
-						<p>
-							Alternatively, you can change the amount to "No tips" to send a
-							message without wallet connection.
-						</p>
-						<Button
-							variant="outline"
-							size="sm"
-							className="mt-1"
-							onClick={() => {
-								form.setValue("amount", 0);
-								toast.success("Amount changed to No tips", {
-									description:
-										"You can now send your message without wallet connection",
-								});
-							}}
-						>
-							Change to No tips
-						</Button>
-					</div>
-				),
-				duration: 10000,
-			});
-			set_confirm_mode(false);
-			return;
-		}
-
-		if (!confirm_mode) {
-			// 確認モードに切り替え
-			set_confirm_mode(true);
-			return;
-		}
-
-		// チップ金額が0の場合、WebSocketでチャットメッセージとして直接送信
-		if (values.amount === 0) {
-			console.log("Sending as normal chat message (no tip)");
-
-			try {
-				// チャットメッセージとして送信
-				actions.sendChatMessage(values.display_name, values.message || "");
-
-				toast.success("Message sent successfully!");
-
-				// コールバック関数があれば実行
-				on_send_success?.(
-					values.amount,
-					values.display_name,
-					values.message || "",
-				);
-
-				// フォームをリセット
-				form.reset({
-					...default_values,
-					recipient_address: values.recipient_address,
-				});
-
-				// 確認モードをリセット
-				set_confirm_mode(false);
-
-				return;
-			} catch (error) {
-				console.error("Failed to send chat message:", error);
-				toast.error("Failed to send message", {
-					description: error instanceof Error ? error.message : String(error),
-				});
-				// 確認モードをリセット
-				set_confirm_mode(false);
-				return;
-			}
-		}
-
-		// === ステップ3: PTB構築 ===
+	async function sendNormalMessage(values: SuperchatFormValues) {
 		try {
-			// ウォレット接続チェック (念のため)
+			// チャットメッセージとして送信
+			actions.sendChatMessage(values.display_name, values.message || "");
+
+			toast.success("Message sent successfully!");
+
+			// コールバック関数があれば実行
+			on_send_success?.(
+				0, // 金額は0
+				values.display_name,
+				values.message || "",
+			);
+
+			// フォームをリセット
+			form.reset({
+				...default_values,
+				recipient_address: values.recipient_address,
+				display_name: values.display_name,
+			});
+		} catch (error) {
+			console.error("Failed to send chat message:", error);
+			toast.error("Failed to send message", {
+				description: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+
+	/**
+	 * スーパーチャットを送信する処理
+	 *
+	 * @param values - フォームの入力値
+	 */
+	async function sendSuperchat(values: SuperchatFormValues) {
+		try {
+			// ウォレット接続チェック
 			if (!currentAccount) {
 				toast.error("Wallet Connection Required", {
-					description: "Please connect your wallet to send SUI tips.",
+					description: "Please connect your wallet to send tips.",
 				});
-				set_confirm_mode(false);
 				return;
 			}
 
-			// 1. SUI → MIST 換算
-			const suiAmountMist = suiToMist(values.amount);
-			const GAS_BUDGET = BigInt(DEFAULT_GAS_BUDGET);
+			// 選択されたコインタイプの取得
+			const selectedCoinType = values.coinTypeArg;
+			const selectedCoin = SUPPORTED_COINS.find(
+				(c) => c.typeArg === selectedCoinType,
+			);
 
-			// 2. すべての SUI コインを取得（ページング対応）
-			let nextCursor: string | null | undefined = null;
-			const allCoins: Awaited<ReturnType<typeof suiClient.getCoins>>["data"] =
-				[];
-			do {
-				const page = await suiClient.getCoins({
+			if (!selectedCoin) {
+				toast.error("Invalid Coin Type", {
+					description: "Please select a valid coin type.",
+				});
+				return;
+			}
+
+			// SUIコインタイプの定義
+			const SUI_TYPE_ARG = SUPPORTED_COINS.find(
+				(coin) => coin.symbol === "SUI",
+			)?.typeArg;
+
+			if (!SUI_TYPE_ARG) {
+				toast.error("SUI coin type not found in supported coins", {
+					description: "Configuration error: SUI coin type is missing.",
+				});
+				return;
+			}
+
+			// 1. 金額をコントラクト用の単位に変換
+			const contractAmount = toContractValue(values.amount, selectedCoinType);
+
+			// 2. 残高チェック
+			const balance = await suiClient.getBalance({
+				owner: currentAccount.address,
+				coinType: selectedCoinType,
+			});
+
+			// SUIの場合はガス代も考慮
+			const requiredBalance =
+				selectedCoinType === SUI_TYPE_ARG
+					? BigInt(contractAmount) + BigInt(DEFAULT_GAS_BUDGET)
+					: BigInt(contractAmount);
+
+			if (BigInt(balance.totalBalance) < requiredBalance) {
+				const errorMessage =
+					selectedCoinType === SUI_TYPE_ARG
+						? `Need at least ${fromContractValue(contractAmount, selectedCoinType)} ${selectedCoin.symbol} plus gas fee`
+						: `Need at least ${fromContractValue(contractAmount, selectedCoinType)} ${selectedCoin.symbol}`;
+
+				toast.error(`Insufficient ${selectedCoin.symbol} balance`, {
+					description: errorMessage,
+				});
+				return;
+			}
+
+			// ガス用のSUI残高チェック（SUI以外の場合）
+			if (selectedCoinType !== SUI_TYPE_ARG) {
+				const suiBalance = await suiClient.getBalance({
 					owner: currentAccount.address,
 					coinType: SUI_TYPE_ARG,
-					limit: 50,
-					cursor: nextCursor,
 				});
-				allCoins.push(...page.data);
-				nextCursor = page.nextCursor;
-			} while (nextCursor);
 
-			// 2-1. 合計残高チェック
-			const totalBalance = allCoins.reduce(
-				(a, c) => a + BigInt(c.balance),
-				BigInt(0),
-			);
-			if (totalBalance < suiAmountMist + GAS_BUDGET) {
-				toast.error("Insufficient SUI balance", {
-					description: `Need at least ${mistToSui(
-						suiAmountMist + GAS_BUDGET,
-					)} SUI including gas.`,
-				});
-				set_confirm_mode(false);
-				return;
+				if (BigInt(suiBalance.totalBalance) < BigInt(DEFAULT_GAS_BUDGET)) {
+					toast.error("Insufficient SUI balance for gas", {
+						description: `Need at least ${fromContractValue(DEFAULT_GAS_BUDGET, SUI_TYPE_ARG)} SUI for gas.`,
+					});
+					return;
+				}
 			}
-
-			// 2-2. ガス用コインを選定（ガス予算をまかなえる最小のコイン）
-			allCoins.sort((a, b) => {
-				const balanceA = BigInt(a.balance);
-				const balanceB = BigInt(b.balance);
-				return balanceB > balanceA ? 1 : balanceB < balanceA ? -1 : 0;
-			});
-			const gasCoin =
-				allCoins.find((c) => BigInt(c.balance) >= GAS_BUDGET) || allCoins[0];
-
-			// ガスコインを除いた残りを支払い用候補に
-			const coinsForPayment = allCoins.filter(
-				(c) => c.coinObjectId !== gasCoin.coinObjectId,
-			);
-
-			// primary＝支払い元コイン
-			const primary = coinsForPayment[0] ?? gasCoin; // 1 枚しか無ければ同一
 
 			// 3. Transaction Block 構築
 			const tx = new Transaction();
+			tx.setSender(currentAccount.address);
 
-			// 3-1. ガスコイン固定（digest / version は getCoins のレスポンスに含まれる）
-			tx.setGasPayment([
-				{
-					objectId: gasCoin.coinObjectId,
-					digest: gasCoin.digest,
-					version: gasCoin.version,
-				},
-			]);
-			tx.setGasBudget(DEFAULT_GAS_BUDGET);
+			// coinWithBalance が自動でSplit/Mergeを注入
+			const paymentCoin = coinWithBalance({
+				balance: BigInt(contractAmount),
+				type: selectedCoinType,
+				// SUI送信時は同じコインをガスにも使用可能に
+				useGasCoin: selectedCoinType === SUI_TYPE_ARG,
+			});
 
-			// 3-2. ガスコインと別オブジェクトなら merge で残高集約
-			const coinsToMerge = coinsForPayment.filter(
-				(c) => c.coinObjectId !== primary.coinObjectId,
-			);
-			if (
-				primary.coinObjectId !== gasCoin.coinObjectId &&
-				coinsToMerge.length
-			) {
-				tx.mergeCoins(
-					tx.object(primary.coinObjectId),
-					coinsToMerge.map((c) => tx.object(c.coinObjectId)),
-				);
-			}
-
-			// 4. 支払い額を split
-			const sourceForSplit =
-				primary.coinObjectId === gasCoin.coinObjectId
-					? tx.gas // 1 枚しかないケース
-					: tx.object(primary.coinObjectId);
-
-			const [paymentCoin] = tx.splitCoins(sourceForSplit, [
-				tx.pure.u64(suiAmountMist),
-			]);
-
-			// 5. Move コントラクト呼び出し
+			// Moveコントラクト呼び出し
 			tx.moveCall({
 				target: `${PACKAGE_ID}::payment::process_superchat_payment`,
 				arguments: [
 					tx.object(PAYMENT_CONFIG_ID),
 					paymentCoin,
-					tx.pure.u64(suiAmountMist),
+					tx.pure.u64(contractAmount),
 					tx.pure.address(values.recipient_address),
 				],
-				typeArguments: [SUI_TYPE_ARG],
+				typeArguments: [selectedCoinType],
 			});
-			// === ステップ4: トランザクション実行 ===
+
+			// ガス上限設定
+			tx.setGasBudget(DEFAULT_GAS_BUDGET);
+
+			// 4. トランザクション実行
 			signAndExecuteTransaction(
 				{
 					transaction: tx,
 				},
 				{
-					onSuccess: async (result) => {
-						console.log("Transaction broadcast successful:", result);
-						const digest = result.digest;
+					onSettled: (result, error) => {
+						// エラー処理
+						if (error) {
+							console.error("Transaction failed:", error);
+							const wallet_error = error as WalletError;
 
-						try {
-							// トランザクションの詳細と実行結果を取得
-							const txDetails = await suiClient.getTransactionBlock({
-								digest: digest,
-								options: { showEffects: true },
-							});
-
-							// トランザクションが成功したか確認
-							if (txDetails.effects?.status.status === "success") {
-								console.log("Transaction successfully executed on chain.");
-								// WebSocketを使ってスーパーチャットメッセージを送信
-								actions.sendSuperchatMessage(
-									values.display_name,
-									values.message || "",
-									{
-										amount: values.amount,
-										tx_hash: digest,
-										wallet_address: currentAccount.address,
-									},
-								);
-
-								toast.success("Super Chat sent successfully!", {
-									description: `Transaction digest: ${digest.substring(0, 8)}...`,
-								});
-
-								// コールバック関数があれば実行
-								on_send_success?.(
-									values.amount,
-									values.display_name,
-									values.message || "",
-									digest,
-								);
-
-								// フォームをリセット
-								form.reset({
-									...default_values,
-									recipient_address: values.recipient_address,
-								});
-
-								// 確認モードをリセット
-								set_confirm_mode(false);
-							} else {
-								// トランザクション失敗時の処理 (ガス不足など)
-								console.warn(
-									"Transaction was not successful on chain:",
-									txDetails.effects?.status.error,
-								);
-								toast.error("Super Chat failed", {
-									description:
-										txDetails.effects?.status.error ||
-										"Transaction execution failed.",
-								});
-								// 確認モードをリセット
-								set_confirm_mode(false);
+							let error_message = "Unknown error occurred.";
+							if (wallet_error.code === 4001) {
+								// ユーザーによるキャンセル
+								error_message = "Transaction was rejected by the user.";
+							} else if (wallet_error.message) {
+								error_message = wallet_error.message;
 							}
-						} catch (error) {
-							console.error(
-								"Failed to get transaction details or process success:",
-								error,
-							);
-							toast.error("Super Chat processing failed", {
-								description:
-									error instanceof Error ? error.message : String(error),
+
+							toast.error("Super Chat failed", {
+								description: error_message,
 							});
-							// 確認モードをリセット
-							set_confirm_mode(false);
-						}
-					},
-					onError: (error) => {
-						console.error("Transaction failed:", error);
-						const wallet_error = error as WalletError;
-
-						let error_message = "Unknown error occurred.";
-						if (wallet_error.code === 4001) {
-							// MetaMaskのユーザーキャンセルエラーコード
-							error_message = "Transaction was rejected by the user.";
-						} else if (wallet_error.message) {
-							error_message = wallet_error.message;
+							return;
 						}
 
-						toast.error("Super Chat failed", {
-							description: error_message,
-						});
+						// 結果処理
+						if (result?.digest) {
+							console.log("Transaction successfully executed on chain.");
+							const digest = result.digest;
 
-						// 確認モードをリセット
-						set_confirm_mode(false);
+							// WebSocketでスーパーチャットメッセージを送信
+							actions.sendSuperchatMessage(
+								values.display_name,
+								values.message || "",
+								{
+									amount: values.amount,
+									coin: selectedCoin.symbol,
+									tx_hash: digest,
+									wallet_address: currentAccount.address,
+								},
+							);
+
+							toast.success("Super Chat sent successfully!", {
+								description: `Transaction digest: ${digest.substring(0, 8)}...`,
+							});
+
+							// コールバック関数があれば実行
+							on_send_success?.(
+								values.amount,
+								values.display_name,
+								values.message || "",
+								digest,
+							);
+
+							// フォームをリセット
+							form.reset({
+								...default_values,
+								recipient_address: values.recipient_address,
+								display_name: values.display_name,
+							});
+						} else {
+							// トランザクション失敗時の処理
+							console.warn("Transaction was not successful on chain");
+							toast.error("Super Chat failed", {
+								description: "Transaction execution failed.",
+							});
+						}
 					},
 				},
 			);
@@ -481,265 +463,228 @@ export function SuperchatForm({
 			toast.error("Payment preparation failed", {
 				description: error instanceof Error ? error.message : String(error),
 			});
-			// 確認モードをリセット
-			set_confirm_mode(false);
 		}
 	}
 
-	// 確認モードキャンセル処理
-	function handle_cancel() {
-		set_confirm_mode(false);
+	/**
+	 * フォーム送信ハンドラー
+	 * @param values - フォームの入力値
+	 */
+	async function on_submit(values: SuperchatFormValues) {
+		// チップ金額が0または非Tip選択状態のチェック
+		const sendTip = has_tip && values.amount > 0;
+
+		// Tipありで金額が0より大きい場合のみウォレット接続チェック
+		if (sendTip && !currentAccount) {
+			toast.error("Wallet Connection Required", {
+				description: (
+					<div className="mt-2 flex flex-col gap-2">
+						<p>Wallet connection is required to send tips.</p>
+						<p>
+							Please connect your wallet using the "Connect Wallet" button at
+							the top.
+						</p>
+						<p>
+							Alternatively, you can disable tipping to send a message without
+							wallet connection.
+						</p>
+						<Button
+							variant="outline"
+							size="sm"
+							className="mt-1"
+							onClick={() => {
+								set_has_tip(false);
+								form.setValue("amount", 0);
+								toast.success("Tip removed", {
+									description:
+										"You can now send your message without wallet connection",
+								});
+							}}
+						>
+							Disable Tip
+						</Button>
+					</div>
+				),
+				duration: 10000,
+			});
+			return;
+		}
+
+		// 確認モードなしで直接送信処理へ進む
+		// Tipなしの場合、WebSocketでチャットメッセージとして直接送信
+		if (!sendTip) {
+			await sendNormalMessage(values);
+		} else {
+			// Tipありの場合、スーパーチャットとして送信
+			await sendSuperchat(values);
+		}
 	}
 
-	// 現在選択されている金額
-	const selected_amount = form.watch("amount");
+	// ユーザー名を更新する関数
+	function updateUsername(name: string) {
+		if (debouncedNameUpdate.current) {
+			clearTimeout(debouncedNameUpdate.current);
+		}
+		debouncedNameUpdate.current = setTimeout(() => {
+			setUsername(name);
+		}, 1000);
+	}
 
-	// 選択されている金額のオプションを取得
-	const selected_option = amount_options.find(
-		(option) => option.value === selected_amount,
-	);
-
+	// UIは常に統合UIを使用（non-integrated UIは使用されていないため削除）
 	return (
-		<Card className="w-full max-w-md mx-auto">
-			<CardHeader>
-				<CardTitle>Send a Super Chat</CardTitle>
-				<CardDescription>
-					Send a message and optionally SUI directly to the streamer
-				</CardDescription>
-			</CardHeader>
-			<CardContent>
-				<Form {...form}>
-					<form onSubmit={form.handleSubmit(on_submit)} className="space-y-6">
-						<FormField
-							control={form.control}
-							name="amount"
-							render={({ field }) => (
-								<FormItem className="space-y-3">
-									<FormLabel>Amount</FormLabel>
-									<FormControl>
-										<div className="space-y-2">
-											{/* No tips ボタン */}
-											<Button
-												key={amount_options[0].value}
-												type="button"
-												variant={
-													amount_options[0].value === field.value
-														? "default"
-														: "outline"
-												}
-												className={`w-full ${
-													amount_options[0].value === field.value
-														? `${amount_options[0].color} text-white`
-														: ""
-												}`}
-												onClick={() => field.onChange(amount_options[0].value)}
-											>
-												<Coins className="mr-2 h-4 w-4" />
-												{amount_options[0].label}
-											</Button>
-
-											{/* SUI金額ボタン */}
-											<div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-												{amount_options.slice(1).map((option) => (
-													<Button
-														key={option.value}
-														type="button"
-														variant={
-															option.value === field.value
-																? "default"
-																: "outline"
-														}
-														className={
-															option.value === field.value
-																? `${option.color} text-white`
-																: ""
-														}
-														onClick={() => {
-															field.onChange(option.value);
-
-															// 金額変更時のガイダンス表示
-															if (option.value > 0 && !currentAccount) {
-																toast.info("Wallet Connection Required", {
-																	description:
-																		"Please connect your wallet using the 'Connect Wallet' button at the top to send SUI tips.",
-																	duration: 5000,
-																});
-															}
-														}}
-													>
-														<Coins className="mr-2 h-4 w-4" />
-														{option.label}
-													</Button>
-												))}
-											</div>
-										</div>
-									</FormControl>
-									<FormDescription>
-										{form.watch("amount") > 0 ? (
-											<span
-												className={
-													!currentAccount ? "text-amber-500 font-medium" : ""
-												}
-											>
-												{!currentAccount
-													? "Wallet connection required for sending SUI"
-													: "SUI will be sent with your message"}
-											</span>
-										) : (
-											"Send message only (no wallet connection needed)"
-										)}
-									</FormDescription>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-
-						<FormField
-							control={form.control}
-							name="recipient_address"
-							render={({ field }) => (
-								<FormItem>
-									<FormLabel>Recipient Address</FormLabel>
-									<FormControl>
-										<Input
-											placeholder="Enter streamer's wallet address"
-											{...field}
-											disabled={!!initial_recipient_address}
-											className={
-												initial_recipient_address
-													? "bg-muted cursor-not-allowed"
-													: ""
-											}
-										/>
-									</FormControl>
-									<FormDescription>
-										{initial_recipient_address
-											? "The streamer's wallet address (automatically filled)"
-											: "The wallet address of the streamer"}
-									</FormDescription>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-
+		<div className="h-full flex flex-col justify-end">
+			<Form {...form}>
+				<form
+					ref={formRef}
+					onSubmit={form.handleSubmit(on_submit)}
+					className={cn(
+						has_tip ? "p-1 pb-2 space-y-1" : "px-1 py-1.5 space-y-0",
+					)}
+				>
+					<div
+						className={cn(
+							"flex items-center justify-between",
+							has_tip ? "mb-0.5" : "",
+						)}
+					>
 						<FormField
 							control={form.control}
 							name="display_name"
 							render={({ field }) => (
-								<FormItem>
-									<FormLabel>Display Name</FormLabel>
-									<FormControl>
-										<Input
-											placeholder="Your display name"
-											{...field}
-											onChange={(e) => {
-												field.onChange(e);
-												// ユーザー名の更新（debounce処理）
-												if (debouncedNameUpdate.current) {
-													clearTimeout(debouncedNameUpdate.current);
-												}
-												debouncedNameUpdate.current = setTimeout(() => {
-													setUsername(e.target.value);
-													toast.success("Display name saved", {
-														description:
-															"This name will be used for your future messages",
-														duration: 2000,
-													});
-												}, 1000);
-											}}
-										/>
-									</FormControl>
-									<FormDescription>
-										This name will be displayed with your message. Changes will
-										be automatically saved.
-									</FormDescription>
+								<FormItem className="flex-grow mr-1">
+									<Input
+										placeholder="表示名"
+										{...field}
+										className="text-xs h-6"
+										onChange={(e) => {
+											field.onChange(e);
+											updateUsername(e.target.value);
+										}}
+									/>
 									<FormMessage />
 								</FormItem>
 							)}
 						/>
 
+						<div className="flex items-center space-x-0.5 bg-secondary rounded-lg p-0.5">
+							<button
+								type="button"
+								onClick={() => set_has_tip(false)}
+								className={`px-1.5 py-0.5 text-xs rounded-md transition-colors ${
+									!has_tip
+										? "bg-card shadow-sm"
+										: "text-muted-foreground hover:bg-secondary/80"
+								}`}
+							>
+								NoTip
+							</button>
+							<button
+								type="button"
+								onClick={() => set_has_tip(true)}
+								className={`px-1.5 py-0.5 text-xs rounded-md transition-colors ${
+									has_tip
+										? "bg-card shadow-sm"
+										: "text-muted-foreground hover:bg-secondary/80"
+								}`}
+							>
+								SuperChat
+							</button>
+						</div>
+					</div>
+
+					{has_tip && (
+						<div className="flex items-center gap-1 mb-0.5">
+							<FormField
+								control={form.control}
+								name="coinTypeArg"
+								render={({ field: coinField }) => (
+									<FormItem className="flex-grow-0">
+										<Select
+											value={coinField.value}
+											onValueChange={coinField.onChange}
+										>
+											<SelectTrigger className="w-16 text-xs h-6">
+												<SelectValue placeholder="Coin" />
+											</SelectTrigger>
+											<SelectContent>
+												{SUPPORTED_COINS.map((coin) => (
+													<SelectItem key={coin.typeArg} value={coin.typeArg}>
+														{coin.symbol}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
+
+							<FormField
+								control={form.control}
+								name="amount"
+								render={({ field: { onChange, value, ...field } }) => (
+									<FormItem className="flex-grow">
+										<Input
+											type="number"
+											placeholder="金額"
+											step="any"
+											min="0"
+											{...field}
+											value={value === 0 ? "" : value}
+											onChange={(e) => {
+												const val =
+													e.target.value === ""
+														? 0
+														: Number.parseFloat(e.target.value);
+												onChange(val);
+											}}
+											className="text-xs h-6"
+										/>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
+						</div>
+					)}
+
+					<FormField
+						control={form.control}
+						name="recipient_address"
+						render={({ field }) => (
+							<FormItem className="hidden">
+								<Input {...field} type="hidden" />
+							</FormItem>
+						)}
+					/>
+
+					<div className="flex items-start">
 						<FormField
 							control={form.control}
 							name="message"
 							render={({ field }) => (
-								<FormItem>
-									<FormLabel>Message (Optional)</FormLabel>
-									<FormControl>
-										<Input placeholder="Message to the streamer" {...field} />
-									</FormControl>
-									<FormDescription>
-										Message shown on stream (up to 100 characters)
-									</FormDescription>
+								<FormItem className="flex-grow">
+									<Textarea
+										placeholder="メッセージを入力..."
+										{...field}
+										className="text-xs min-h-6 max-h-24 py-1 px-3 resize-none overflow-hidden"
+										style={{ height: "auto" }}
+										onInput={handleTextareaResize}
+									/>
 									<FormMessage />
 								</FormItem>
 							)}
 						/>
-
-						{confirm_mode && (
-							<div className="p-4 border rounded-md bg-secondary">
-								<h4 className="font-medium mb-2">Confirm</h4>
-								<p className="text-sm mb-4">
-									Are you sure you want to send the following?
-								</p>
-
-								<div className="grid grid-cols-3 gap-2 text-sm mb-1">
-									<span className="font-medium">Amount:</span>
-									<span className="col-span-2">{selected_option?.label}</span>
-								</div>
-
-								<div className="grid grid-cols-3 gap-2 text-sm mb-1">
-									<span className="font-medium">To:</span>
-									<span className="col-span-2 font-mono text-xs break-all">
-										{form.getValues("recipient_address")}
-									</span>
-								</div>
-
-								<div className="grid grid-cols-3 gap-2 text-sm mb-1">
-									<span className="font-medium">Display Name:</span>
-									<span className="col-span-2">
-										{form.getValues("display_name")}
-									</span>
-								</div>
-
-								{form.getValues("message") && (
-									<div className="grid grid-cols-3 gap-2 text-sm">
-										<span className="font-medium">Message:</span>
-										<span className="col-span-2">
-											{form.getValues("message")}
-										</span>
-									</div>
-								)}
-							</div>
-						)}
-
-						<div className="flex gap-2">
-							{confirm_mode ? (
-								<>
-									<Button
-										type="button"
-										variant="outline"
-										onClick={handle_cancel}
-										className="flex-1"
-									>
-										Cancel
-									</Button>
-									<Button
-										type="submit"
-										className={`flex-1 ${selected_option?.color} text-white`}
-										disabled={isPending}
-									>
-										{isPending ? "Sending..." : "Send"}
-									</Button>
-								</>
-							) : (
-								<Button type="submit" className="w-full">
-									Confirm
-								</Button>
-							)}
-						</div>
-					</form>
-				</Form>
-			</CardContent>
-		</Card>
+						<Button
+							type="submit"
+							className="ml-1 h-6"
+							disabled={isPending}
+							size="sm"
+						>
+							{isPending ? "送信中..." : "送信"}
+						</Button>
+					</div>
+				</form>
+			</Form>
+		</div>
 	);
 }

@@ -17,6 +17,8 @@ pub struct StreamerInfo {
     obs_url: String,
     /// 配信者のSUIウォレットアドレス
     wallet_address: String,
+    /// YouTube動画ID (設定されている場合)
+    youtube_video_id: Option<String>,
 }
 
 /// ## ウォレットアドレスを設定する Tauri コマンド
@@ -36,8 +38,6 @@ pub fn set_wallet_address(
     address: String,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    println!("Setting wallet address to: {}", address);
-
     let trimmed_address = address.trim();
 
     // --- SUIウォレットアドレス形式のバリデーション ---
@@ -71,7 +71,6 @@ pub fn set_wallet_address(
         eprintln!("Failed to emit wallet_address_updated event: {}", e);
         "Failed to notify frontend about wallet address update".to_string()
     })?;
-    println!("Wallet address saved and event 'wallet_address_updated' emitted.");
 
     Ok(())
 }
@@ -89,8 +88,6 @@ pub fn set_wallet_address(
 /// - `Result<{ wallet_address: Option<String> }, String>`: 成功した場合はウォレットアドレスを含むオブジェクト
 #[command]
 pub fn get_wallet_address(app_state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    println!("Getting wallet address...");
-
     // ウォレットアドレスを取得
     let wallet_addr_guard = app_state
         .wallet_address
@@ -132,6 +129,13 @@ pub fn get_streamer_info(app_state: State<'_, AppState>) -> Result<StreamerInfo,
         .ok_or_else(|| "Wallet address is not set. Please configure it first.".to_string())?
         .clone();
 
+    // --- YouTube動画IDを取得 ---
+    let youtube_id_guard = app_state
+        .youtube_video_id
+        .lock()
+        .map_err(|_| "Failed to lock YouTube video ID mutex".to_string())?;
+    let youtube_video_id = youtube_id_guard.clone();
+
     // --- WebSocket URLをAppStateから構築 ---
     let host_guard = app_state
         .host
@@ -169,5 +173,6 @@ pub fn get_streamer_info(app_state: State<'_, AppState>) -> Result<StreamerInfo,
         ws_url,
         obs_url,
         wallet_address,
+        youtube_video_id,
     })
 }

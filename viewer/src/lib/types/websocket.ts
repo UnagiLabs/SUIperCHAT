@@ -21,6 +21,10 @@ export enum MessageType {
 	/** 接続状態の更新 */
 	CONNECTION_STATUS = "connection_status",
 	DISCONNECTED = "DISCONNECTED",
+	/** 過去のメッセージを要求 */
+	GET_HISTORY = "GET_HISTORY",
+	/** 過去のメッセージデータ */
+	HISTORY_DATA = "HISTORY_DATA",
 }
 
 /**
@@ -30,6 +34,8 @@ export enum MessageType {
 export interface SuperchatData {
 	/** 送金額 (SUI単位) */
 	amount: number;
+	/** 使用されたコインの通貨シンボル (例: "SUI", "USDC") */
+	coin: string;
 	/** トランザクションハッシュ */
 	tx_hash: string;
 	/** 送金者のウォレットアドレス */
@@ -136,6 +142,14 @@ export interface WebSocketState {
 	retryCount: number;
 	/** メッセージ履歴 */
 	messages: (ChatMessage | SuperchatMessage)[];
+	/** 過去ログ読み込み中フラグ */
+	isLoadingHistory: boolean;
+	/** さらに過去のログがあるフラグ */
+	hasMoreHistory: boolean;
+	/** 最も古いメッセージのタイムスタンプ */
+	oldestMessageTimestamp: number | null;
+	/** 過去ログ取得時のエラー */
+	historyError: string | null;
 }
 
 /**
@@ -155,6 +169,8 @@ export interface WebSocketContextActions {
 		message: string,
 		superchatData: SuperchatData,
 	) => void;
+	/** 過去ログを要求する関数 */
+	requestHistory: (limit?: number) => void;
 }
 
 /**
@@ -166,4 +182,34 @@ export interface WebSocketContextType {
 	state: WebSocketState;
 	/** WebSocketの操作関数 */
 	actions: WebSocketContextActions;
+}
+
+/**
+ * 過去ログリクエストの型
+ */
+export interface GetHistoryPayload {
+	/** 取得するメッセージの最大数 */
+	limit?: number;
+	/** このタイムスタンプより前のメッセージを取得 */
+	before_timestamp?: number;
+}
+
+/**
+ * 過去ログデータの型
+ */
+export interface HistoryDataPayload {
+	/** 過去のメッセージ配列 */
+	messages: (ChatMessage | SuperchatMessage)[];
+	/** さらに古いメッセージがあるかどうか */
+	has_more: boolean;
+}
+
+/**
+ * 過去ログデータメッセージの型
+ */
+export interface HistoryDataMessage extends BaseMessage {
+	/** メッセージの種類（履歴データ） */
+	type: MessageType.HISTORY_DATA;
+	/** 履歴データペイロード */
+	payload: HistoryDataPayload;
 }

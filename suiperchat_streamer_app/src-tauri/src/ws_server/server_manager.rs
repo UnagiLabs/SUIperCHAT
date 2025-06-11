@@ -418,37 +418,23 @@ async fn run_servers(
         match crate::ws_server::ip_utils::get_external_ip(&app_handle_clone).await {
             Ok(ip) => {
                 // 成功した場合、IPをAppStateに保存
-                println!("[Test Log] 外部IPアドレスの取得に成功: {}", ip); // Test Log
                 {
                     let mut external_ip_guard = app_state.external_ip.lock().unwrap();
                     *external_ip_guard = Some(ip);
-                    println!(
-                        "[Test Log] AppState.external_ip set to: {:?}",
-                        *external_ip_guard
-                    ); // Test Log
                 }
 
                 // 失敗フラグをfalseに設定
                 {
                     let mut failed_guard = app_state.global_ip_fetch_failed.lock().unwrap();
                     *failed_guard = false;
-                    println!(
-                        "[Test Log] AppState.global_ip_fetch_failed set to: {}",
-                        *failed_guard
-                    ); // Test Log
                 }
 
                 // CGNAT判定を実行
                 match crate::ws_server::ip_utils::check_cgnat(ip).await {
                     Ok(is_cgnat) => {
-                        println!("[Test Log] CGNAT判定成功: is_cgnat = {}", is_cgnat); // Test Log
-                                                                                       // CGNAT判定結果をAppStateに保存
+                        // CGNAT判定結果をAppStateに保存
                         let mut cgnat_guard = app_state.cgnat_detected.lock().unwrap();
                         *cgnat_guard = is_cgnat;
-                        println!(
-                            "[Test Log] AppState.cgnat_detected set to: {}",
-                            *cgnat_guard
-                        ); // Test Log
 
                         if is_cgnat {
                             println!("警告: CGNAT環境が検出されました。WebSocketサーバーへの外部アクセスが制限される可能性があります。");
@@ -458,39 +444,24 @@ async fn run_servers(
                     }
                     Err(e) => {
                         // CGNAT判定に失敗した場合、警告としてtrueを設定
-                        println!(
-                            "[Test Log] CGNAT判定に失敗: {}. Setting cgnat_detected to true.",
-                            e
-                        ); // Test Log
+                        eprintln!("CGNAT判定に失敗: {}. Setting cgnat_detected to true.", e);
                         let mut cgnat_guard = app_state.cgnat_detected.lock().unwrap();
                         *cgnat_guard = true; // 判定失敗時は安全側に倒してtrueに
-                        println!(
-                            "[Test Log] AppState.cgnat_detected set to: {}",
-                            *cgnat_guard
-                        ); // Test Log
                     }
                 }
             }
             Err(e) => {
                 // 失敗した場合、エラーログを出力し失敗フラグを設定
-                eprintln!("[Test Log] 外部IP取得エラー: {}", e); // Test Log
+                eprintln!("外部IP取得エラー: {}", e);
                 {
                     let mut failed_guard = app_state.global_ip_fetch_failed.lock().unwrap();
                     *failed_guard = true;
-                    println!(
-                        "[Test Log] AppState.global_ip_fetch_failed set to: {}",
-                        *failed_guard
-                    ); // Test Log
                 }
 
                 // IP取得に失敗した場合もCGNAT判定は不明なため警告としてtrueを設定
                 {
                     let mut cgnat_guard = app_state.cgnat_detected.lock().unwrap();
                     *cgnat_guard = true;
-                    println!(
-                        "[Test Log] AppState.cgnat_detected set to: {} (due to IP fetch failure)",
-                        *cgnat_guard
-                    ); // Test Log
                 }
                 println!("外部IP取得に失敗したため、CGNATの有無を判定できません。安全のため、CGNATが存在する可能性があると仮定します。");
             }

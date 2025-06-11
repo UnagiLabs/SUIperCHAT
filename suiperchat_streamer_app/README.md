@@ -19,6 +19,8 @@ SuiperCHAT Streamer App は、SuiperCHAT サービスを利用するストリー
 
 - パソコン (Windows または macOS)
 - インターネット接続
+- Windows では Visual Studio Build Tools（C++ Build Tools）をインストール
+- macOS では Xcode Command Line Tools をインストール
 
 ## セットアップ (使い方)
 
@@ -97,9 +99,10 @@ SuiperCHAT Streamer App をソースコードからビルドしてインスト�
 
 1.  **アプリケーションをビルドします:**
     *   ターミナル（macOS）またはコマンドプロンプト（Windows）で、`suiperchat_streamer_app` ディレクトリにいることを確認し、以下のコマンドをコピーして貼り付け、Enter キーを押して実行します。
-        ```bash
-        npm run tauri build
-        ```
+```bash
+npm run tauri build
+```
+    *   `npm run tauri build` を実行すると、内部で Next.js のビルド (`npm run build`) も自動的に行われます。そのため、`npm run build` を個別に実行する必要はありません。
     *   このコマンドは、アプリケーションのリリース版をビルドします。ビルドには時間がかかる場合があります。
     *   ビルドが成功すると、インストーラーファイルが以下のディレクトリに生成されます。
         *   Windows: `suiperchat_streamer_app/src-tauri/target/release/bundle/msi` または `suiperchat_streamer_app/src-tauri/target/release/bundle/nsis` (`.msi` または `.exe` ファイル)
@@ -235,12 +238,12 @@ To build and install the SuiperCHAT Streamer App from source code, you need to i
 Once you have installed the necessary tools and prepared the source code, you can build and install the application on your computer.
 
 1.  **Build the Application:**
-    *   In your terminal (macOS) or command prompt (Windows), ensure you are in the `suiperchat_streamer_app` directory and copy and paste the following commands, then press Enter to run them.
+    *   In your terminal (macOS) or command prompt (Windows), ensure you are in the `suiperchat_streamer_app` directory and copy and paste the following command, then press Enter to run it.
         ```bash
-        npm run build
         npm run tauri build
         ```
-    *   These commands will build the release version of the application. The build process might take some time.
+    *   Running `npm run tauri build` also triggers the Next.js build step (`npm run build`) automatically, so you do not need to run `npm run build` separately.
+    *   This command will build the release version of the application. The build process might take some time.
     *   If the build is successful, an installer file will be generated in the following directory:
         *   Windows: `suiperchat_streamer_app/src-tauri/target/release/bundle/msi` or `suiperchat_streamer_app/src-tauri/target/release/bundle/nsis` (a `.msi` or `.exe` file)
         *   macOS: `suiperchat_streamer_app/src-tauri/target/release/bundle/dmg` (a `.dmg` file) or `suiperchat_streamer_app/src-tauri/target/release/bundle/macos` (a `.app` file)

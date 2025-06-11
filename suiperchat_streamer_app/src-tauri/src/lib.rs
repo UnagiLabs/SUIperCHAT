@@ -17,6 +17,7 @@ pub mod db_models; // データベースモデル定義モジュール
 pub mod state; // 状態管理モジュール
 pub mod types; // 型定義モジュール
 pub mod ws_server; // WebSocket サーバーロジック
+pub mod cloudflared_manager; // Cloudflaredダウンロード管理モジュール
 
 // モジュールの再エクスポート
 pub use state::AppState;
@@ -28,6 +29,8 @@ pub use commands::wallet::{get_streamer_info, get_wallet_address, set_wallet_add
 pub use commands::connection::{disconnect_client, get_connections_info, set_connection_limits};
 // 履歴関連コマンドの再エクスポート
 pub use commands::history::get_message_history;
+// YouTube関連コマンドの再エクスポート
+pub use commands::youtube::{get_youtube_video_id, set_youtube_video_id};
 
 /// ## テーブル作成のためのSQL文
 ///
@@ -50,6 +53,7 @@ CREATE TABLE IF NOT EXISTS messages (
     display_name TEXT NOT NULL,
     message TEXT NOT NULL,
     amount REAL DEFAULT 0,
+    coin TEXT,
     tx_hash TEXT,
     wallet_address TEXT,
     session_id TEXT NOT NULL,
@@ -76,6 +80,15 @@ pub fn run() {
                     Target::new(TargetKind::Stdout),
                     Target::new(TargetKind::LogDir { file_name: None }),
                 ])
+                .level(log::LevelFilter::Info) // INFO以上のレベルのみ表示
+                .filter(|metadata| {
+                    // 外部ライブラリの詳細ログを抑制
+                    !metadata.target().starts_with("tao::") &&
+                    !metadata.target().starts_with("mio::") &&
+                    !metadata.target().starts_with("sqlx::query") &&
+                    !metadata.target().starts_with("hyper::") &&
+                    !metadata.target().starts_with("actix_web::")
+                })
                 .build(),
         )
         // --- AppState を Tauri で管理 ---
@@ -245,7 +258,13 @@ pub fn run() {
             commands::connection::disconnect_client,
             commands::connection::set_connection_limits,
             // 履歴関連コマンド
-            commands::history::get_message_history
+            commands::history::get_message_history,
+            commands::history::get_current_session_id,
+            commands::history::get_all_session_ids,
+            commands::history::get_all_sessions_info,
+            // YouTube関連コマンド
+            commands::youtube::set_youtube_video_id,
+            commands::youtube::get_youtube_video_id
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

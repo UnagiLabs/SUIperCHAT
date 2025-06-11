@@ -4,6 +4,7 @@
 //! このモジュールでは以下の型を定義します：
 //! 1. WebSocketクライアントとサーバー間で交換するメッセージの型と構造
 //! 2. 接続管理やセッション処理に使用される共通の型と定数
+//! 3. 過去ログ取得関連の型定義
 
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -38,17 +39,13 @@ pub struct ConnectionsInfo {
 
 /// 接続カウンターを増加させる
 pub fn increment_connections() -> usize {
-    let new_count = CONNECTIONS_COUNT.fetch_add(1, Ordering::SeqCst) + 1;
-    println!("接続カウンター増加: {}", new_count);
-    new_count
+    CONNECTIONS_COUNT.fetch_add(1, Ordering::SeqCst) + 1
 }
 
 /// 接続カウンターを減少させる
 pub fn decrement_connections() -> usize {
     let prev_count = CONNECTIONS_COUNT.fetch_sub(1, Ordering::SeqCst);
-    let new_count = prev_count - 1;
-    println!("接続カウンター減少: {} -> {}", prev_count, new_count);
-    new_count
+    prev_count - 1
 }
 
 /// 現在の接続数を取得
@@ -81,6 +78,12 @@ pub enum MessageType {
     /// 切断状態
     #[serde(rename = "DISCONNECTED")]
     Disconnected,
+    /// 過去ログリクエスト
+    #[serde(rename = "GET_HISTORY")]
+    GetHistory,
+    /// 過去ログデータ
+    #[serde(rename = "HISTORY_DATA")]
+    HistoryData,
 }
 
 /// ## スーパーチャットのデータ構造体
@@ -90,6 +93,8 @@ pub enum MessageType {
 pub struct SuperchatData {
     /// 送金額 (SUI単位)
     pub amount: f64,
+    /// 使用されたコインの通貨シンボル (例: "SUI", "USDC")
+    pub coin: String,
     /// トランザクションハッシュ
     pub tx_hash: String,
     /// 送金者のウォレットアドレス
@@ -162,6 +167,16 @@ pub enum ClientMessage {
     Superchat(SuperchatMessage),
     /// 通常のチャットメッセージ
     Chat(ChatMessage),
+    /// 過去ログリクエスト
+    GetHistory {
+        /// メッセージタイプ (GET_HISTORY固定)
+        #[serde(rename = "type")]
+        message_type: MessageType,
+        /// 取得する最大件数
+        limit: Option<i64>,
+        /// このタイムスタンプより前のメッセージを取得
+        before_timestamp: Option<i64>,
+    },
 }
 
 /// ## サーバーレスポンスメッセージ
@@ -176,6 +191,160 @@ pub struct ServerResponse {
     pub message: String,
     /// タイムスタンプ
     pub timestamp: String,
+}
+
+/// ## サーバーからのメッセージ列挙型
+///
+/// WebSocketサーバーからクライアントに送信するメッセージの型を定義します。
+#[derive(Debug, Serialize, Clone)]
+#[serde(tag = "type")]
+pub enum OutgoingMessage {
+    /// 通常のチャットメッセージ
+    #[serde(rename = "chat")]
+    Chat(SerializableMessage),
+    /// スーパーチャットメッセージ
+    #[serde(rename = "superchat")]
+    Superchat(SerializableMessage),
+    /// 過去のメッセージ履歴
+    #[serde(rename = "HISTORY_DATA")]
+    HistoryData {
+        /// 過去のメッセージリスト
+        messages: Vec<SerializableMessage>,
+        /// さらに古いメッセージがあるかどうか
+        has_more: bool,
+    },
+    /// エラーメッセージ
+    #[serde(rename = "ERROR")]
+    Error {
+        /// エラーメッセージ
+        message: String,
+    },
+}
+
+/// ## クライアントに送信するメッセージ構造体
+///
+/// チャットメッセージまたはスーパーチャットを送信するための構造体です。
+/// `viewer` 側の型定義と互換性があります。
+#[derive(Serialize, Debug, Clone)]
+pub struct SerializableMessage {
+    /// メッセージの一意識別子
+    pub id: String,
+    /// メッセージタイプ ("CHAT" または "SUPERCHAT")
+    #[serde(rename = "type")]
+    pub message_type: String,
+    /// 送信者の表示名
+    pub display_name: String,
+    /// メッセージ内容
+    pub message: String,
+    /// タイムスタンプ (Unixミリ秒)
+    pub timestamp: i64,
+    /// スーパーチャットデータ (スーパーチャットの場合のみ)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub superchat: Option<SerializableSuperchatData>,
+}
+
+/// ## クライアントに送信するスーパーチャットデータ構造体
+///
+/// スパチャメッセージの詳細情報を保持します。
+/// `viewer` 側の型定義と互換性があります。
+#[derive(Serialize, Debug, Clone)]
+pub struct SerializableSuperchatData {
+    /// 送金額
+    pub amount: f64,
+    /// 使用されたコインの種類
+    pub coin: String,
+    /// トランザクションハッシュ
+    pub tx_hash: String,
+    /// 送金者のウォレットアドレス
+    pub wallet_address: String,
+}
+
+impl From<crate::db_models::Message> for SerializableMessage {
+    /// DBメッセージからSerializableMessageへの変換
+    ///
+    /// データベースから取得したメッセージを、クライアントに送信可能な形式に変換します。
+    fn from(db_msg: crate::db_models::Message) -> Self {
+        // スーパーチャットかどうかを判断
+        let is_superchat = db_msg.amount.is_some() && db_msg.amount.unwrap_or(0.0) > 0.0;
+
+        // スーパーチャットデータの変換
+        let superchat = if is_superchat {
+            Some(SerializableSuperchatData {
+                amount: db_msg.amount.unwrap_or(0.0),
+                coin: db_msg.coin.unwrap_or_else(|| "SUI".to_string()),
+                tx_hash: db_msg.tx_hash.unwrap_or_else(|| "unknown".to_string()),
+                wallet_address: db_msg
+                    .wallet_address
+                    .unwrap_or_else(|| "unknown".to_string()),
+            })
+        } else {
+            None
+        };
+
+        // メッセージタイプを決定
+        let message_type = if is_superchat { "superchat" } else { "chat" };
+
+        // Unixタイムスタンプをミリ秒に変換
+        let timestamp = db_msg.timestamp.timestamp_millis();
+
+        SerializableMessage {
+            id: db_msg.id,
+            message_type: message_type.to_string(),
+            display_name: db_msg.display_name,
+            message: db_msg.content,
+            timestamp,
+            superchat,
+        }
+    }
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct SerializableSuperchatDataForStreamer {
+    pub amount: Option<f64>,     // Optionalに変更
+    pub coin: Option<String>,    // Optionalに変更
+    pub tx_hash: Option<String>, // Optionalに変更
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct SerializableMessageForStreamer {
+    pub id: String,
+    pub session_id: String,   // セッションIDも返すように
+    pub message_type: String, // "CHAT" or "SUPERCHAT"
+    pub display_name: String,
+    pub content: String, // viewerでは "message" だったが、DBのフィールド名に合わせる
+    pub timestamp: i64,  // Unixミリ秒
+    pub superchat_specific_data: Option<SerializableSuperchatDataForStreamer>, // フィールド名を変更
+}
+
+// DB型からSerializableMessageForStreamerへの変換を実装
+impl From<crate::db_models::Message> for SerializableMessageForStreamer {
+    fn from(db_msg: crate::db_models::Message) -> Self {
+        let message_type = if db_msg.amount.is_some() && db_msg.coin.is_some() {
+            "SUPERCHAT".to_string()
+        } else {
+            "CHAT".to_string()
+        };
+
+        let superchat_specific_data = if message_type == "SUPERCHAT" {
+            Some(SerializableSuperchatDataForStreamer {
+                amount: db_msg.amount,
+                coin: db_msg.coin,
+                tx_hash: db_msg.tx_hash,
+            })
+        } else {
+            None
+        };
+
+        SerializableMessageForStreamer {
+            id: db_msg.id.clone(),
+            session_id: db_msg.session_id.unwrap_or_default(),
+            message_type,
+            display_name: db_msg.display_name.clone(),
+            content: db_msg.content.clone(),
+            timestamp: db_msg.timestamp.timestamp_millis(),
+            superchat_specific_data,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -220,6 +389,7 @@ mod tests {
         // テスト用のスーパーチャットデータを作成
         let superchat_data = SuperchatData {
             amount: 10.0,
+            coin: "SUI".to_string(),
             tx_hash: "0x1234567890abcdef".to_string(),
             wallet_address: "0xabcdef1234567890".to_string(),
         };
@@ -249,6 +419,7 @@ mod tests {
                 assert_eq!(parsed_superchat.display_name, "スパチャユーザー");
                 assert_eq!(parsed_superchat.content, "大応援してます！");
                 assert_eq!(parsed_superchat.superchat.amount, 10.0);
+                assert_eq!(parsed_superchat.superchat.coin, "SUI");
                 assert_eq!(parsed_superchat.superchat.tx_hash, "0x1234567890abcdef");
                 assert_eq!(
                     parsed_superchat.superchat.wallet_address,
@@ -280,6 +451,7 @@ mod tests {
             "message": "頑張ってください！",
             "superchat": {
                 "amount": 5.0,
+                "coin": "SUI",
                 "tx_hash": "0x9876543210fedcba",
                 "wallet_address": "0xfedcba9876543210"
             },
@@ -312,6 +484,7 @@ mod tests {
                 assert_eq!(superchat.display_name, "WebユーザーB");
                 assert_eq!(superchat.content, "頑張ってください！");
                 assert_eq!(superchat.superchat.amount, 5.0);
+                assert_eq!(superchat.superchat.coin, "SUI");
                 assert_eq!(superchat.superchat.tx_hash, "0x9876543210fedcba");
                 assert_eq!(superchat.superchat.wallet_address, "0xfedcba9876543210");
                 assert_eq!(superchat.timestamp, Some(1700000050000));

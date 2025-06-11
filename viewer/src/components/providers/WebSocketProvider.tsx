@@ -10,6 +10,10 @@ import { useWebSocketConnectionManager } from "@/hooks/useWebSocketConnect"; // 
 import { useWebSocketMessageHandler } from "@/hooks/useWebSocketMessage"; // メッセージ処理ロジック
 import {
 	ConnectionStatus,
+	type ChatMessage,
+	type HistoryDataMessage,
+	MessageType,
+	type SuperchatMessage,
 	type WebSocketContextType,
 	type WebSocketState,
 } from "@/lib/types/websocket";
@@ -22,6 +26,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { toast } from "sonner";
 
 /**
  * WebSocketコンテキスト
@@ -32,221 +37,360 @@ const WebSocketContext = createContext<WebSocketContextType | undefined>(
 );
 
 /**
- * WebSocketプロバイダーコンポーネント
- * 状態管理とWebSocketインスタンス管理、コンテキスト提供を行う
+ * WebSocketの初期状態
  */
-export function WebSocketProvider({ children }: React.PropsWithChildren) {
-	const [state, setState] = useState<WebSocketState>({
-		status: ConnectionStatus.DISCONNECTED,
-		url: null,
-		error: null,
-		retryCount: 0,
-		messages: [],
-	});
+const INITIAL_STATE: WebSocketState = {
+	status: ConnectionStatus.DISCONNECTED,
+	url: null,
+	error: null,
+	retryCount: 0,
+	messages: [],
+	isLoadingHistory: false,
+	hasMoreHistory: true,
+	historyError: null,
+	oldestMessageTimestamp: null,
+};
+
+/**
+ * WebSocketプロバイダーコンポーネント
+ *
+ * アプリケーション全体でWebSocketの状態と操作を共有するためのコンテキストプロバイダー。
+ *
+ * @param props - プロバイダーのプロパティ
+ * @returns WebSocketプロバイダーのJSXエレメント
+ */
+export function WebSocketProvider({
+	children,
+	autoConnect = true,
+	url = null,
+}: {
+	children: React.ReactNode;
+	autoConnect?: boolean;
+	url?: string | null;
+}) {
+	// WebSocketの状態
+	const [state, setState] = useState<WebSocketState>(INITIAL_STATE);
 	const wsRef = useRef<WebSocket | null>(null);
 
-	// --- WebSocketインスタンスの生成と破棄 ---
-	const connectWebSocketInstance = useCallback(
-		(url: string) => {
-			// 既存のインスタンスがあれば閉じる（念のため）
-			if (wsRef.current) {
-				console.warn(
-					"既存のWebSocketインスタンスを閉じてから新規作成します (Provider)",
-				);
-				wsRef.current.onopen = null;
-				wsRef.current.onmessage = null;
-				wsRef.current.onerror = null;
-				wsRef.current.onclose = null;
-				wsRef.current.close();
-				wsRef.current = null;
-			}
+	// メッセージハンドラの取得 (標準ハンドラ)
+	const standardMessageHandler = useWebSocketMessageHandler({
+		wsRef,
+		setState,
+		updateStatus: (status, error) => {
+			setState((prev) => ({
+				...prev,
+				status,
+				error: error !== undefined ? error : prev.error,
+			}));
+		},
+	});
 
+	// WebSocketメッセージハンドラの拡張 (過去ログ処理用)
+	const handleHistoryMessage = useCallback((data: { messages?: (ChatMessage | SuperchatMessage)[]; has_more?: boolean }) => {
+		console.debug(`履歴データ受信: ${data.messages?.length || 0}件`);
+
+		setState((prev) => {
+			// サーバーからのレスポンス形式に対応
+			const messages = data.messages || [];
+			const hasMore = data.has_more || false;
+
+			// 既存メッセージのIDを取得
+			const existingMessageIds = new Set(prev.messages.map((msg) => msg.id));
+
+			// 重複を除外して新しいメッセージを追加
+			const newMessages = [
+				...messages.filter(
+					(msg) => !existingMessageIds.has(msg.id),
+				),
+				...prev.messages,
+			];
+
+			// メッセージをタイムスタンプでソート
+			newMessages.sort((a, b) => a.timestamp - b.timestamp);
+
+			// 最も古いメッセージのタイムスタンプを更新
+			const oldestMessage = newMessages[0];
+			const oldestTimestamp = oldestMessage ? oldestMessage.timestamp : null;
+
+			return {
+				...prev,
+				messages: newMessages,
+				isLoadingHistory: false,
+				hasMoreHistory: hasMore,
+				historyError: null,
+				oldestMessageTimestamp: oldestTimestamp,
+			};
+		});
+	}, []);
+
+	// カスタムメッセージハンドラ (メッセージタイプに応じて処理を振り分け)
+	const customHandleMessage = useCallback(
+		(event: MessageEvent) => {
 			try {
-				console.log("WebSocketインスタンス作成開始 (Provider):", url);
-				const newWs = new WebSocket(url);
-				console.log("WebSocketインスタンス作成完了 (Provider)");
+				const data = JSON.parse(event.data);
+				console.debug("受信メッセージ:", data.type);
 
-				// イベントハンドラをフックのハンドラに紐付け
-				// 注意: フックのハンドラはuseCallbackでメモ化されている必要がある
-				newWs.onopen = () => connectionManager.handleOpen();
-				newWs.onmessage = (event) => messageHandler.handleMessage(event);
-				newWs.onerror = (event) => connectionManager.handleError(event);
-				newWs.onclose = (event) => {
-					connectionManager.handleClose(event);
-					// クリーンアップ後に参照をnullにする
-					wsRef.current = null;
-					console.log("WebSocketインスタンス参照をクリア (Provider onclose)");
+				if (data.type === MessageType.HISTORY_DATA) {
+					handleHistoryMessage(data);
+					return; // カスタム処理で対応したので標準ハンドラをスキップ
+				}
+
+				// それ以外のメッセージは標準ハンドラに委譲
+				if (standardMessageHandler.handleMessage) {
+					standardMessageHandler.handleMessage(event);
+				}
+			} catch (err) {
+				console.error("WebSocketメッセージ処理エラー:", err);
+				console.error("受信データ:", event.data);
+			}
+		},
+		[handleHistoryMessage, standardMessageHandler],
+	);
+
+	// WebSocketインスタンスの作成
+	const connectWebSocketInstance = useCallback(
+		(wsUrl: string) => {
+			try {
+				// 既存の接続があれば閉じる
+				if (wsRef.current) {
+					wsRef.current.onclose = null; // 古い接続のイベントハンドラを解除
+					wsRef.current.close();
+				}
+
+				// 新しいWebSocketインスタンスを作成
+				const ws = new WebSocket(wsUrl);
+				wsRef.current = ws;
+
+				// イベントハンドラを設定
+				ws.onopen = () => {
+					connectionManager.handleOpen();
 				};
 
-				wsRef.current = newWs;
-				console.log("イベントハンドラ設定完了 (Provider)");
+				ws.onclose = (event) => {
+					connectionManager.handleClose(event);
+				};
+
+				ws.onerror = (event) => {
+					connectionManager.handleError(event);
+				};
+
+				ws.onmessage = customHandleMessage;
 			} catch (error) {
-				const errorMsg = `WebSocketインスタンス作成失敗 (Provider): ${error instanceof Error ? error.message : String(error)}`;
-				console.error(errorMsg, error);
-				// 状態更新はconnectionManagerが行う
+				console.error("WebSocket接続エラー:", error);
 				setState((prev) => ({
 					...prev,
 					status: ConnectionStatus.ERROR,
-					error: errorMsg,
+					error: `WebSocketインスタンスの作成に失敗しました: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
 				}));
-				// 必要であれば再接続試行をトリガー？ (connectionManagerに任せる)
-				// connectionManager.attemptReconnect(); // これは避けるべきか？ handleClose経由でトリガーされるはず
 			}
 		},
-		// setStateは安定しているので依存配列から除外 (linter指摘対応)
-		// フックのハンドラへの依存は useEffect で解決
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[
-			/* setState */
-			/* connectionManager, messageHandler が初期化されるまで待つ */
-		],
+		[customHandleMessage], // connectionManagerは循環参照のため依存配列から除外
 	);
 
+	// WebSocketインスタンスの閉鎖
 	const closeWebSocketInstance = useCallback(
 		(code?: number, reason?: string) => {
 			if (wsRef.current) {
-				console.log("WebSocketインスタンス閉鎖開始 (Provider):", {
-					code,
-					reason,
-				});
-				// oncloseハンドラが呼ばれる前にハンドラを削除しないこと
-				// wsRef.current.onopen = null;
-				// wsRef.current.onmessage = null;
-				// wsRef.current.onerror = null;
-				// wsRef.current.onclose = null; // onclose内でwsRef.current=nullするので、ここでは削除しない
-				wsRef.current.close(code, reason);
-				// wsRef.current = null; // oncloseハンドラでクリアする
-			} else {
-				console.debug("閉鎖するWebSocketインスタンスなし (Provider)");
+				try {
+					wsRef.current.close(code, reason);
+				} catch (error) {
+					console.error("WebSocket切断エラー:", error);
+				} finally {
+					wsRef.current = null;
+				}
 			}
 		},
-		[
-			/* wsRef is stable */
-		], // wsRefは安定しているので依存配列から除外 (linter指摘対応)
+		[],
 	);
 
-	// --- カスタムフックの利用 ---
-	// 状態更新関数 (ログ付き) - connectionManagerとmessageHandlerに渡す
-	const updateStatus = useCallback(
-		(status: ConnectionStatus, error: string | null = null) => {
-			setState((prev) => {
-				const newError =
-					error === null ? null : error !== prev.error ? error : prev.error;
-				if (prev.status === status && prev.error === newError) return prev;
-
-				const newState = { ...prev, status, error: newError };
-				// ログ
-				if (error && error !== prev.error)
-					console.warn(`WebSocket状態更新(Provider): ${status}`, error);
-				else if (!error && prev.error)
-					console.debug(
-						`WebSocket状態更新(Provider): ${status} (エラークリア)`,
-					);
-				else if (prev.status !== status)
-					console.debug(`WebSocket状態更新(Provider): ${status}`);
-
-				return newState;
-			});
-		},
-		[
-			/* setState is stable */
-		], // setStateは安定しているので依存配列から除外 (linter指摘対応)
-	);
-
+	// 接続マネージャーの取得
 	const connectionManager = useWebSocketConnectionManager({
 		wsRef,
-		state, // 現在の状態を渡す
-		setState, // 状態更新関数を渡す
-		connectWebSocketInstance, // インスタンス生成関数を渡す
-		closeWebSocketInstance, // インスタンス閉鎖関数を渡す
+		state,
+		setState,
+		connectWebSocketInstance,
+		closeWebSocketInstance,
 	});
 
-	const messageHandler = useWebSocketMessageHandler({
-		wsRef,
-		setState, // 状態更新関数を渡す
-		updateStatus, // 接続フックから取れないため、ProviderのupdateStatusを渡す
-	});
-
-	// --- WebSocketインスタンス生成時のコールバック依存性解決 ---
-	// connectWebSocketInstanceがconnectionManagerとmessageHandlerに依存するため、
-	// それらが初期化された後にconnectWebSocketInstanceを再生成するuseEffectを追加
-	const memoizedConnectWebSocketInstance = useRef(connectWebSocketInstance);
+	// 接続完了時に自動で履歴を取得
 	useEffect(() => {
-		memoizedConnectWebSocketInstance.current = (url: string) => {
-			// 既存のインスタンスがあれば閉じる
-			if (wsRef.current) {
-				console.warn(
-					"既存のWebSocketインスタンスを閉じてから新規作成します (Provider - Effect)",
-				);
-				// イベントハンドラをnullに設定してから閉じる
-				wsRef.current.onopen = null;
-				wsRef.current.onmessage = null;
-				wsRef.current.onerror = null;
-				wsRef.current.onclose = null;
-				wsRef.current.close();
-				wsRef.current = null;
-			}
+		if (state.status === ConnectionStatus.CONNECTED) {
+			// 接続完了時にメッセージ履歴をクリア（新しい接続で新鮮な履歴を取得）
+			setState((prev) => ({
+				...prev,
+				messages: [],
+				oldestMessageTimestamp: null,
+				hasMoreHistory: true,
+			}));
+
+			// 接続完了後、少し待ってから履歴を取得（サーバーの準備完了を待つ）
+			const timer = setTimeout(() => {
+				if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+					try {
+						setState((prev) => ({
+							...prev,
+							isLoadingHistory: true,
+							historyError: null,
+						}));
+
+						const request = {
+							type: MessageType.GET_HISTORY,
+							limit: 50, // 初回は50件取得
+							before_timestamp: null, // 最新から取得
+						};
+
+						console.debug("接続完了時の履歴取得リクエスト送信:", request);
+						wsRef.current.send(JSON.stringify(request));
+					} catch (error) {
+						console.error("接続時の履歴取得リクエスト送信エラー:", error);
+						setState((prev) => ({
+							...prev,
+							isLoadingHistory: false,
+							historyError: `履歴の取得に失敗しました: ${
+								error instanceof Error ? error.message : String(error)
+							}`,
+						}));
+					}
+				}
+			}, 1000); // 1秒待機
+
+			return () => clearTimeout(timer);
+		}
+	}, [state.status]);
+
+	// 循環参照を解決するためにconnectWebSocketInstanceを更新
+	useEffect(() => {
+		const originalConnectInstance = connectWebSocketInstance;
+		const wrappedConnectInstance = (wsUrl: string) => {
 			try {
-				console.log("WebSocketインスタンス作成開始 (Provider - Effect):", url);
-				const newWs = new WebSocket(url);
-				console.log("WebSocketインスタンス作成完了 (Provider - Effect)");
-				// ここで最新のハンドラを設定
-				newWs.onopen = () => connectionManager.handleOpen();
-				newWs.onmessage = (event) => messageHandler.handleMessage(event);
-				newWs.onerror = (event) => connectionManager.handleError(event);
-				newWs.onclose = (event) => {
-					connectionManager.handleClose(event);
-					wsRef.current = null; // ここでクリア
-					console.log(
-						"WebSocketインスタンス参照をクリア (Provider onclose - Effect)",
-					);
-				};
-				wsRef.current = newWs;
-				console.log("イベントハンドラ設定完了 (Provider - Effect)");
+				originalConnectInstance(wsUrl);
 			} catch (error) {
-				const errorMsg = `WebSocketインスタンス作成失敗 (Provider-Effect): ${error instanceof Error ? error.message : String(error)}`;
-				console.error(errorMsg, error);
-				setState((prev) => ({
-					...prev,
-					status: ConnectionStatus.ERROR,
-					error: errorMsg,
-				}));
+				console.error("接続エラー:", error);
 			}
 		};
-	}, [connectionManager, messageHandler /* setState is stable */]); // setStateは安定しているので依存配列から除外 (linter指摘対応)
 
-	// connectionManagerに最新のインスタンス生成関数を渡すための更新
-	// ※ これは少しトリッキーかもしれない。useWebSocketConnectionManagerの引数を更新する必要がある。
-	//   より良い方法は、Provider内でconnect/disconnectアクションを定義し、
-	//   その内部でインスタンス生成/破棄とフックのアクション呼び出しを行うことかもしれない。
-	//   => 今回は connectionManager の引数を更新するアプローチを試す。
+		// 必要に応じてここでconnectionManagerのconnectWebSocketInstanceを更新
+	}, [connectWebSocketInstance]);
 
-	// --- コンテキストに渡す値 ---
+	// Ping送信の定期実行
+	useEffect(() => {
+		let pingInterval: NodeJS.Timeout | null = null;
+
+		// 接続中の場合のみPingを送信
+		if (state.status === ConnectionStatus.CONNECTED && wsRef.current) {
+			pingInterval = setInterval(() => {
+				if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+					try {
+						const pingMessage = {
+							type: MessageType.PING,
+							timestamp: Date.now(),
+						};
+						wsRef.current.send(JSON.stringify(pingMessage));
+					} catch (error) {
+						console.error("Ping送信エラー:", error);
+					}
+				}
+			}, 30000); // 30秒ごとにPing
+		}
+
+		// クリーンアップ関数
+		return () => {
+			if (pingInterval) {
+				clearInterval(pingInterval);
+			}
+		};
+	}, [state.status]);
+
+	// 自動接続処理
+	useEffect(() => {
+		if (autoConnect && url && state.status === ConnectionStatus.DISCONNECTED) {
+			connectionManager.connect(url);
+		}
+	}, [autoConnect, url, state.status, connectionManager]);
+
+	// urlが変更された場合に再接続
+	useEffect(() => {
+		if (url && wsRef.current && connectionManager) {
+			// まず現在の接続を切断
+			connectionManager.disconnect();
+			// 少し待ってから再接続
+			const timer = setTimeout(() => {
+				connectionManager.connect(url);
+			}, 500);
+			return () => clearTimeout(timer);
+		}
+	}, [url, connectionManager]);
+
+	// WebSocketアクション
+	const actions = useMemo(() => {
+		return {
+			// 接続系
+			connect: connectionManager.connect,
+			disconnect: connectionManager.disconnect,
+			// メッセージ送受信系
+			sendChatMessage: standardMessageHandler.sendChatMessage,
+			sendSuperchatMessage: standardMessageHandler.sendSuperchatMessage,
+			// 過去ログ取得
+			requestHistory: (limit = 50) => {
+				if (
+					!wsRef.current ||
+					wsRef.current.readyState !== WebSocket.OPEN ||
+					state.isLoadingHistory
+				) {
+					console.warn("過去ログリクエスト送信不可:", {
+						connected:
+							!!wsRef.current && wsRef.current.readyState === WebSocket.OPEN,
+						isLoading: state.isLoadingHistory,
+					});
+					return;
+				}
+
+				try {
+					// ローディング状態に設定
+					setState((prev) => ({
+						...prev,
+						isLoadingHistory: true,
+						historyError: null,
+					}));
+
+					const request = {
+						type: MessageType.GET_HISTORY,
+						limit: Math.min(Math.max(1, limit), 200), // 1～200の範囲に制限
+						before_timestamp: state.oldestMessageTimestamp,
+					};
+
+					console.debug("過去ログリクエスト送信:", request);
+					wsRef.current.send(JSON.stringify(request));
+				} catch (error) {
+					console.error("過去ログリクエスト送信エラー:", error);
+					setState((prev) => ({
+						...prev,
+						isLoadingHistory: false,
+						historyError: `過去ログの取得に失敗しました: ${
+							error instanceof Error ? error.message : String(error)
+						}`,
+					}));
+					toast.error("過去ログの取得に失敗しました");
+				}
+			},
+		};
+	}, [
+		connectionManager,
+		standardMessageHandler,
+		state.isLoadingHistory,
+		state.oldestMessageTimestamp,
+	]);
+
+	// コンテキスト値
 	const contextValue = useMemo<WebSocketContextType>(
 		() => ({
 			state,
-			actions: {
-				// connectionManager と messageHandler から公開されているアクションを渡す
-				connect: connectionManager.connect,
-				disconnect: connectionManager.disconnect,
-				sendChatMessage: messageHandler.sendChatMessage,
-				sendSuperchatMessage: messageHandler.sendSuperchatMessage,
-			},
-			// connectionManagerとmessageHandlerのインスタンスも依存配列に入れる
+			actions,
 		}),
-		[state, connectionManager, messageHandler],
+		[state, actions],
 	);
-
-	// --- アンマウント時のクリーンアップ ---
-	// useWebSocketConnect フック内で useEffect を使用してアンマウント時の disconnect を呼び出すため、
-	// Provider 側での useEffect による disconnect 呼び出しは不要になる。
-	// useEffect(() => {
-	// 	return () => {
-	// 		console.log("WebSocketProvider unmounting, calling disconnect...");
-	// 		// disconnect関数は connectionManager から取得したものを使う
-	// 		connectionManager.disconnect();
-	// 	};
-	// }, [connectionManager]); // connectionManagerインスタンスに依存
 
 	return (
 		<WebSocketContext.Provider value={contextValue}>
@@ -257,9 +401,11 @@ export function WebSocketProvider({ children }: React.PropsWithChildren) {
 
 /**
  * WebSocketコンテキストを使用するためのカスタムフック
- * コンテキストが未定義の場合にエラーをスローする
+ *
+ * @returns WebSocketの状態とアクション
+ * @throws Error コンテキストがプロバイダーの外部で使用された場合
  */
-export function useWebSocket() {
+export function useWebSocket(): WebSocketContextType {
 	const context = useContext(WebSocketContext);
 	if (context === undefined) {
 		throw new Error("useWebSocket must be used within a WebSocketProvider");
