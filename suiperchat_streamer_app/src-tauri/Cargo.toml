@@ -47,3 +47,4 @@ stun-client = "0.1"
 thiserror = "2.0"
 regex = "1.11.1"
 tauri-plugin-updater = "2.7.1"
+reqwest = { version = "0.12", features = ["stream"] }
