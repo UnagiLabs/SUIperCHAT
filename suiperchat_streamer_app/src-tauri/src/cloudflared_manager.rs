@@ -123,20 +123,20 @@ impl CloudflaredManager {
         let decoder = GzDecoder::new(bytes);
         let mut archive = Archive::new(decoder);
         
-        let _parent_dir = self.binary_path.parent()
-            .ok_or_else(|| CloudflaredManagerError::DownloadFailed("Invalid binary path".to_string()))?;
-        
         // アーカイブからバイナリファイルを探して展開
         for entry in archive.entries().map_err(|e| CloudflaredManagerError::DownloadFailed(e.to_string()))? {
             let mut entry = entry.map_err(|e| CloudflaredManagerError::DownloadFailed(e.to_string()))?;
             let path = entry.path().map_err(|e| CloudflaredManagerError::DownloadFailed(e.to_string()))?;
             
+            info!("Found file in archive: {}", path.display());
+            
             // cloudflaredバイナリファイルを探す
             if let Some(filename) = path.file_name() {
                 if filename == "cloudflared" {
-                    info!("Found cloudflared binary in archive, extracting...");
+                    info!("Found cloudflared binary in archive, extracting to: {:?}", self.binary_path);
                     entry.unpack(&self.binary_path)
-                        .map_err(|e| CloudflaredManagerError::DownloadFailed(e.to_string()))?;
+                        .map_err(|e| CloudflaredManagerError::DownloadFailed(format!("Failed to unpack: {}", e)))?;
+                    info!("Successfully extracted cloudflared binary");
                     return Ok(());
                 }
             }
