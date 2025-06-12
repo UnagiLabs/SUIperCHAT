@@ -605,17 +605,28 @@ body {
 }
 
 .vs-divider {
-    font-size: 32px;
-    font-weight: 700;
-    color: #4FC3F7;
+    font-size: 48px;
+    font-weight: 900;
+    color: #ff667d;
     display: flex;
     align-items: center;
     justify-content: center;
     min-width: 60px;
-    background: linear-gradient(135deg, #4FC3F7 0%, #29B6F6 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    text-shadow: 0 3px 10px rgba(255, 102, 125, 0.5);
+    animation: pulse 2s infinite;
+    align-self: center;
+    margin: auto;
+}
+
+@keyframes pulse {
+    0%, 100% { 
+        transform: scale(1);
+        text-shadow: 0 3px 10px rgba(255, 102, 125, 0.5);
+    }
+    50% { 
+        transform: scale(1.1);
+        text-shadow: 0 5px 15px rgba(255, 102, 125, 0.8);
+    }
 }
 
 .solution-impact {
