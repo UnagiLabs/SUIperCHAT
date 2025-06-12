@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SUIperCHAT - ハッカソンプレゼンテーション</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #0a0a0a;
+            color: #fff;
+            overflow: hidden;
+        }
+        
+        .presentation-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .slide {
+            width: 90%;
+            max-width: 1200px;
+            height: 90vh;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 60px;
+            position: relative;
+            background: linear-gradient(135deg, #1a1a2e 0%, #0f0f23 100%);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+        
+        .slide.active {
+            display: flex;
+        }
+        
+        .slide h1 {
+            font-size: 72px;
+            font-weight: 700;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #4FC3F7 0%, #29B6F6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-align: center;
+        }
+        
+        .slide h2 {
+            font-size: 48px;
+            font-weight: 600;
+            margin-bottom: 40px;
+            color: #4FC3F7;
+            text-align: center;
+        }
+        
+        .slide h3 {
+            font-size: 36px;
+            font-weight: 500;
+            margin-bottom: 20px;
+            color: #81D4FA;
+        }
+        
+        .slide p {
+            font-size: 24px;
+            line-height: 1.6;
+            text-align: center;
+            color: #e0e0e0;
+            max-width: 800px;
+        }
+        
+        .subtitle {
+            font-size: 28px;
+            color: #81D4FA;
+            margin-bottom: 20px;
+        }
+        
+        .problem-list {
+            list-style: none;
+            font-size: 32px;
+            margin-top: 40px;
+        }
+        
+        .problem-list li {
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            animation: fadeInUp 0.6s ease-out forwards;
+            opacity: 0;
+        }
+        
+        .problem-list li:nth-child(1) { animation-delay: 0.2s; }
+        .problem-list li:nth-child(2) { animation-delay: 0.4s; }
+        .problem-list li:nth-child(3) { animation-delay: 0.6s; }
+        .problem-list li:nth-child(4) { animation-delay: 0.8s; }
+        
+        .problem-icon {
+            font-size: 40px;
+            margin-right: 20px;
+            color: #FF5252;
+        }
+        
+        .solution-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 40px;
+            margin-top: 40px;
+            width: 100%;
+        }
+        
+        .solution-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .solution-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(79, 195, 247, 0.3);
+        }
+        
+        .solution-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+            color: #4FC3F7;
+        }
+        
+        .demo-container {
+            width: 80%;
+            height: 400px;
+            background: #000;
+            border-radius: 10px;
+            margin-top: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #4FC3F7;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .demo-placeholder {
+            font-size: 24px;
+            color: #666;
+        }
+        
+        .comparison-table {
+            margin-top: 40px;
+            border-collapse: collapse;
+            font-size: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .comparison-table th,
+        .comparison-table td {
+            padding: 20px 30px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .comparison-table th {
+            background: rgba(79, 195, 247, 0.2);
+            font-weight: 600;
+        }
+        
+        .comparison-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .highlight {
+            color: #4FC3F7;
+            font-weight: 600;
+        }
+        
+        .impact-number {
+            font-size: 64px;
+            font-weight: 700;
+            color: #4FC3F7;
+            margin: 20px 0;
+        }
+        
+        .impact-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            margin-top: 40px;
+            width: 100%;
+        }
+        
+        .impact-card {
+            background: rgba(79, 195, 247, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            border: 1px solid rgba(79, 195, 247, 0.3);
+        }
+        
+        .impact-card h4 {
+            font-size: 24px;
+            color: #4FC3F7;
+            margin-bottom: 15px;
+        }
+        
+        .timeline {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin-top: 40px;
+            position: relative;
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            top: 30px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #4FC3F7;
+        }
+        
+        .timeline-item {
+            position: relative;
+            text-align: center;
+            flex: 1;
+        }
+        
+        .timeline-dot {
+            width: 20px;
+            height: 20px;
+            background: #4FC3F7;
+            border-radius: 50%;
+            margin: 20px auto;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .timeline-content {
+            margin-top: 20px;
+        }
+        
+        .timeline-content h4 {
+            font-size: 20px;
+            color: #4FC3F7;
+            margin-bottom: 10px;
+        }
+        
+        .cta-container {
+            margin-top: 40px;
+            text-align: center;
+        }
+        
+        .qr-code {
+            width: 200px;
+            height: 200px;
+            background: #fff;
+            margin: 30px auto;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+        
+        .navigation {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 1000;
+        }
+        
+        .nav-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 16px;
+        }
+        
+        .nav-btn:hover {
+            background: rgba(79, 195, 247, 0.3);
+            border-color: #4FC3F7;
+        }
+        
+        .slide-number {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            font-size: 18px;
+            color: #666;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .feature-list {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            margin-top: 40px;
+            width: 100%;
+            max-width: 800px;
+        }
+        
+        .feature-item {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 25px;
+            border-radius: 15px;
+            transition: all 0.3s ease;
+        }
+        
+        .feature-item:hover {
+            background: rgba(79, 195, 247, 0.1);
+            transform: translateX(10px);
+        }
+        
+        .feature-number {
+            font-size: 36px;
+            font-weight: 700;
+            color: #4FC3F7;
+            margin-right: 30px;
+            min-width: 50px;
+        }
+        
+        .feature-text {
+            font-size: 24px;
+            color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="presentation-container">
+        <!-- Slide 1: タイトル & 問題提起 -->
+        <div class="slide active">
+            <span class="slide-number">1/8</span>
+            <h1>SUIperCHAT</h1>
+            <p class="subtitle">投げ銭の手数料30%は高すぎる</p>
+            <ul class="problem-list">
+                <li><span class="problem-icon">💸</span>配信者の収益が奪われている現実</li>
+                <li><span class="problem-icon">🔒</span>プラットフォーム依存のリスク</li>
+                <li><span class="problem-icon">⏱️</span>複雑な換金プロセス</li>
+                <li><span class="problem-icon">🌍</span>国際送金の制限</li>
+            </ul>
+        </div>
+        
+        <!-- Slide 2: ソリューション -->
+        <div class="slide">
+            <span class="slide-number">2/8</span>
+            <h2>手数料ほぼゼロの投げ銭システム</h2>
+            <div class="solution-grid">
+                <div class="solution-item">
+                    <div class="solution-icon">💰</div>
+                    <h3>Before</h3>
+                    <p>1000円の投げ銭</p>
+                    <p class="impact-number">700円</p>
+                    <p>配信者の手取り</p>
+                </div>
+                <div class="solution-item">
+                    <div class="solution-icon">🚀</div>
+                    <h3>After</h3>
+                    <p>1000円の投げ銭</p>
+                    <p class="impact-number">999円</p>
+                    <p>配信者の手取り</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Slide 3: 製品デモ - 視聴者側 -->
+        <div class="slide">
+            <span class="slide-number">3/8</span>
+            <h2>こんなに簡単！3クリックで投げ銭</h2>
+            <div class="demo-container">
+                <p class="demo-placeholder">視聴者デモ画面</p>
+            </div>
+            <div class="feature-list">
+                <div class="feature-item">
+                    <span class="feature-number">1</span>
+                    <span class="feature-text">ウォレット接続</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-number">2</span>
+                    <span class="feature-text">金額入力</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-number">3</span>
+                    <span class="feature-text">送信完了！</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Slide 4: 製品デモ - 配信者側 -->
+        <div class="slide">
+            <span class="slide-number">4/8</span>
+            <h2>Rust製の軽快な配信者アプリ</h2>
+            <div class="demo-container">
+                <p class="demo-placeholder">配信者アプリデモ</p>
+            </div>
+            <div class="solution-grid">
+                <div class="solution-item">
+                    <h3>⚡ 軽量・高速</h3>
+                    <p>起動は一瞬</p>
+                </div>
+                <div class="solution-item">
+                    <h3>🎮 OBS連携</h3>
+                    <p>ワンクリック設定</p>
+                </div>
+                <div class="solution-item">
+                    <h3>🔔 リアルタイム通知</h3>
+                    <p>投げ銭を見逃さない</p>
+                </div>
+                <div class="solution-item">
+                    <h3>💎 シンプルUI</h3>
+                    <p>誰でも使える</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Slide 5: なぜSUIなのか -->
+        <div class="slide">
+            <span class="slide-number">5/8</span>
+            <h2>SUIだから実現できた3つの価値</h2>
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>特徴</th>
+                        <th>SUI</th>
+                        <th>他のブロックチェーン</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>処理速度</td>
+                        <td class="highlight">1秒以内</td>
+                        <td>10秒〜数分</td>
+                    </tr>
+                    <tr>
+                        <td>手数料</td>
+                        <td class="highlight">0.001ドル以下</td>
+                        <td>1〜50ドル</td>
+                    </tr>
+                    <tr>
+                        <td>同時処理</td>
+                        <td class="highlight">大量の投げ銭OK</td>
+                        <td>詰まりやすい</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Slide 6: SUIエコシステムへのインパクト -->
+        <div class="slide">
+            <span class="slide-number">6/8</span>
+            <h2>配信市場 × SUI = 大規模ユーザー獲得</h2>
+            <div class="impact-grid">
+                <div class="impact-card">
+                    <h4>市場規模</h4>
+                    <p class="impact-number">500億円</p>
+                    <p>YouTube SuperChat市場</p>
+                </div>
+                <div class="impact-card">
+                    <h4>潜在ユーザー</h4>
+                    <p class="impact-number">数百万人</p>
+                    <p>毎日の配信視聴者</p>
+                </div>
+                <div class="impact-card">
+                    <h4>成長率</h4>
+                    <p class="impact-number">年30%</p>
+                    <p>配信市場の成長</p>
+                </div>
+            </div>
+            <h3 style="margin-top: 40px;">なぜ配信者・視聴者がSUIを選ぶか</h3>
+            <ul class="feature-list">
+                <li class="feature-item">
+                    <span class="feature-text">✅ Web3を意識させないUX</span>
+                </li>
+                <li class="feature-item">
+                    <span class="feature-text">✅ 実益（手数料削減）が明確</span>
+                </li>
+                <li class="feature-item">
+                    <span class="feature-text">✅ 既存の配信ワークフローにシームレス統合</span>
+                </li>
+            </ul>
+        </div>
+        
+        <!-- Slide 7: ビジョンと成長戦略 -->
+        <div class="slide">
+            <span class="slide-number">7/8</span>
+            <h2>段階的な市場浸透戦略</h2>
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <h4>Phase 1</h4>
+                        <p>個人配信者から導入</p>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <h4>Phase 2</h4>
+                        <p>配信グループ・事務所展開</p>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <h4>Phase 3</h4>
+                        <p>プラットフォーム連携</p>
+                    </div>
+                </div>
+            </div>
+            <h3 style="margin-top: 60px; font-size: 40px;">SUIのキラーアプリになる可能性</h3>
+        </div>
+        
+        <!-- Slide 8: CTA -->
+        <div class="slide">
+            <span class="slide-number">8/8</span>
+            <h2>今すぐ試せる</h2>
+            <p style="font-size: 32px; margin-bottom: 30px;">実際に動いています</p>
+            <div class="qr-code">
+                <p>QRコード</p>
+            </div>
+            <div class="cta-container">
+                <h3>SUIの mass adoption はここから始まる</h3>
+                <p style="margin-top: 20px;">配信者の方、今すぐ導入できます</p>
+                <p style="margin-top: 40px; font-size: 20px; color: #666;">demo.suiperchat.com</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="navigation">
+        <button class="nav-btn" onclick="previousSlide()">← 前へ</button>
+        <button class="nav-btn" onclick="nextSlide()">次へ →</button>
+    </div>
+    
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        
+        function showSlide(index) {
+            slides.forEach(slide => slide.classList.remove('active'));
+            slides[index].classList.add('active');
+        }
+        
+        function nextSlide() {
+            currentSlide = (currentSlide + 1) % slides.length;
+            showSlide(currentSlide);
+        }
+        
+        function previousSlide() {
+            currentSlide = (currentSlide - 1 + slides.length) % slides.length;
+            showSlide(currentSlide);
+        }
+        
+        // キーボードナビゲーション
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') nextSlide();
+            if (e.key === 'ArrowLeft') previousSlide();
+        });
+    </script>
+</body>
+</html>
