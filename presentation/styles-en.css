@@ -411,7 +411,7 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    min-width: 230px;
+    min-width: 280px;
     border: 2px solid rgba(168, 211, 225, 0.2);
     transition: all 0.3s ease;
 }
@@ -683,6 +683,7 @@ body {
     font-size: 96px;
     font-weight: 800;
     margin-bottom: 10px;
+    margin-top: 6cm;
     background: linear-gradient(135deg, #ff667d 0%, #ffb3ba 50%, #ff667d 100%);
     -webkit-background-clip: text;
     background-clip: text;
@@ -717,6 +718,8 @@ body {
     justify-content: center;
     gap: 20px;
     margin-bottom: 15px;
+    margin-left: -5cm;
+    margin-top: 5cm;
 }
 
 .team-name {
@@ -736,7 +739,7 @@ body {
 
 .member-photos {
     position: absolute;
-    right: calc(5% - 9cm);
+    right: calc(5% - 8cm);
     top: calc(50% + 6cm);
     transform: translateY(-50%);
     display: flex;
@@ -1023,10 +1026,145 @@ body {
     text-align: center;
 }
 
+/* Clean Fee Summary Styles */
+.fee-summary-clean {
+    display: flex;
+    gap: 40px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.stat-clean {
+    text-align: center;
+    padding: 0;
+    background: none;
+    border: none;
+}
+
+.stat-number-clean {
+    font-size: 48px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.stat-clean.stat-bad .stat-number-clean {
+    color: #ff667d;
+}
+
+.stat-clean.stat-good .stat-number-clean {
+    color: #4FC3F7;
+}
+
+.stat-label-clean {
+    font-size: 18px;
+    color: #333333;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* Left/Right Layout for Slide 2 */
+.fee-layout {
+    display: flex;
+    gap: 50px;
+    align-items: flex-start;
+    margin-top: 10px;
+    width: 100%;
+    max-width: 1200px;
+}
+
+.fee-flow {
+    flex: 1;
+}
+
+.fee-summary-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 15px;
+    border: 1px solid rgba(168, 211, 225, 0.3);
+}
+
+.fee-summary-right .fee-summary-clean {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+/* Clean Impact Stats for Slide 3 */
+.solution-impact-clean {
+    display: flex;
+    gap: 60px;
+    justify-content: center;
+    margin-top: 40px;
+}
+
+.impact-clean {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0;
+    background: none;
+    border: none;
+}
+
+.impact-icon {
+    font-size: 48px;
+    opacity: 0.8;
+}
+
+.impact-content {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.impact-number-clean {
+    font-size: 54px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 5px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.impact-clean.revenue .impact-number-clean {
+    color: #4FC3F7;
+}
+
+.impact-clean.instant .impact-number-clean {
+    color: #ff667d;
+}
+
+.impact-label-clean {
+    font-size: 18px;
+    color: #333333;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* Clean zkLogin Impact Stats */
+.zklogin-impact-clean {
+    display: flex;
+    gap: 60px;
+    justify-content: center;
+    margin-top: 40px;
+}
+
+.impact-clean.zklogin-time .impact-number-clean {
+    color: #ff667d;
+}
+
+.impact-clean.zklogin-users .impact-number-clean {
+    color: #4FC3F7;
+}
+
 /* Strategy Slide Logo */
 .strategy-logo {
     position: absolute;
-    top: calc(50% - 3cm + 1cm);
+    top: calc(50% - 3cm + 1cm - 1cm + 0.5cm);
     left: calc(10% + 2cm + 0.5cm);
     transform: translateY(-50%);
     opacity: 0.8;

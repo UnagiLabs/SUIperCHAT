@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SUIperCHAT - ハッカソンプレゼンテーション</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>SUIperCHAT - Hackathon Presentation</title>
+    <link rel="stylesheet" href="styles-en.css">
 </head>
 <body>
     <div class="presentation-container">
@@ -12,8 +12,8 @@
     </div>
     
     <div class="navigation">
-        <button class="nav-btn" onclick="previousSlide()">← 前へ</button>
-        <button class="nav-btn" onclick="nextSlide()">次へ →</button>
+        <button class="nav-btn" onclick="previousSlide()">← Previous</button>
+        <button class="nav-btn" onclick="nextSlide()">Next →</button>
     </div>
     
     <script>
@@ -21,64 +21,64 @@
         const totalSlides = 11;
         const slideContainer = document.getElementById('slide-container');
         
-        // スライドファイルのパス
+        // Slide file paths
         const slidePaths = [
-            'slides/slide0.html',
-            'slides/slide1.html',
-            'slides/slide2.html',
-            'slides/slide3.html',
-            'slides/slide4.html',
-            'slides/slide5.html',
-            'slides/slide6.html',
-            'slides/slide7.html',
-            'slides/slide8.html',
-            'slides/slide9.html',
-            'slides/slide10.html'
+            'slides-en/slide0.html',
+            'slides-en/slide1.html',
+            'slides-en/slide2.html',
+            'slides-en/slide3.html',
+            'slides-en/slide4.html',
+            'slides-en/slide5.html',
+            'slides-en/slide6.html',
+            'slides-en/slide7.html',
+            'slides-en/slide8.html',
+            'slides-en/slide9.html',
+            'slides-en/slide10.html'
         ];
         
-        // スライドを読み込む関数
+        // Function to load slide
         async function loadSlide(index) {
             try {
                 const response = await fetch(slidePaths[index]);
                 const html = await response.text();
                 slideContainer.innerHTML = html;
                 
-                // アクティブクラスを追加
+                // Add active class
                 const slide = slideContainer.querySelector('.slide');
                 if (slide) {
                     slide.classList.add('active');
                 }
             } catch (error) {
-                console.error('スライドの読み込みエラー:', error);
-                slideContainer.innerHTML = '<div class="slide active"><h2>スライドの読み込みに失敗しました</h2></div>';
+                console.error('Error loading slide:', error);
+                slideContainer.innerHTML = '<div class="slide active"><h2>Failed to load slide</h2></div>';
             }
         }
         
-        // スライドを表示する関数
+        // Function to show slide
         function showSlide(index) {
             currentSlide = index;
             loadSlide(index);
         }
         
-        // 次のスライド
+        // Next slide
         function nextSlide() {
             currentSlide = (currentSlide + 1) % totalSlides;
             showSlide(currentSlide);
         }
         
-        // 前のスライド
+        // Previous slide
         function previousSlide() {
             currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
             showSlide(currentSlide);
         }
         
-        // キーボードナビゲーション
+        // Keyboard navigation
         document.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowRight') nextSlide();
             if (e.key === 'ArrowLeft') previousSlide();
         });
         
-        // 初期化
+        // Initialize
         showSlide(0);
     </script>
 </body>
