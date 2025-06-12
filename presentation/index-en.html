@@ -105,6 +105,11 @@
                 expandedVideo.play();
             }
             
+            // Add event listener to close overlay when video ends
+            expandedVideo.addEventListener('ended', function() {
+                closeExpandedVideoGeneric();
+            }, { once: true });
+            
             overlay.style.display = 'flex';
             setTimeout(() => {
                 overlay.classList.add('active');
