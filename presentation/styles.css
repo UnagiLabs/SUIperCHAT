@@ -629,3 +629,131 @@ body {
     font-size: 15px;
     color: #e0e0e0;
 }
+
+/* Cover Slide Styles */
+.cover-slide {
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0f0f23 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+.cover-slide::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 20% 80%, rgba(79, 195, 247, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(41, 182, 246, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 40% 40%, rgba(129, 212, 250, 0.05) 0%, transparent 50%);
+    z-index: 0;
+}
+
+.cover-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    text-align: center;
+}
+
+.cover-title {
+    font-size: 96px;
+    font-weight: 800;
+    margin-bottom: 10px;
+    background: linear-gradient(135deg, #4FC3F7 0%, #29B6F6 50%, #81D4FA 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 40px rgba(79, 195, 247, 0.3);
+    letter-spacing: -2px;
+}
+
+.cover-subtitle {
+    font-size: 32px;
+    color: #81D4FA;
+    margin-bottom: 30px;
+    font-weight: 300;
+    letter-spacing: 1px;
+}
+
+.cover-divider {
+    width: 200px;
+    height: 3px;
+    background: linear-gradient(90deg, transparent 0%, #4FC3F7 50%, transparent 100%);
+    margin: 20px 0;
+    opacity: 0.7;
+}
+
+.team-info {
+    margin-top: 20px;
+}
+
+.team-name {
+    font-size: 42px;
+    color: #4FC3F7;
+    margin-bottom: 15px;
+    font-weight: 600;
+    letter-spacing: 2px;
+}
+
+.team-members {
+    display: flex;
+    gap: 40px;
+    justify-content: center;
+    margin-bottom: 30px;
+}
+
+.member {
+    font-size: 24px;
+    color: #e0e0e0;
+    padding: 12px 24px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 25px;
+    border: 1px solid rgba(79, 195, 247, 0.3);
+    transition: all 0.3s ease;
+}
+
+.member:hover {
+    background: rgba(79, 195, 247, 0.1);
+    border-color: rgba(79, 195, 247, 0.5);
+    transform: translateY(-2px);
+}
+
+.cover-footer {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.conference-info {
+    font-size: 20px;
+    color: #666;
+    font-weight: 300;
+    letter-spacing: 1px;
+}
+
+/* SUI Logo */
+.cover-logo {
+    position: absolute;
+    top: 12%;
+    right: calc(5% - 5cm);
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
+
+.logo-image {
+    width: 180px;
+    height: 180px;
+    filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.3));
+}
