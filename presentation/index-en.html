@@ -80,6 +80,79 @@
         
         // Initialize
         showSlide(0);
+        
+        // Video expansion functionality
+        function expandVideo(event) {
+            event.stopPropagation();
+            const overlay = document.getElementById('video-overlay');
+            const originalVideo = document.getElementById('demo-video');
+            const expandedVideo = document.getElementById('expanded-video');
+            
+            if (!overlay || !originalVideo || !expandedVideo) return;
+            
+            // Sync playback position and state
+            expandedVideo.currentTime = originalVideo.currentTime;
+            if (!originalVideo.paused) {
+                expandedVideo.play();
+            }
+            
+            overlay.style.display = 'flex';
+            setTimeout(() => {
+                overlay.classList.add('active');
+            }, 10);
+        }
+
+        function closeExpandedVideo() {
+            const overlay = document.getElementById('video-overlay');
+            const originalVideo = document.getElementById('demo-video');
+            const expandedVideo = document.getElementById('expanded-video');
+            
+            if (!overlay || !originalVideo || !expandedVideo) return;
+            
+            // Sync back to original video
+            originalVideo.currentTime = expandedVideo.currentTime;
+            if (!expandedVideo.paused) {
+                originalVideo.play();
+            }
+            
+            overlay.classList.remove('active');
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                expandedVideo.pause();
+            }, 300);
+        }
+
+        // Event delegation for dynamically loaded content
+        document.addEventListener('click', function(event) {
+            // Check if clicked element is video container
+            if (event.target.closest('.video-container')) {
+                const videoContainer = event.target.closest('.video-container');
+                const video = videoContainer.querySelector('video');
+                
+                // Only expand if not clicking on video controls
+                const rect = video.getBoundingClientRect();
+                const clickY = event.clientY;
+                const videoBottom = rect.bottom;
+                const controlsHeight = 40; // Approximate height of video controls
+                
+                if (clickY < videoBottom - controlsHeight) {
+                    expandVideo(event);
+                }
+            }
+            
+            // Check if clicked on overlay background or close button
+            if (event.target.classList.contains('video-overlay') || 
+                event.target.classList.contains('close-video-btn')) {
+                closeExpandedVideo();
+            }
+        });
+
+        // Close on Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeExpandedVideo();
+            }
+        });
     </script>
 </body>
 </html>
