@@ -46,7 +46,7 @@ body {
     font-size: 72px;
     font-weight: 800;
     margin-bottom: 30px;
-    background: linear-gradient(135deg, #ff667d 0%, #ffb3ba 100%);
+    background: linear-gradient(135deg, #4FC3F7 0%, #81D4FA 100%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -695,11 +695,11 @@ body {
     font-weight: 800;
     margin-bottom: 10px;
     margin-top: 6cm;
-    background: linear-gradient(135deg, #ff667d 0%, #ffb3ba 50%, #ff667d 100%);
+    background: linear-gradient(135deg, #4FC3F7 0%, #81D4FA 50%, #4FC3F7 100%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    text-shadow: 0 0 40px rgba(255, 102, 125, 0.3);
+    text-shadow: 0 0 40px rgba(79, 195, 247, 0.3);
     letter-spacing: -2px;
 }
 
