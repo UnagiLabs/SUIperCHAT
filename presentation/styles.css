@@ -21,14 +21,14 @@ body {
 }
 
 .slide {
-    width: 90%;
-    max-width: 1200px;
+    width: 95vw;
+    max-width: calc(90vh * 16 / 9);
     height: 90vh;
     display: none;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding: 60px;
+    padding: 60px 80px;
     position: relative;
     background: linear-gradient(135deg, #1a1a2e 0%, #0f0f23 100%);
     border-radius: 20px;
@@ -80,22 +80,36 @@ body {
 
 .problem-list {
     list-style: none;
-    font-size: 32px;
+    font-size: 28px;
     margin-top: 40px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 30px 40px;
+    width: 100%;
+    max-width: 1200px;
 }
 
 .problem-list li {
-    margin-bottom: 30px;
     display: flex;
     align-items: center;
     animation: fadeInUp 0.6s ease-out forwards;
     opacity: 0;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 20px 25px;
+    border-radius: 12px;
+    transition: all 0.3s ease;
+}
+
+.problem-list li:hover {
+    background: rgba(79, 195, 247, 0.1);
+    transform: translateY(-3px);
 }
 
 .problem-list li:nth-child(1) { animation-delay: 0.2s; }
 .problem-list li:nth-child(2) { animation-delay: 0.4s; }
 .problem-list li:nth-child(3) { animation-delay: 0.6s; }
 .problem-list li:nth-child(4) { animation-delay: 0.8s; }
+.problem-list li:nth-child(5) { animation-delay: 1.0s; }
 
 .problem-icon {
     font-size: 40px;
