@@ -81,12 +81,21 @@
         // Initialize
         showSlide(0);
         
-        // Video expansion functionality
-        function expandVideo(event) {
+        // Generic video expansion functionality
+        function expandVideoGeneric(event) {
             event.stopPropagation();
-            const overlay = document.getElementById('video-overlay');
-            const originalVideo = document.getElementById('demo-video');
-            const expandedVideo = document.getElementById('expanded-video');
+            const videoContainer = event.target.closest('.video-container');
+            const originalVideo = videoContainer.querySelector('video');
+            
+            // Determine which overlay to use based on video ID
+            let overlay, expandedVideo;
+            if (originalVideo.id === 'demo-video') {
+                overlay = document.getElementById('video-overlay');
+                expandedVideo = document.getElementById('expanded-video');
+            } else if (originalVideo.id === 'demo-video-2') {
+                overlay = document.getElementById('video-overlay-2');
+                expandedVideo = document.getElementById('expanded-video-2');
+            }
             
             if (!overlay || !originalVideo || !expandedVideo) return;
             
@@ -102,24 +111,36 @@
             }, 10);
         }
 
-        function closeExpandedVideo() {
-            const overlay = document.getElementById('video-overlay');
-            const originalVideo = document.getElementById('demo-video');
-            const expandedVideo = document.getElementById('expanded-video');
+        function closeExpandedVideoGeneric() {
+            // Check all possible overlays
+            const overlays = [
+                {
+                    overlay: document.getElementById('video-overlay'),
+                    original: document.getElementById('demo-video'),
+                    expanded: document.getElementById('expanded-video')
+                },
+                {
+                    overlay: document.getElementById('video-overlay-2'),
+                    original: document.getElementById('demo-video-2'),
+                    expanded: document.getElementById('expanded-video-2')
+                }
+            ];
             
-            if (!overlay || !originalVideo || !expandedVideo) return;
-            
-            // Sync back to original video
-            originalVideo.currentTime = expandedVideo.currentTime;
-            if (!expandedVideo.paused) {
-                originalVideo.play();
-            }
-            
-            overlay.classList.remove('active');
-            setTimeout(() => {
-                overlay.style.display = 'none';
-                expandedVideo.pause();
-            }, 300);
+            overlays.forEach(({overlay, original, expanded}) => {
+                if (overlay && overlay.classList.contains('active') && original && expanded) {
+                    // Sync back to original video
+                    original.currentTime = expanded.currentTime;
+                    if (!expanded.paused) {
+                        original.play();
+                    }
+                    
+                    overlay.classList.remove('active');
+                    setTimeout(() => {
+                        overlay.style.display = 'none';
+                        expanded.pause();
+                    }, 300);
+                }
+            });
         }
 
         // Event delegation for dynamically loaded content
@@ -136,21 +157,21 @@
                 const controlsHeight = 40; // Approximate height of video controls
                 
                 if (clickY < videoBottom - controlsHeight) {
-                    expandVideo(event);
+                    expandVideoGeneric(event);
                 }
             }
             
             // Check if clicked on overlay background or close button
             if (event.target.classList.contains('video-overlay') || 
                 event.target.classList.contains('close-video-btn')) {
-                closeExpandedVideo();
+                closeExpandedVideoGeneric();
             }
         });
 
         // Close on Escape key
         document.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
-                closeExpandedVideo();
+                closeExpandedVideoGeneric();
             }
         });
     </script>
