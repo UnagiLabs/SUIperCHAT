@@ -9,8 +9,8 @@
 import { useWebSocketConnectionManager } from "@/hooks/useWebSocketConnect"; // 接続管理ロジック
 import { useWebSocketMessageHandler } from "@/hooks/useWebSocketMessage"; // メッセージ処理ロジック
 import {
-	ConnectionStatus,
 	type ChatMessage,
+	ConnectionStatus,
 	type HistoryDataMessage,
 	MessageType,
 	type SuperchatMessage,
@@ -86,42 +86,46 @@ export function WebSocketProvider({
 	});
 
 	// WebSocketメッセージハンドラの拡張 (過去ログ処理用)
-	const handleHistoryMessage = useCallback((data: { messages?: (ChatMessage | SuperchatMessage)[]; has_more?: boolean }) => {
-		console.debug(`履歴データ受信: ${data.messages?.length || 0}件`);
+	const handleHistoryMessage = useCallback(
+		(data: {
+			messages?: (ChatMessage | SuperchatMessage)[];
+			has_more?: boolean;
+		}) => {
+			console.debug(`履歴データ受信: ${data.messages?.length || 0}件`);
 
-		setState((prev) => {
-			// サーバーからのレスポンス形式に対応
-			const messages = data.messages || [];
-			const hasMore = data.has_more || false;
+			setState((prev) => {
+				// サーバーからのレスポンス形式に対応
+				const messages = data.messages || [];
+				const hasMore = data.has_more || false;
 
-			// 既存メッセージのIDを取得
-			const existingMessageIds = new Set(prev.messages.map((msg) => msg.id));
+				// 既存メッセージのIDを取得
+				const existingMessageIds = new Set(prev.messages.map((msg) => msg.id));
 
-			// 重複を除外して新しいメッセージを追加
-			const newMessages = [
-				...messages.filter(
-					(msg) => !existingMessageIds.has(msg.id),
-				),
-				...prev.messages,
-			];
+				// 重複を除外して新しいメッセージを追加
+				const newMessages = [
+					...messages.filter((msg) => !existingMessageIds.has(msg.id)),
+					...prev.messages,
+				];
 
-			// メッセージをタイムスタンプでソート
-			newMessages.sort((a, b) => a.timestamp - b.timestamp);
+				// メッセージをタイムスタンプでソート
+				newMessages.sort((a, b) => a.timestamp - b.timestamp);
 
-			// 最も古いメッセージのタイムスタンプを更新
-			const oldestMessage = newMessages[0];
-			const oldestTimestamp = oldestMessage ? oldestMessage.timestamp : null;
+				// 最も古いメッセージのタイムスタンプを更新
+				const oldestMessage = newMessages[0];
+				const oldestTimestamp = oldestMessage ? oldestMessage.timestamp : null;
 
-			return {
-				...prev,
-				messages: newMessages,
-				isLoadingHistory: false,
-				hasMoreHistory: hasMore,
-				historyError: null,
-				oldestMessageTimestamp: oldestTimestamp,
-			};
-		});
-	}, []);
+				return {
+					...prev,
+					messages: newMessages,
+					isLoadingHistory: false,
+					hasMoreHistory: hasMore,
+					historyError: null,
+					oldestMessageTimestamp: oldestTimestamp,
+				};
+			});
+		},
+		[],
+	);
 
 	// カスタムメッセージハンドラ (メッセージタイプに応じて処理を振り分け)
 	const customHandleMessage = useCallback(

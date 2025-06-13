@@ -625,18 +625,27 @@ export function SuperchatForm({
 								render={({ field: { onChange, value, ...field } }) => (
 									<FormItem className="flex-grow">
 										<Input
-											type="number"
+											type="text"
 											placeholder="金額"
-											step="any"
-											min="0"
+											inputMode="decimal"
+											pattern="[0-9]*\.?[0-9]*"
 											{...field}
-											value={value === 0 ? "" : value}
+											value={value === 0 ? "" : value.toString()}
 											onChange={(e) => {
-												const val =
-													e.target.value === ""
-														? 0
-														: Number.parseFloat(e.target.value);
-												onChange(val);
+												const inputValue = e.target.value;
+												// 空文字の場合は0をセット
+												if (inputValue === "") {
+													onChange(0);
+													return;
+												}
+												// 数値として妥当な形式かチェック
+												if (/^\d*\.?\d*$/.test(inputValue)) {
+													const val = Number.parseFloat(inputValue);
+													// NaNでない場合のみ更新
+													if (!Number.isNaN(val)) {
+														onChange(val);
+													}
+												}
 											}}
 											className="text-xs h-6"
 										/>
