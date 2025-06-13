@@ -622,36 +622,68 @@ export function SuperchatForm({
 							<FormField
 								control={form.control}
 								name="amount"
-								render={({ field: { onChange, value, ...field } }) => (
-									<FormItem className="flex-grow">
-										<Input
-											type="text"
-											placeholder="金額"
-											inputMode="decimal"
-											pattern="[0-9]*\.?[0-9]*"
-											{...field}
-											value={value === 0 ? "" : value.toString()}
-											onChange={(e) => {
-												const inputValue = e.target.value;
-												// 空文字の場合は0をセット
-												if (inputValue === "") {
-													onChange(0);
-													return;
-												}
-												// 数値として妥当な形式かチェック
-												if (/^\d*\.?\d*$/.test(inputValue)) {
-													const val = Number.parseFloat(inputValue);
-													// NaNでない場合のみ更新
-													if (!Number.isNaN(val)) {
-														onChange(val);
+								render={({ field: { onChange, value, ...field } }) => {
+									// 表示用の値を管理（入力中の状態を保持）
+									const [displayValue, setDisplayValue] = useState(
+										value === 0 ? "" : value.toString(),
+									);
+
+									// valueが外部から変更された場合に表示値を更新
+									useEffect(() => {
+										setDisplayValue(value === 0 ? "" : value.toString());
+									}, [value]);
+
+									return (
+										<FormItem className="flex-grow">
+											<Input
+												type="text"
+												placeholder="金額"
+												inputMode="decimal"
+												pattern="[0-9]*\.?[0-9]*"
+												{...field}
+												value={displayValue}
+												onChange={(e) => {
+													const inputValue = e.target.value;
+
+													// 空文字の場合
+													if (inputValue === "") {
+														setDisplayValue("");
+														onChange(0);
+														return;
 													}
-												}
-											}}
-											className="text-xs h-6"
-										/>
-										<FormMessage />
-									</FormItem>
-								)}
+
+													// 数値として妥当な形式かチェック（末尾のドットも許可）
+													if (/^\d*\.?\d*$/.test(inputValue)) {
+														setDisplayValue(inputValue);
+
+														// 数値に変換可能な場合のみフォームの値を更新
+														// 末尾が.の場合は変換しない（入力中のため）
+														if (!inputValue.endsWith(".")) {
+															const val = Number.parseFloat(inputValue);
+															if (!Number.isNaN(val)) {
+																onChange(val);
+															}
+														}
+													}
+												}}
+												onBlur={() => {
+													// フォーカスが外れたときに表示値を整形
+													if (
+														displayValue !== "" &&
+														!displayValue.endsWith(".")
+													) {
+														const val = Number.parseFloat(displayValue);
+														if (!Number.isNaN(val)) {
+															setDisplayValue(val.toString());
+														}
+													}
+												}}
+												className="text-xs h-6"
+											/>
+											<FormMessage />
+										</FormItem>
+									);
+								}}
 							/>
 						</div>
 					)}
