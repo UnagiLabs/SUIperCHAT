@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SUIperCHAT - ハッカソンプレゼンテーション</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="presentation-container">
+        <div id="slide-container"></div>
+    </div>
+    
+    <div class="navigation">
+        <button class="nav-btn" onclick="previousSlide()">← 前へ</button>
+        <button class="nav-btn" onclick="nextSlide()">次へ →</button>
+    </div>
+    
+    <script>
+        let currentSlide = 0;
+        const totalSlides = 11;
+        const slideContainer = document.getElementById('slide-container');
+        
+        // スライドファイルのパス
+        const slidePaths = [
+            'slides/slide0.html',
+            'slides/slide1.html',
+            'slides/slide2.html',
+            'slides/slide3.html',
+            'slides/slide4.html',
+            'slides/slide5.html',
+            'slides/slide6.html',
+            'slides/slide7.html',
+            'slides/slide8.html',
+            'slides/slide9.html',
+            'slides/slide10.html'
+        ];
+        
+        // スライドを読み込む関数
+        async function loadSlide(index) {
+            try {
+                const response = await fetch(slidePaths[index]);
+                const html = await response.text();
+                slideContainer.innerHTML = html;
+                
+                // アクティブクラスを追加
+                const slide = slideContainer.querySelector('.slide');
+                if (slide) {
+                    slide.classList.add('active');
+                }
+            } catch (error) {
+                console.error('スライドの読み込みエラー:', error);
+                slideContainer.innerHTML = '<div class="slide active"><h2>スライドの読み込みに失敗しました</h2></div>';
+            }
+        }
+        
+        // スライドを表示する関数
+        function showSlide(index) {
+            currentSlide = index;
+            loadSlide(index);
+        }
+        
+        // 次のスライド
+        function nextSlide() {
+            currentSlide = (currentSlide + 1) % totalSlides;
+            showSlide(currentSlide);
+        }
+        
+        // 前のスライド
+        function previousSlide() {
+            currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
+            showSlide(currentSlide);
+        }
+        
+        // キーボードナビゲーション
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') nextSlide();
+            if (e.key === 'ArrowLeft') previousSlide();
+        });
+        
+        // 初期化
+        showSlide(0);
+    </script>
+</body>
+</html>
