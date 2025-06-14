@@ -47,12 +47,23 @@ export function useMobileKeyboard(): MobileKeyboardState {
 			const keyboardHeight = windowHeight - viewportHeight;
 
 			// iOS SafariとAndroidの判定を改善
-			// iOSでは小さな変動があるため閾値を調整
+			// 閾値を下げてより正確な検出を実現
 			const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
-			const threshold = isIOS ? 200 : 150;
+			const threshold = isIOS ? 100 : 50;
 
 			// キーボードの高さが閾値以上の場合をキーボード表示と判定
 			const isKeyboardVisible = keyboardHeight > threshold;
+
+			// デバッグ用（開発環境のみ）
+			if (process.env.NODE_ENV === "development") {
+				console.log("Keyboard state:", {
+					windowHeight,
+					viewportHeight,
+					keyboardHeight,
+					threshold,
+					isKeyboardVisible,
+				});
+			}
 
 			setKeyboardState({
 				isKeyboardVisible,

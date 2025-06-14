@@ -557,10 +557,13 @@ export function SuperchatForm({
 	const isLandscape =
 		typeof window !== "undefined" && window.innerWidth > window.innerHeight;
 
+	// キーボード高さを微調整（余白を減らすため）
+	const adjustedKeyboardHeight = keyboardHeight > 0 ? keyboardHeight - 20 : 0;
+
 	const mobileKeyboardStyle = isMobileKeyboardFixed
 		? {
 				position: "fixed" as const,
-				bottom: `${keyboardHeight}px`,
+				bottom: `${adjustedKeyboardHeight}px`,
 				left: isLandscape ? "50%" : "0",
 				right: isLandscape ? "auto" : "0",
 				width: isLandscape ? "50%" : "100%",
@@ -569,8 +572,7 @@ export function SuperchatForm({
 				backgroundColor: "hsl(var(--background))",
 				borderTop: "1px solid hsl(var(--border))",
 				boxShadow: "0 -4px 12px -2px rgb(0 0 0 / 0.15)",
-				// Safe Area対応
-				paddingBottom: "env(safe-area-inset-bottom, 0px)",
+				// Safe Areaはvisualviewportで既に考慮されているため削除
 				// アニメーション効果
 				transition: "all 0.2s ease-in-out",
 			}
