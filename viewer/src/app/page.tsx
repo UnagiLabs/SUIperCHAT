@@ -52,14 +52,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 	}
 
 	return (
-		<>
+		<div className="h-full flex flex-col overflow-hidden">
 			{/* WebSocketのURL処理用コンポーネント (URLパラメータからWS接続) */}
 			<Suspense fallback={null}>
 				<WebSocketUrlHandler />
 			</Suspense>
 
 			<ViewerHeader />
-			<main className="container max-w-screen-xl mx-auto p-0.5 md:p-1">
+			<main className="flex-1 container max-w-screen-xl mx-auto p-0.5 md:p-1 overflow-hidden">
 				<ViewerLayout
 					video_player={
 						<VideoPlayer
@@ -82,6 +82,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 					}
 				/>
 			</main>
-		</>
+		</div>
 	);
 }
