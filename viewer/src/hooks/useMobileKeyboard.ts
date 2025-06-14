@@ -46,9 +46,13 @@ export function useMobileKeyboard(): MobileKeyboardState {
 			const viewportHeight = viewport.height;
 			const keyboardHeight = windowHeight - viewportHeight;
 
-			// キーボードの高さが150px以上の場合をキーボード表示と判定
-			// （小さな差異はブラウザのUI変更などの可能性があるため）
-			const isKeyboardVisible = keyboardHeight > 150;
+			// iOS SafariとAndroidの判定を改善
+			// iOSでは小さな変動があるため閾値を調整
+			const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+			const threshold = isIOS ? 200 : 150;
+
+			// キーボードの高さが閾値以上の場合をキーボード表示と判定
+			const isKeyboardVisible = keyboardHeight > threshold;
 
 			setKeyboardState({
 				isKeyboardVisible,

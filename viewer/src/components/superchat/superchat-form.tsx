@@ -553,223 +553,262 @@ export function SuperchatForm({
 
 	// モバイルキーボード表示時のスタイル設定
 	const isMobileKeyboardFixed = isKeyboardVisible && isInputFocused;
+	// 画面幅で横画面かどうかを判定
+	const isLandscape =
+		typeof window !== "undefined" && window.innerWidth > window.innerHeight;
+
 	const mobileKeyboardStyle = isMobileKeyboardFixed
 		? {
 				position: "fixed" as const,
 				bottom: `${keyboardHeight}px`,
-				left: "0",
-				right: "0",
+				left: isLandscape ? "50%" : "0",
+				right: isLandscape ? "auto" : "0",
+				width: isLandscape ? "50%" : "100%",
+				transform: isLandscape ? "translateX(-100%)" : "none",
 				zIndex: 1000,
 				backgroundColor: "hsl(var(--background))",
 				borderTop: "1px solid hsl(var(--border))",
-				boxShadow: "0 -4px 6px -1px rgb(0 0 0 / 0.1)",
+				boxShadow: "0 -4px 12px -2px rgb(0 0 0 / 0.15)",
+				// Safe Area対応
+				paddingBottom: "env(safe-area-inset-bottom, 0px)",
+				// アニメーション効果
+				transition: "all 0.2s ease-in-out",
 			}
 		: {};
 
 	// UIは常に統合UIを使用（non-integrated UIは使用されていないため削除）
 	return (
-		<div className="h-full flex flex-col justify-end">
-			<Form {...form}>
-				<form
-					ref={formRef}
-					onSubmit={form.handleSubmit(on_submit)}
-					className={cn(
-						has_tip ? "p-1 pb-2 space-y-1" : "px-1 py-1.5 space-y-0",
-						isMobileKeyboardFixed && "px-2 py-2",
-					)}
-					style={mobileKeyboardStyle}
-				>
-					<div
+		<>
+			{/* キーボード表示時のオーバーレイ */}
+			{isMobileKeyboardFixed && (
+				<div
+					className="fixed inset-0 bg-black/20 backdrop-blur-sm transition-opacity duration-200"
+					style={{ zIndex: 999 }}
+					onClick={() => {
+						// オーバーレイクリックでフォーカスを外す
+						const activeElement = document.activeElement as HTMLElement;
+						if (activeElement?.blur) {
+							activeElement.blur();
+						}
+					}}
+					onKeyDown={(e) => {
+						// Escapeキーでフォーカスを外す
+						if (e.key === "Escape") {
+							const activeElement = document.activeElement as HTMLElement;
+							if (activeElement?.blur) {
+								activeElement.blur();
+							}
+						}
+					}}
+					tabIndex={-1}
+					role="button"
+					aria-label="フォーカスを外す"
+				/>
+			)}
+
+			<div className="h-full flex flex-col justify-end">
+				<Form {...form}>
+					<form
+						ref={formRef}
+						onSubmit={form.handleSubmit(on_submit)}
 						className={cn(
-							"flex items-center justify-between",
-							has_tip ? "mb-0.5" : "",
+							has_tip ? "p-1 pb-2 space-y-1" : "px-1 py-1.5 space-y-0",
+							isMobileKeyboardFixed && "px-2 py-2",
 						)}
+						style={mobileKeyboardStyle}
 					>
-						<FormField
-							control={form.control}
-							name="display_name"
-							render={({ field }) => (
-								<FormItem className="flex-grow mr-1">
-									<Input
-										placeholder="表示名"
-										{...field}
-										className="text-xs h-6"
-										onChange={(e) => {
-											field.onChange(e);
-											updateUsername(e.target.value);
-										}}
-										onFocus={handleInputFocus}
-										onBlur={handleInputBlur}
-									/>
-									<FormMessage />
-								</FormItem>
+						<div
+							className={cn(
+								"flex items-center justify-between",
+								has_tip ? "mb-0.5" : "",
 							)}
-						/>
-
-						<div className="flex items-center space-x-0.5 bg-secondary rounded-lg p-0.5">
-							<button
-								type="button"
-								onClick={() => set_has_tip(false)}
-								className={`px-1.5 py-0.5 text-xs rounded-md transition-colors ${
-									!has_tip
-										? "bg-card shadow-sm"
-										: "text-muted-foreground hover:bg-secondary/80"
-								}`}
-							>
-								NoTip
-							</button>
-							<button
-								type="button"
-								onClick={() => set_has_tip(true)}
-								className={`px-1.5 py-0.5 text-xs rounded-md transition-colors ${
-									has_tip
-										? "bg-card shadow-sm"
-										: "text-muted-foreground hover:bg-secondary/80"
-								}`}
-							>
-								SuperChat
-							</button>
-						</div>
-					</div>
-
-					{has_tip && (
-						<div className="flex items-center gap-1 mb-0.5">
+						>
 							<FormField
 								control={form.control}
-								name="coinTypeArg"
-								render={({ field: coinField }) => (
-									<FormItem className="flex-grow-0">
-										<Select
-											value={coinField.value}
-											onValueChange={coinField.onChange}
-										>
-											<SelectTrigger className="w-16 text-xs h-6">
-												<SelectValue placeholder="Coin" />
-											</SelectTrigger>
-											<SelectContent>
-												{SUPPORTED_COINS.map((coin) => (
-													<SelectItem key={coin.typeArg} value={coin.typeArg}>
-														{coin.symbol}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
+								name="display_name"
+								render={({ field }) => (
+									<FormItem className="flex-grow mr-1">
+										<Input
+											placeholder="表示名"
+											{...field}
+											className="text-xs h-6"
+											onChange={(e) => {
+												field.onChange(e);
+												updateUsername(e.target.value);
+											}}
+											onFocus={handleInputFocus}
+											onBlur={handleInputBlur}
+										/>
 										<FormMessage />
 									</FormItem>
 								)}
 							/>
 
-							<FormField
-								control={form.control}
-								name="amount"
-								render={({ field: { onChange, value, ...field } }) => {
-									// 表示用の値を管理（入力中の状態を保持）
-									const [displayValue, setDisplayValue] = useState(
-										value === 0 ? "" : value.toString(),
-									);
+							<div className="flex items-center space-x-0.5 bg-secondary rounded-lg p-0.5">
+								<button
+									type="button"
+									onClick={() => set_has_tip(false)}
+									className={`px-1.5 py-0.5 text-xs rounded-md transition-colors ${
+										!has_tip
+											? "bg-card shadow-sm"
+											: "text-muted-foreground hover:bg-secondary/80"
+									}`}
+								>
+									NoTip
+								</button>
+								<button
+									type="button"
+									onClick={() => set_has_tip(true)}
+									className={`px-1.5 py-0.5 text-xs rounded-md transition-colors ${
+										has_tip
+											? "bg-card shadow-sm"
+											: "text-muted-foreground hover:bg-secondary/80"
+									}`}
+								>
+									SuperChat
+								</button>
+							</div>
+						</div>
 
-									// valueが外部から変更された場合に表示値を更新
-									useEffect(() => {
-										setDisplayValue(value === 0 ? "" : value.toString());
-									}, [value]);
-
-									return (
-										<FormItem className="flex-grow">
-											<Input
-												type="text"
-												placeholder="金額"
-												inputMode="decimal"
-												pattern="[0-9]*\.?[0-9]*"
-												{...field}
-												value={displayValue}
-												onChange={(e) => {
-													const inputValue = e.target.value;
-
-													// 空文字の場合
-													if (inputValue === "") {
-														setDisplayValue("");
-														onChange(0);
-														return;
-													}
-
-													// 数値として妥当な形式かチェック（末尾のドットも許可）
-													if (/^\d*\.?\d*$/.test(inputValue)) {
-														setDisplayValue(inputValue);
-
-														// 数値に変換可能な場合のみフォームの値を更新
-														// 末尾が.の場合は変換しない（入力中のため）
-														if (!inputValue.endsWith(".")) {
-															const val = Number.parseFloat(inputValue);
-															if (!Number.isNaN(val)) {
-																onChange(val);
-															}
-														}
-													}
-												}}
-												onFocus={handleInputFocus}
-												onBlur={(e) => {
-													// フォーカスが外れたときに表示値を整形
-													if (
-														displayValue !== "" &&
-														!displayValue.endsWith(".")
-													) {
-														const val = Number.parseFloat(displayValue);
-														if (!Number.isNaN(val)) {
-															setDisplayValue(val.toString());
-														}
-													}
-													handleInputBlur();
-												}}
-												className="text-xs h-6"
-											/>
+						{has_tip && (
+							<div className="flex items-center gap-1 mb-0.5">
+								<FormField
+									control={form.control}
+									name="coinTypeArg"
+									render={({ field: coinField }) => (
+										<FormItem className="flex-grow-0">
+											<Select
+												value={coinField.value}
+												onValueChange={coinField.onChange}
+											>
+												<SelectTrigger className="w-16 text-xs h-6">
+													<SelectValue placeholder="Coin" />
+												</SelectTrigger>
+												<SelectContent>
+													{SUPPORTED_COINS.map((coin) => (
+														<SelectItem key={coin.typeArg} value={coin.typeArg}>
+															{coin.symbol}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
 											<FormMessage />
 										</FormItem>
-									);
-								}}
-							/>
-						</div>
-					)}
+									)}
+								/>
 
-					<FormField
-						control={form.control}
-						name="recipient_address"
-						render={({ field }) => (
-							<FormItem className="hidden">
-								<Input {...field} type="hidden" />
-							</FormItem>
+								<FormField
+									control={form.control}
+									name="amount"
+									render={({ field: { onChange, value, ...field } }) => {
+										// 表示用の値を管理（入力中の状態を保持）
+										const [displayValue, setDisplayValue] = useState(
+											value === 0 ? "" : value.toString(),
+										);
+
+										// valueが外部から変更された場合に表示値を更新
+										useEffect(() => {
+											setDisplayValue(value === 0 ? "" : value.toString());
+										}, [value]);
+
+										return (
+											<FormItem className="flex-grow">
+												<Input
+													type="text"
+													placeholder="金額"
+													inputMode="decimal"
+													pattern="[0-9]*\.?[0-9]*"
+													{...field}
+													value={displayValue}
+													onChange={(e) => {
+														const inputValue = e.target.value;
+
+														// 空文字の場合
+														if (inputValue === "") {
+															setDisplayValue("");
+															onChange(0);
+															return;
+														}
+
+														// 数値として妥当な形式かチェック（末尾のドットも許可）
+														if (/^\d*\.?\d*$/.test(inputValue)) {
+															setDisplayValue(inputValue);
+
+															// 数値に変換可能な場合のみフォームの値を更新
+															// 末尾が.の場合は変換しない（入力中のため）
+															if (!inputValue.endsWith(".")) {
+																const val = Number.parseFloat(inputValue);
+																if (!Number.isNaN(val)) {
+																	onChange(val);
+																}
+															}
+														}
+													}}
+													onFocus={handleInputFocus}
+													onBlur={(e) => {
+														// フォーカスが外れたときに表示値を整形
+														if (
+															displayValue !== "" &&
+															!displayValue.endsWith(".")
+														) {
+															const val = Number.parseFloat(displayValue);
+															if (!Number.isNaN(val)) {
+																setDisplayValue(val.toString());
+															}
+														}
+														handleInputBlur();
+													}}
+													className="text-xs h-6"
+												/>
+												<FormMessage />
+											</FormItem>
+										);
+									}}
+								/>
+							</div>
 						)}
-					/>
 
-					<div className="flex items-start">
 						<FormField
 							control={form.control}
-							name="message"
+							name="recipient_address"
 							render={({ field }) => (
-								<FormItem className="flex-grow">
-									<Textarea
-										placeholder="メッセージを入力..."
-										{...field}
-										className="text-xs min-h-6 max-h-24 py-1 px-3 resize-none overflow-hidden"
-										style={{ height: "auto" }}
-										onInput={handleTextareaResize}
-										onFocus={handleInputFocus}
-										onBlur={handleInputBlur}
-									/>
-									<FormMessage />
+								<FormItem className="hidden">
+									<Input {...field} type="hidden" />
 								</FormItem>
 							)}
 						/>
-						<Button
-							type="submit"
-							className="ml-1 h-6"
-							disabled={isPending}
-							size="sm"
-						>
-							{isPending ? "送信中..." : "送信"}
-						</Button>
-					</div>
-				</form>
-			</Form>
-		</div>
+
+						<div className="flex items-start">
+							<FormField
+								control={form.control}
+								name="message"
+								render={({ field }) => (
+									<FormItem className="flex-grow">
+										<Textarea
+											placeholder="メッセージを入力..."
+											{...field}
+											className="text-xs min-h-6 max-h-24 py-1 px-3 resize-none overflow-hidden"
+											style={{ height: "auto" }}
+											onInput={handleTextareaResize}
+											onFocus={handleInputFocus}
+											onBlur={handleInputBlur}
+										/>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
+							<Button
+								type="submit"
+								className="ml-1 h-6"
+								disabled={isPending}
+								size="sm"
+							>
+								{isPending ? "送信中..." : "送信"}
+							</Button>
+						</div>
+					</form>
+				</Form>
+			</div>
+		</>
 	);
 }
