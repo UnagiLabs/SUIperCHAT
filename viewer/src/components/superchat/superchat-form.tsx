@@ -32,6 +32,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useMobileKeyboard } from "@/hooks/useMobileKeyboard";
 import { toast } from "sonner";
 
 import {
@@ -161,9 +162,13 @@ export function SuperchatForm({
 	// 確認モード状態管理は不要になったため削除
 	// Tipの有無を管理するステート
 	const [has_tip, set_has_tip] = useState(false);
+	// 入力フィールドがフォーカス中かどうかの状態
+	const [isInputFocused, setIsInputFocused] = useState(false);
 
 	// WebSocketコンテキストを取得
 	const { actions } = useWebSocket();
+	// モバイルキーボードの状態を取得
+	const { isKeyboardVisible, keyboardHeight } = useMobileKeyboard();
 
 	// ユーザー名コンテキストを取得
 	const { username, setUsername } = useUser();
@@ -530,6 +535,37 @@ export function SuperchatForm({
 		}, 1000);
 	}
 
+	// 入力フィールドのフォーカス/ブラーハンドラー
+	const handleInputFocus = useCallback(() => {
+		setIsInputFocused(true);
+	}, []);
+
+	const handleInputBlur = useCallback(() => {
+		// 少し遅延させてフォーカスが他の入力要素に移った場合を考慮
+		setTimeout(() => {
+			const activeElement = document.activeElement;
+			const isFormInput = formRef.current?.contains(activeElement);
+			if (!isFormInput) {
+				setIsInputFocused(false);
+			}
+		}, 100);
+	}, []);
+
+	// モバイルキーボード表示時のスタイル設定
+	const isMobileKeyboardFixed = isKeyboardVisible && isInputFocused;
+	const mobileKeyboardStyle = isMobileKeyboardFixed
+		? {
+				position: "fixed" as const,
+				bottom: `${keyboardHeight}px`,
+				left: "0",
+				right: "0",
+				zIndex: 1000,
+				backgroundColor: "hsl(var(--background))",
+				borderTop: "1px solid hsl(var(--border))",
+				boxShadow: "0 -4px 6px -1px rgb(0 0 0 / 0.1)",
+			}
+		: {};
+
 	// UIは常に統合UIを使用（non-integrated UIは使用されていないため削除）
 	return (
 		<div className="h-full flex flex-col justify-end">
@@ -539,7 +575,9 @@ export function SuperchatForm({
 					onSubmit={form.handleSubmit(on_submit)}
 					className={cn(
 						has_tip ? "p-1 pb-2 space-y-1" : "px-1 py-1.5 space-y-0",
+						isMobileKeyboardFixed && "px-2 py-2",
 					)}
+					style={mobileKeyboardStyle}
 				>
 					<div
 						className={cn(
@@ -560,6 +598,8 @@ export function SuperchatForm({
 											field.onChange(e);
 											updateUsername(e.target.value);
 										}}
+										onFocus={handleInputFocus}
+										onBlur={handleInputBlur}
 									/>
 									<FormMessage />
 								</FormItem>
@@ -666,7 +706,8 @@ export function SuperchatForm({
 														}
 													}
 												}}
-												onBlur={() => {
+												onFocus={handleInputFocus}
+												onBlur={(e) => {
 													// フォーカスが外れたときに表示値を整形
 													if (
 														displayValue !== "" &&
@@ -677,6 +718,7 @@ export function SuperchatForm({
 															setDisplayValue(val.toString());
 														}
 													}
+													handleInputBlur();
 												}}
 												className="text-xs h-6"
 											/>
@@ -710,6 +752,8 @@ export function SuperchatForm({
 										className="text-xs min-h-6 max-h-24 py-1 px-3 resize-none overflow-hidden"
 										style={{ height: "auto" }}
 										onInput={handleTextareaResize}
+										onFocus={handleInputFocus}
+										onBlur={handleInputBlur}
 									/>
 									<FormMessage />
 								</FormItem>

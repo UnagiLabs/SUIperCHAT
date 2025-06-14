@@ -17,6 +17,7 @@
 
 import { WebSocketConnectionStatus } from "@/components/superchat/ws-connection-status";
 import { useAspectRatio } from "@/hooks/useAspectRatio";
+import { useMobileKeyboard } from "@/hooks/useMobileKeyboard";
 import { cn } from "@/lib/utils";
 import React from "react";
 import {
@@ -124,6 +125,8 @@ export function ViewerLayout({
 	const { is_landscape } = useAspectRatio({ threshold: 1.0 });
 	// 画面幅を取得
 	const { window_width, window_height } = useWindowSize();
+	// モバイルキーボードの状態を取得
+	const { isKeyboardVisible, keyboardHeight } = useMobileKeyboard();
 
 	// クライアントサイドでのレンダリングかどうかを検出
 	const [is_mounted, set_is_mounted] = useState(false);
@@ -376,7 +379,14 @@ export function ViewerLayout({
 					<div
 						ref={commentWrapperRef}
 						className="overflow-hidden flex-grow"
-						style={{ flex: "1 1 auto", minHeight: "0" }}
+						style={{
+							flex: "1 1 auto",
+							minHeight: "0",
+							// キーボード表示時に固定された入力フィールド分のpadding-bottomを追加
+							paddingBottom: isKeyboardVisible
+								? `${superchatHeight + 20}px`
+								: "0",
+						}}
 					>
 						{comment_list}
 					</div>
