@@ -63,7 +63,7 @@ export default function RootLayout({
 	return (
 		<html lang="ja" className="dark">
 			<body
-				className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen`}
+				className={`${geistSans.variable} ${geistMono.variable} antialiased h-full overflow-hidden`}
 			>
 				<ClientProviders>
 					<UserProvider>{children}</UserProvider>

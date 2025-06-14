@@ -17,6 +17,7 @@
 
 import { WebSocketConnectionStatus } from "@/components/superchat/ws-connection-status";
 import { useAspectRatio } from "@/hooks/useAspectRatio";
+import { useMobileKeyboard } from "@/hooks/useMobileKeyboard";
 import { cn } from "@/lib/utils";
 import React from "react";
 import {
@@ -124,6 +125,8 @@ export function ViewerLayout({
 	const { is_landscape } = useAspectRatio({ threshold: 1.0 });
 	// 画面幅を取得
 	const { window_width, window_height } = useWindowSize();
+	// モバイルキーボードの状態を取得
+	const { isKeyboardVisible, keyboardHeight } = useMobileKeyboard();
 
 	// クライアントサイドでのレンダリングかどうかを検出
 	const [is_mounted, set_is_mounted] = useState(false);
@@ -141,19 +144,27 @@ export function ViewerLayout({
 	const containerRef = useRef<HTMLDivElement>(null);
 	const videoRef = useRef<HTMLDivElement>(null);
 	const commentRef = useRef<HTMLDivElement>(null);
-	const headerRef = useRef<HTMLDivElement | null>(null);
 	const superchatRef = useRef<HTMLDivElement>(null);
 	const commentListRef = useRef<HTMLDivElement>(null);
 	const commentWrapperRef = useRef<HTMLDivElement>(null);
 
 	// スーパーチャットエリアの高さ（NoTipモードとデバイスに応じて調整）
 	const getSuperchatHeight = useCallback(() => {
+		// モバイルの場合は入力要素が大きくなるため高さを調整
+		const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
+
 		if (!has_tip) {
 			// NoTipモードの場合は最小限の高さにする
-			return !is_mounted ? 80 : is_mobile_landscape ? 65 : 80;
+			if (!is_mounted) return 80;
+			if (is_mobile_landscape) return 65;
+			if (isMobile) return 100; // モバイルは高めに
+			return 80;
 		}
 		// Tipありの場合は通常の高さにする
-		return !is_mounted ? 140 : is_mobile_landscape ? 100 : 140;
+		if (!is_mounted) return 140;
+		if (is_mobile_landscape) return 120;
+		if (isMobile) return 160; // モバイルは高めに
+		return 140;
 	}, [has_tip, is_mounted, is_mobile_landscape]);
 
 	// スーパーチャット高さの計算
@@ -177,15 +188,6 @@ export function ViewerLayout({
 		set_has_tip(tip_mode);
 	}, []);
 
-	// ヘッダー要素を探す
-	useLayoutEffect(() => {
-		// header要素を取得
-		const header = document.querySelector("header") as HTMLDivElement;
-		if (header) {
-			headerRef.current = header;
-		}
-	}, []);
-
 	// リサイズや初期レンダリング時にレイアウトを動的に計算
 	useEffect(() => {
 		// ビューポートの高さを取得するための関数
@@ -197,21 +199,9 @@ export function ViewerLayout({
 		};
 
 		function updateLayout() {
-			// ヘッダーの高さを取得
-			const headerHeight = headerRef.current
-				? headerRef.current.offsetHeight
-				: is_landscape
-					? 40
-					: 32;
-
-			// メインコンテンツのパディング
-			const mainPadding = 8;
-
-			// ビューポートの高さを取得
-			const viewportHeight = getViewportHeight();
-
-			// 使用可能な高さを計算（ヘッダーとパディングを引く）
-			const availableHeight = viewportHeight - headerHeight - mainPadding;
+			// mainタグの高さを直接取得（flex-1により自動計算される）
+			const mainElement = containerRef.current?.parentElement;
+			const availableHeight = mainElement?.offsetHeight || window.innerHeight;
 
 			if (is_mobile_landscape) {
 				// スマホ横画面時は動画とコメントコンテナの高さを同じに
@@ -330,7 +320,6 @@ export function ViewerLayout({
 		<div
 			ref={containerRef}
 			className={cn("w-full max-w-7xl mx-auto h-full flex flex-col", className)}
-			style={{ minHeight: "calc(100vh - 60px)" }}
 		>
 			{/* レイアウトをアスペクト比に基づいて切り替え */}
 			<div
@@ -376,7 +365,14 @@ export function ViewerLayout({
 					<div
 						ref={commentWrapperRef}
 						className="overflow-hidden flex-grow"
-						style={{ flex: "1 1 auto", minHeight: "0" }}
+						style={{
+							flex: "1 1 auto",
+							minHeight: "0",
+							// キーボード表示時に固定された入力フィールド分のpadding-bottomを追加
+							paddingBottom: isKeyboardVisible
+								? `${superchatHeight + 20}px`
+								: "0",
+						}}
 					>
 						{comment_list}
 					</div>
