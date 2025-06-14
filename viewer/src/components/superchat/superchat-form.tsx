@@ -631,7 +631,7 @@ export function SuperchatForm({
 										<Input
 											placeholder="表示名"
 											{...field}
-											className="text-xs h-6"
+											className="text-base md:text-xs h-10 md:h-6"
 											onChange={(e) => {
 												field.onChange(e);
 												updateUsername(e.target.value);
@@ -648,7 +648,7 @@ export function SuperchatForm({
 								<button
 									type="button"
 									onClick={() => set_has_tip(false)}
-									className={`px-1.5 py-0.5 text-xs rounded-md transition-colors ${
+									className={`px-1.5 py-0.5 text-sm md:text-xs rounded-md transition-colors ${
 										!has_tip
 											? "bg-card shadow-sm"
 											: "text-muted-foreground hover:bg-secondary/80"
@@ -659,7 +659,7 @@ export function SuperchatForm({
 								<button
 									type="button"
 									onClick={() => set_has_tip(true)}
-									className={`px-1.5 py-0.5 text-xs rounded-md transition-colors ${
+									className={`px-1.5 py-0.5 text-sm md:text-xs rounded-md transition-colors ${
 										has_tip
 											? "bg-card shadow-sm"
 											: "text-muted-foreground hover:bg-secondary/80"
@@ -681,7 +681,7 @@ export function SuperchatForm({
 												value={coinField.value}
 												onValueChange={coinField.onChange}
 											>
-												<SelectTrigger className="w-16 text-xs h-6">
+												<SelectTrigger className="w-16 text-base md:text-xs h-10 md:h-6">
 													<SelectValue placeholder="Coin" />
 												</SelectTrigger>
 												<SelectContent>
@@ -758,7 +758,7 @@ export function SuperchatForm({
 														}
 														handleInputBlur();
 													}}
-													className="text-xs h-6"
+													className="text-base md:text-xs h-10 md:h-6"
 												/>
 												<FormMessage />
 											</FormItem>
@@ -787,7 +787,7 @@ export function SuperchatForm({
 										<Textarea
 											placeholder="メッセージを入力..."
 											{...field}
-											className="text-xs min-h-6 max-h-24 py-1 px-3 resize-none overflow-hidden"
+											className="text-base md:text-xs min-h-10 md:min-h-6 max-h-24 py-1 px-3 resize-none overflow-hidden"
 											style={{ height: "auto" }}
 											onInput={handleTextareaResize}
 											onFocus={handleInputFocus}
@@ -799,7 +799,7 @@ export function SuperchatForm({
 							/>
 							<Button
 								type="submit"
-								className="ml-1 h-6"
+								className="ml-1 h-10 md:h-6"
 								disabled={isPending}
 								size="sm"
 							>

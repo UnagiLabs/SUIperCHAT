@@ -3,6 +3,30 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* モバイルデバイスでの自動ズームを防止 */
+@media (max-width: 768px) {
+	/* 入力要素のフォントサイズを16px以上に設定 */
+	input[type="text"],
+	input[type="email"],
+	input[type="number"],
+	input[type="tel"],
+	input[type="search"],
+	input[type="password"],
+	textarea,
+	select {
+		font-size: 16px !important;
+		/* Webkitブラウザのテキストサイズ調整を無効化 */
+		-webkit-text-size-adjust: 100%;
+	}
+
+	/* 入力要素フォーカス時のズームを防止 */
+	input:focus,
+	textarea:focus,
+	select:focus {
+		font-size: 16px !important;
+	}
+}
+
 @theme inline {
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);

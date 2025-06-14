@@ -151,12 +151,21 @@ export function ViewerLayout({
 
 	// スーパーチャットエリアの高さ（NoTipモードとデバイスに応じて調整）
 	const getSuperchatHeight = useCallback(() => {
+		// モバイルの場合は入力要素が大きくなるため高さを調整
+		const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
+
 		if (!has_tip) {
 			// NoTipモードの場合は最小限の高さにする
-			return !is_mounted ? 80 : is_mobile_landscape ? 65 : 80;
+			if (!is_mounted) return 80;
+			if (is_mobile_landscape) return 65;
+			if (isMobile) return 100; // モバイルは高めに
+			return 80;
 		}
 		// Tipありの場合は通常の高さにする
-		return !is_mounted ? 140 : is_mobile_landscape ? 100 : 140;
+		if (!is_mounted) return 140;
+		if (is_mobile_landscape) return 120;
+		if (isMobile) return 160; // モバイルは高めに
+		return 140;
 	}, [has_tip, is_mounted, is_mobile_landscape]);
 
 	// スーパーチャット高さの計算
