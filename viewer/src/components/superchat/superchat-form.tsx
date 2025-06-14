@@ -613,7 +613,7 @@ export function SuperchatForm({
 						onSubmit={form.handleSubmit(on_submit)}
 						className={cn(
 							has_tip ? "p-1 pb-2 space-y-1" : "px-1 py-1.5 space-y-0",
-							isMobileKeyboardFixed && "px-2 py-2",
+							isMobileKeyboardFixed ? "px-2 py-2" : "",
 						)}
 						style={mobileKeyboardStyle}
 					>
