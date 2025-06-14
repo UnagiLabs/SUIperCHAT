@@ -209,21 +209,24 @@ export function ViewerLayout({
 		};
 
 		function updateLayout() {
-			// ヘッダーの高さを取得
+			// ヘッダーの高さを取得（実際のヘッダー高さに合わせて調整）
 			const headerHeight = headerRef.current
 				? headerRef.current.offsetHeight
 				: is_landscape
-					? 40
-					: 32;
+					? 48 // md:h-[calc(100vh-3rem)]
+					: 40; // h-[calc(100vh-2.5rem)]
 
-			// メインコンテンツのパディング
-			const mainPadding = 8;
+			// メインコンテンツのパディング (p-0.5 = 2px, md:p-1 = 4px)
+			const mainPadding = is_landscape ? 4 : 2;
 
 			// ビューポートの高さを取得
 			const viewportHeight = getViewportHeight();
 
-			// 使用可能な高さを計算（ヘッダーとパディングを引く）
-			const availableHeight = viewportHeight - headerHeight - mainPadding;
+			// mainタグの高さを直接取得（より正確）
+			const mainElement = containerRef.current?.parentElement;
+			const availableHeight = mainElement
+				? mainElement.offsetHeight
+				: viewportHeight - headerHeight - mainPadding * 2;
 
 			if (is_mobile_landscape) {
 				// スマホ横画面時は動画とコメントコンテナの高さを同じに
@@ -342,7 +345,6 @@ export function ViewerLayout({
 		<div
 			ref={containerRef}
 			className={cn("w-full max-w-7xl mx-auto h-full flex flex-col", className)}
-			style={{ minHeight: "calc(100vh - 60px)" }}
 		>
 			{/* レイアウトをアスペクト比に基づいて切り替え */}
 			<div

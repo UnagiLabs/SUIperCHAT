@@ -140,7 +140,11 @@
 	* {
 		@apply border-border outline-ring/50;
 	}
+	/* ページ全体のスクロール無効化 */
+	html {
+		@apply h-full overflow-hidden;
+	}
 	body {
-		@apply bg-background text-foreground;
+		@apply bg-background text-foreground h-full overflow-hidden;
 	}
 }

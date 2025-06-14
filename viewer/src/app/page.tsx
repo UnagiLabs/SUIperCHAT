@@ -59,7 +59,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 			</Suspense>
 
 			<ViewerHeader />
-			<main className="container max-w-screen-xl mx-auto p-0.5 md:p-1">
+			<main className="container max-w-screen-xl mx-auto p-0.5 md:p-1 h-[calc(100vh-2.5rem)] md:h-[calc(100vh-3rem)] overflow-hidden">
 				<ViewerLayout
 					video_player={
 						<VideoPlayer
