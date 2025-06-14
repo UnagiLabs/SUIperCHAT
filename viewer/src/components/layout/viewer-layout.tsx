@@ -144,7 +144,6 @@ export function ViewerLayout({
 	const containerRef = useRef<HTMLDivElement>(null);
 	const videoRef = useRef<HTMLDivElement>(null);
 	const commentRef = useRef<HTMLDivElement>(null);
-	const headerRef = useRef<HTMLDivElement | null>(null);
 	const superchatRef = useRef<HTMLDivElement>(null);
 	const commentListRef = useRef<HTMLDivElement>(null);
 	const commentWrapperRef = useRef<HTMLDivElement>(null);
@@ -189,15 +188,6 @@ export function ViewerLayout({
 		set_has_tip(tip_mode);
 	}, []);
 
-	// ヘッダー要素を探す
-	useLayoutEffect(() => {
-		// header要素を取得
-		const header = document.querySelector("header") as HTMLDivElement;
-		if (header) {
-			headerRef.current = header;
-		}
-	}, []);
-
 	// リサイズや初期レンダリング時にレイアウトを動的に計算
 	useEffect(() => {
 		// ビューポートの高さを取得するための関数
@@ -209,24 +199,9 @@ export function ViewerLayout({
 		};
 
 		function updateLayout() {
-			// ヘッダーの高さを取得（実際のヘッダー高さに合わせて調整）
-			const headerHeight = headerRef.current
-				? headerRef.current.offsetHeight
-				: is_landscape
-					? 48 // md:h-[calc(100vh-3rem)]
-					: 40; // h-[calc(100vh-2.5rem)]
-
-			// メインコンテンツのパディング (p-0.5 = 2px, md:p-1 = 4px)
-			const mainPadding = is_landscape ? 4 : 2;
-
-			// ビューポートの高さを取得
-			const viewportHeight = getViewportHeight();
-
-			// mainタグの高さを直接取得（より正確）
+			// mainタグの高さを直接取得（flex-1により自動計算される）
 			const mainElement = containerRef.current?.parentElement;
-			const availableHeight = mainElement
-				? mainElement.offsetHeight
-				: viewportHeight - headerHeight - mainPadding * 2;
+			const availableHeight = mainElement?.offsetHeight || window.innerHeight;
 
 			if (is_mobile_landscape) {
 				// スマホ横画面時は動画とコメントコンテナの高さを同じに
