@@ -142,7 +142,10 @@
 	}
 	/* ページ全体のスクロール無効化 */
 	html {
-		@apply h-full overflow-hidden;
+		/* iOS Safariの動的ビューポート対応 */
+		height: 100%;
+		height: 100dvh;
+		@apply overflow-hidden;
 	}
 	body {
 		@apply bg-background text-foreground h-full overflow-hidden;

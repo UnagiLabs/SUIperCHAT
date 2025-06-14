@@ -52,7 +52,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 	}
 
 	return (
-		<div className="h-screen flex flex-col overflow-hidden">
+		<div className="h-full flex flex-col overflow-hidden">
 			{/* WebSocketのURL処理用コンポーネント (URLパラメータからWS接続) */}
 			<Suspense fallback={null}>
 				<WebSocketUrlHandler />
