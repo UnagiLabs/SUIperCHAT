@@ -443,7 +443,9 @@ yt-live-chat-text-message-renderer[author-type="member"][is-highlighted] {
 	width: 100%;
 	height: 100vh;
 	overflow-y: auto;
+	overflow-x: hidden;
 	padding: 10px;
+	scroll-behavior: smooth;
 }
 
 .superchat-container {
