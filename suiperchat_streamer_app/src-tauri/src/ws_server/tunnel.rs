@@ -264,9 +264,24 @@ impl TunnelInfo {
             "--url".to_string(),
             format!("http://127.0.0.1:{}", ws_port),
             "--no-autoupdate".to_string(),
-            "--protocol".to_string(),
-            "h2mux".to_string(), // HTTP/1.1ベースのmultiplexingでWebSocket接続を安定化
         ];
+        
+        // プロトコルをautoに設定してCloudflareに最適化を任せる
+        args.push("--protocol".to_string());
+        args.push("auto".to_string());
+        
+        // WebSocket接続改善のための設定
+        args.push("--compression-quality".to_string());
+        args.push("0".to_string()); // 圧縮を無効化してWebSocketを安定化
+        
+        // macOS固有の設定
+        #[cfg(target_os = "macos")]
+        {
+            args.push("--http-host-header".to_string());
+            args.push("localhost".to_string());
+            args.push("--origin-server-name".to_string());
+            args.push("localhost".to_string());
+        }
         
         // 環境変数から追加引数を取得して追加
         if let Ok(extra_args_str) = std::env::var("CLOUDFLARED_EXTRA_ARGS") {
@@ -321,15 +336,27 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
     #[cfg(unix)]
     {
         std::env::set_var("RUST_BACKTRACE", "1");
+        // SIGPIPEエラーを防ぐための環境変数
+        std::env::set_var("CLOUDFLARED_NO_CHUNKED_ENCODING", "true");
     }
 
     // tokioプロセスを使用してcloudflaredを起動
     // SIGPIPEエラーを回避するための設定を追加
-    let mut child = TokioCommand::new(&binary_path)
+    let mut command = TokioCommand::new(&binary_path);
+    command
         .args(&args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .kill_on_drop(true) // プロセスがドロップされたときNEWに終了させる
+        .kill_on_drop(true); // プロセスがドロップされたときに終了させる
+    
+    // macOS固有の設定
+    #[cfg(target_os = "macos")]
+    {
+        // macOSでSIGPIPEを無視する設定
+        command.stdin(Stdio::null()); // 標準入力を閉じる
+    }
+    
+    let mut child = command
         .spawn()
         .map_err(|e| {
             error!("Failed to spawn cloudflared process: {}", e);
