@@ -266,9 +266,10 @@ impl TunnelInfo {
             "--no-autoupdate".to_string(),
         ];
         
-        // プロトコルをautoに設定してCloudflareに最適化を任せる
-        args.push("--protocol".to_string());
-        args.push("auto".to_string());
+        // プロトコル設定を削除してCloudflareのデフォルト動作に任せる
+        // Issue #45の修正: macOSでWebSocket接続が失敗する問題を解決
+        // args.push("--protocol".to_string());
+        // args.push("auto".to_string());
         
         // WebSocket接続改善のための設定
         args.push("--compression-quality".to_string());
