@@ -435,8 +435,6 @@ impl WsSession {
                     let serializable_messages: Vec<crate::types::SerializableMessage> =
                         limited_messages.into_iter().map(|msg| msg.into()).collect();
 
-                    // 長さを先に取得しておく
-                    let _messages_len = serializable_messages.len();
 
                     // レスポンスを構築
                     let history_data = crate::types::OutgoingMessage::HistoryData {
