@@ -229,7 +229,7 @@ impl TunnelInfo {
         info!("Restarting cloudflared with args: {:?}", args.join(" "));
         
         // 新しいプロセスを起動
-        let child = TokioCommand::new(&binary_path)
+        let mut child = TokioCommand::new(&binary_path)
             .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -240,6 +240,53 @@ impl TunnelInfo {
             })?;
         
         info!("New cloudflared process spawned with PID: {:?}", child.id());
+        
+        // SIGPIPEを防ぐため、再起動時も即座にバックグラウンドログ読み取りを開始
+        if let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) {
+            use tokio::io::{AsyncBufReadExt, BufReader};
+            
+            let mut stdout_reader = BufReader::new(stdout).lines();
+            let mut stderr_reader = BufReader::new(stderr).lines();
+            
+            tokio::spawn(async move {
+                info!("Starting background log reading for restarted process...");
+                loop {
+                    tokio::select! {
+                        line = stdout_reader.next_line() => {
+                            match line {
+                                Ok(Some(line_str)) => {
+                                    debug!("cloudflared stdout (restart): {}", line_str);
+                                }
+                                Ok(None) => {
+                                    debug!("cloudflared stdout stream ended (restart)");
+                                    break;
+                                }
+                                Err(e) => {
+                                    debug!("Error reading cloudflared stdout (restart): {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                        line = stderr_reader.next_line() => {
+                            match line {
+                                Ok(Some(line_str)) => {
+                                    debug!("cloudflared stderr (restart): {}", line_str);
+                                }
+                                Ok(None) => {
+                                    debug!("cloudflared stderr stream ended (restart)");
+                                    break;
+                                }
+                                Err(e) => {
+                                    debug!("Error reading cloudflared stderr (restart): {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                info!("Background log reading for restarted process completed");
+            });
+        }
         
         // 古いプロセスを置き換え
         {
@@ -379,8 +426,11 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
     let child_arc = Arc::new(Mutex::new(Some(child)));
 
     // URL抽出ロジック（タイムアウト付き）
+    // SIGPIPEを防ぐため、URL抽出後もログ読み取りを継続
     let url_extraction = async {
         info!("Starting URL extraction from cloudflared output...");
+        let mut found_url = None;
+        
         loop {
             tokio::select! {
                 line = stdout_reader.next_line() => {
@@ -389,10 +439,56 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
                             info!("cloudflared stdout: {}", line_str);
                             
                             // 標準出力からTunnelのURLを検索
-                            if let Some(mat) = URL_REGEX.find(&line_str) {
-                                let url = mat.as_str().to_string();
-                                info!("Cloudflare Tunnel URL found: {}", url);
-                                return Ok(url);
+                            if found_url.is_none() {
+                                if let Some(mat) = URL_REGEX.find(&line_str) {
+                                    let url = mat.as_str().to_string();
+                                    info!("Cloudflare Tunnel URL found: {}", url);
+                                    found_url = Some(url.clone());
+                                    
+                                    // URLが見つかったらバックグラウンドで継続読み取り開始
+                                    let mut stdout_reader_bg = stdout_reader;
+                                    let mut stderr_reader_bg = stderr_reader;
+                                    tokio::spawn(async move {
+                                        info!("Starting background log reading to prevent SIGPIPE...");
+                                        loop {
+                                            tokio::select! {
+                                                line = stdout_reader_bg.next_line() => {
+                                                    match line {
+                                                        Ok(Some(line_str)) => {
+                                                            debug!("cloudflared stdout (bg): {}", line_str);
+                                                        }
+                                                        Ok(None) => {
+                                                            debug!("cloudflared stdout stream ended (bg)");
+                                                            break;
+                                                        }
+                                                        Err(e) => {
+                                                            debug!("Error reading cloudflared stdout (bg): {}", e);
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                                line = stderr_reader_bg.next_line() => {
+                                                    match line {
+                                                        Ok(Some(line_str)) => {
+                                                            debug!("cloudflared stderr (bg): {}", line_str);
+                                                        }
+                                                        Ok(None) => {
+                                                            debug!("cloudflared stderr stream ended (bg)");
+                                                            break;
+                                                        }
+                                                        Err(e) => {
+                                                            debug!("Error reading cloudflared stderr (bg): {}", e);
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        info!("Background log reading task completed");
+                                    });
+                                    
+                                    return Ok(url);
+                                }
                             }
                         }
                         Ok(None) => {
@@ -411,10 +507,56 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
                             warn!("cloudflared stderr: {}", line_str);
                             
                             // 標準エラー出力からもURLを検索
-                            if let Some(mat) = URL_REGEX.find(&line_str) {
-                                let url = mat.as_str().to_string();
-                                info!("Cloudflare Tunnel URL found in stderr: {}", url);
-                                return Ok(url);
+                            if found_url.is_none() {
+                                if let Some(mat) = URL_REGEX.find(&line_str) {
+                                    let url = mat.as_str().to_string();
+                                    info!("Cloudflare Tunnel URL found in stderr: {}", url);
+                                    found_url = Some(url.clone());
+                                    
+                                    // URLが見つかったらバックグラウンドで継続読み取り開始
+                                    let mut stdout_reader_bg = stdout_reader;
+                                    let mut stderr_reader_bg = stderr_reader;
+                                    tokio::spawn(async move {
+                                        info!("Starting background log reading to prevent SIGPIPE...");
+                                        loop {
+                                            tokio::select! {
+                                                line = stdout_reader_bg.next_line() => {
+                                                    match line {
+                                                        Ok(Some(line_str)) => {
+                                                            debug!("cloudflared stdout (bg): {}", line_str);
+                                                        }
+                                                        Ok(None) => {
+                                                            debug!("cloudflared stdout stream ended (bg)");
+                                                            break;
+                                                        }
+                                                        Err(e) => {
+                                                            debug!("Error reading cloudflared stdout (bg): {}", e);
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                                line = stderr_reader_bg.next_line() => {
+                                                    match line {
+                                                        Ok(Some(line_str)) => {
+                                                            debug!("cloudflared stderr (bg): {}", line_str);
+                                                        }
+                                                        Ok(None) => {
+                                                            debug!("cloudflared stderr stream ended (bg)");
+                                                            break;
+                                                        }
+                                                        Err(e) => {
+                                                            debug!("Error reading cloudflared stderr (bg): {}", e);
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        info!("Background log reading task completed");
+                                    });
+                                    
+                                    return Ok(url);
+                                }
                             }
                         }
                         Ok(None) => {
@@ -430,7 +572,11 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
             }
         }
         
-        Err(TunnelError::UrlNotFound)
+        if let Some(url) = found_url {
+            Ok(url)
+        } else {
+            Err(TunnelError::UrlNotFound)
+        }
     };
 
     // タイムアウト付きでURL抽出処理を実行
