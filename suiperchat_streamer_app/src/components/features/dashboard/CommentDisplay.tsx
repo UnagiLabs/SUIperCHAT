@@ -174,12 +174,24 @@ export default function CommentDisplay() {
 
 			set_current_session_id(session_result);
 
-			// 現在のセッションIDが有効でセッション選択されていない場合は自動選択
-			if (session_result && !selected_session_id) {
-				set_selected_session_id(session_result);
-				await fetch_comments_by_session_id(session_result);
+			// 現在のセッションIDが有効な場合の自動選択ロジック
+			if (session_result) {
+				// セッションが選択されていない場合、または選択されたセッションが現在のセッションと異なる場合
+				if (!selected_session_id || selected_session_id !== session_result) {
+					console.log(
+						"自動選択: セッションを切り替え",
+						selected_session_id,
+						"→",
+						session_result,
+					);
+					set_selected_session_id(session_result);
+					await fetch_comments_by_session_id(session_result);
+				} else {
+					// 選択されたセッションIDでコメントを取得
+					await fetch_comments_by_session_id(selected_session_id);
+				}
 			} else {
-				// 選択されたセッションIDでコメントを取得
+				// 現在のセッションIDがない場合は選択されたセッションでコメントを取得
 				await fetch_comments_by_session_id(selected_session_id);
 			}
 		} catch (err) {
@@ -213,17 +225,50 @@ export default function CommentDisplay() {
 	}, [fetch_available_sessions, fetch_comments]);
 
 	/**
-	 * サーバー状態変更時に再取得
+	 * サーバー状態変更時に再取得とセッション自動切り替え
 	 */
 	useEffect(() => {
-		const unsubscribe = listen("server_status_updated", () => {
-			fetch_comments();
+		const unsubscribe = listen("server_status_updated", async () => {
+			// 現在のセッションIDを取得
+			try {
+				const current_session_result = await invoke<string | null>(
+					"get_current_session_id",
+				);
+				console.log(
+					"サーバー状態更新時の現在のセッションID:",
+					current_session_result,
+				);
+
+				set_current_session_id(current_session_result);
+
+				// 現在のセッションIDが有効で、選択されたセッションIDと異なる場合は自動切り替え
+				if (
+					current_session_result &&
+					current_session_result !== selected_session_id
+				) {
+					console.log(
+						"セッションを自動切り替え:",
+						selected_session_id,
+						"→",
+						current_session_result,
+					);
+					set_selected_session_id(current_session_result);
+					await fetch_comments_by_session_id(current_session_result);
+				} else {
+					// 通常のコメント取得
+					fetch_comments();
+				}
+			} catch (err) {
+				console.error("サーバー状態更新時のセッションID取得エラー:", err);
+				// エラーが発生した場合は通常のコメント取得を実行
+				fetch_comments();
+			}
 		});
 
 		return () => {
 			unsubscribe.then((unsub) => unsub());
 		};
-	}, [fetch_comments]);
+	}, [fetch_comments, fetch_comments_by_session_id, selected_session_id]);
 
 	/**
 	 * 新しいメッセージが保存されたイベントの購読
