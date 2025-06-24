@@ -356,8 +356,10 @@ function renderChatMessage(container, chatData, isHistory = false) {
 
 	// 履歴メッセージの場合はスクロールを抑制
 	if (!isHistory) {
-		// メッセージ要素を表示領域内に自動スクロール
-		chatElement.scrollIntoView({ behavior: "smooth", block: "end" });
+		// 確実に最下部にスクロール
+		setTimeout(() => {
+			container.scrollTop = container.scrollHeight;
+		}, 50);
 	}
 }
 
@@ -474,8 +476,10 @@ function displaySuperchatMessage(data, isHistory = false) {
 
 	// 履歴メッセージの場合はスクロールを抑制
 	if (!isHistory) {
-		// メッセージ要素を表示領域内に自動スクロール
-		superchatElement.scrollIntoView({ behavior: "smooth", block: "end" });
+		// 確実に最下部にスクロール
+		setTimeout(() => {
+			container.scrollTop = container.scrollHeight;
+		}, 50);
 	}
 }
 
