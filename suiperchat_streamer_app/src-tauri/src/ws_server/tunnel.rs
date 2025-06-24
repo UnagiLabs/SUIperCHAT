@@ -429,7 +429,7 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
     // SIGPIPEを防ぐため、URL抽出後もログ読み取りを継続
     let url_extraction = async {
         info!("Starting URL extraction from cloudflared output...");
-        let mut found_url = None;
+        let found_url = None;
         
         loop {
             tokio::select! {
@@ -443,7 +443,6 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
                                 if let Some(mat) = URL_REGEX.find(&line_str) {
                                     let url = mat.as_str().to_string();
                                     info!("Cloudflare Tunnel URL found: {}", url);
-                                    found_url = Some(url.clone());
                                     
                                     // URLが見つかったらバックグラウンドで継続読み取り開始
                                     let mut stdout_reader_bg = stdout_reader;
@@ -511,7 +510,6 @@ pub async fn start_tunnel(app: &AppHandle, ws_port: u16) -> Result<TunnelInfo, T
                                 if let Some(mat) = URL_REGEX.find(&line_str) {
                                     let url = mat.as_str().to_string();
                                     info!("Cloudflare Tunnel URL found in stderr: {}", url);
-                                    found_url = Some(url.clone());
                                     
                                     // URLが見つかったらバックグラウンドで継続読み取り開始
                                     let mut stdout_reader_bg = stdout_reader;
