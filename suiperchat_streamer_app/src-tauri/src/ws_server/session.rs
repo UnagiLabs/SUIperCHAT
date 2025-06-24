@@ -435,8 +435,6 @@ impl WsSession {
                     let serializable_messages: Vec<crate::types::SerializableMessage> =
                         limited_messages.into_iter().map(|msg| msg.into()).collect();
 
-                    // 長さを先に取得しておく
-                    let messages_len = serializable_messages.len();
 
                     // レスポンスを構築
                     let history_data = crate::types::OutgoingMessage::HistoryData {
@@ -447,10 +445,6 @@ impl WsSession {
                     // JSONに変換
                     match serde_json::to_string(&history_data) {
                         Ok(json) => {
-                            println!(
-                                "履歴データを送信: {} 件 (has_more: {})",
-                                messages_len, has_more
-                            );
                             Ok(json)
                         }
                         Err(e) => {
@@ -598,10 +592,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                                 limit,
                                 before_timestamp,
                             } => {
-                                println!(
-                                    "履歴取得リクエストを受信: limit={:?}, before_timestamp={:?}",
-                                    limit, before_timestamp
-                                );
                                 self.handle_get_history(limit, before_timestamp, ctx);
                             }
                             // 既存のチャットとスーパーチャットの処理
