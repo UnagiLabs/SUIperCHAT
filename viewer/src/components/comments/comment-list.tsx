@@ -319,7 +319,7 @@ function CommentItem({ comment }: CommentItemProps) {
 							{(comment as SuperchatMessage).superchat.amount} SUI
 						</span>
 					</div>
-					<div className="font-medium text-white text-xs mt-0.5 leading-tight whitespace-pre-wrap break-words break-all w-full max-h-20 overflow-y-auto">
+					<div className="font-medium text-white text-xs mt-0.5 leading-tight whitespace-pre-wrap break-words break-all w-full">
 						{comment.message}
 					</div>
 				</>
