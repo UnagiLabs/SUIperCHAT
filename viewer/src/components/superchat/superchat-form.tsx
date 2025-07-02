@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useMobileKeyboard } from "@/hooks/useMobileKeyboard";
+import { Send } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -631,7 +632,7 @@ export function SuperchatForm({
 								render={({ field }) => (
 									<FormItem className="flex-grow mr-1">
 										<Input
-											placeholder="表示名"
+											placeholder="Display Name"
 											{...field}
 											className="text-base md:text-xs h-10 md:h-6"
 											onChange={(e) => {
@@ -717,7 +718,7 @@ export function SuperchatForm({
 											<FormItem className="flex-grow">
 												<Input
 													type="text"
-													placeholder="金額"
+													placeholder="Amount"
 													inputMode="decimal"
 													pattern="[0-9]*\.?[0-9]*"
 													{...field}
@@ -787,7 +788,7 @@ export function SuperchatForm({
 								render={({ field }) => (
 									<FormItem className="flex-grow">
 										<Textarea
-											placeholder="メッセージを入力..."
+											placeholder="Enter message..."
 											{...field}
 											className="text-base md:text-xs min-h-10 md:min-h-6 max-h-24 py-1 px-3 resize-none overflow-hidden"
 											style={{ height: "auto" }}
@@ -801,11 +802,11 @@ export function SuperchatForm({
 							/>
 							<Button
 								type="submit"
-								className="ml-1 h-10 md:h-6"
+								className="ml-1 h-10 md:h-6 px-2"
 								disabled={isPending}
 								size="sm"
 							>
-								{isPending ? "送信中..." : "送信"}
+								<Send className="h-4 w-4" />
 							</Button>
 						</div>
 					</form>
