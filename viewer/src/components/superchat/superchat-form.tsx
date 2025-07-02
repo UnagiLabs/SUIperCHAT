@@ -632,7 +632,7 @@ export function SuperchatForm({
 								render={({ field }) => (
 									<FormItem className="flex-grow mr-1">
 										<Input
-											placeholder="表示名"
+											placeholder="Display Name"
 											{...field}
 											className="text-base md:text-xs h-10 md:h-6"
 											onChange={(e) => {
@@ -718,7 +718,7 @@ export function SuperchatForm({
 											<FormItem className="flex-grow">
 												<Input
 													type="text"
-													placeholder="金額"
+													placeholder="Amount"
 													inputMode="decimal"
 													pattern="[0-9]*\.?[0-9]*"
 													{...field}
@@ -788,7 +788,7 @@ export function SuperchatForm({
 								render={({ field }) => (
 									<FormItem className="flex-grow">
 										<Textarea
-											placeholder="メッセージを入力..."
+											placeholder="Enter message..."
 											{...field}
 											className="text-base md:text-xs min-h-10 md:min-h-6 max-h-24 py-1 px-3 resize-none overflow-hidden"
 											style={{ height: "auto" }}
