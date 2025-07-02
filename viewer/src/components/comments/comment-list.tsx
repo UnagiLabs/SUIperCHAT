@@ -303,7 +303,7 @@ function CommentItem({ comment }: CommentItemProps) {
 		<div
 			className={cn(
 				is_superchat
-					? "py-0.5 px-1.5 text-sm h-full shadow-sm border-b border-border/5"
+					? "py-0.5 px-1.5 text-sm min-h-full shadow-sm border-b border-border/5 overflow-hidden"
 					: "py-0 px-1 text-xs h-full hover:bg-secondary/5 transition-colors border-b border-border/5",
 				is_superchat ? `${getSuperchatBgColor()} text-white` : "",
 			)}
@@ -319,7 +319,7 @@ function CommentItem({ comment }: CommentItemProps) {
 							{(comment as SuperchatMessage).superchat.amount} SUI
 						</span>
 					</div>
-					<div className="font-medium text-white text-xs mt-0.5 leading-tight whitespace-pre-wrap break-words break-all overflow-hidden w-full">
+					<div className="font-medium text-white text-xs mt-0.5 leading-tight whitespace-pre-wrap break-words break-all w-full max-h-20 overflow-y-auto">
 						{comment.message}
 					</div>
 				</>
