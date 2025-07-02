@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useMobileKeyboard } from "@/hooks/useMobileKeyboard";
+import { Send } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -801,11 +802,11 @@ export function SuperchatForm({
 							/>
 							<Button
 								type="submit"
-								className="ml-1 h-10 md:h-6"
+								className="ml-1 h-10 md:h-6 px-2"
 								disabled={isPending}
 								size="sm"
 							>
-								{isPending ? "Sending..." : "Send"}
+								<Send className="h-4 w-4" />
 							</Button>
 						</div>
 					</form>
