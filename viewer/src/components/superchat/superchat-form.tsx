@@ -805,7 +805,7 @@ export function SuperchatForm({
 								disabled={isPending}
 								size="sm"
 							>
-								{isPending ? "送信中..." : "送信"}
+								{isPending ? "Sending..." : "Send"}
 							</Button>
 						</div>
 					</form>
