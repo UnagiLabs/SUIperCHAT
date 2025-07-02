@@ -76,18 +76,11 @@ export function CommentList({
 		return [...messages].sort((a, b) => a.timestamp - b.timestamp);
 	}, [messages]);
 
-	// 各アイテムの高さを推定する関数（measureElementによる実測値に依存するため簡略化）
-	const estimateItemSize = useCallback(
-		(index: number) => {
-			const message = sortedMessages[index];
-			// メッセージが存在しない場合はデフォルト値を返す
-			if (!message) return 22;
-
-			// メッセージの種類に応じて最低限の高さを設定（実測値で自動調整される）
-			return message.type === MessageType.SUPERCHAT ? 40 : 22;
-		},
-		[sortedMessages],
-	);
+	// 各アイテムの高さを推定する関数（measureElementによる実測で正確な高さに調整される）
+	const estimateItemSize = useCallback(() => {
+		// 最小限の初期値のみ設定、実測で上書きされる
+		return 50;
+	}, []);
 
 	// 仮想スクロールの設定
 	const virtualizer = useVirtualizer({
