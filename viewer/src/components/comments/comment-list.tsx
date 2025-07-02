@@ -76,35 +76,15 @@ export function CommentList({
 		return [...messages].sort((a, b) => a.timestamp - b.timestamp);
 	}, [messages]);
 
-	// 各アイテムの高さを推定する関数
+	// 各アイテムの高さを推定する関数（measureElementによる実測値に依存するため簡略化）
 	const estimateItemSize = useCallback(
 		(index: number) => {
 			const message = sortedMessages[index];
 			// メッセージが存在しない場合はデフォルト値を返す
 			if (!message) return 22;
 
-			// メッセージの種類に応じて基本高さを設定
-			const baseHeight = message.type === MessageType.SUPERCHAT ? 40 : 22;
-
-			// メッセージの長さから追加の高さを計算
-			const messageText = message.message || "";
-			const messageLength = messageText.length;
-
-			// スーパーチャットと通常メッセージで異なる計算を適用
-			if (message.type === MessageType.SUPERCHAT) {
-				// スーパーチャットは1行あたり約30文字として計算
-				const estimatedLines = Math.ceil(messageLength / 30);
-				// 基本高さに各行の高さを加算（1行目は基本高さに含まれる）
-				return baseHeight + Math.max(0, estimatedLines - 1) * 16; // 追加の各行に16px
-			}
-
-			// 通常コメントは1行あたり約40文字として計算
-			// 改行コードも考慮
-			const newlineCount = (messageText.match(/\n/g) || []).length;
-			const textLines = Math.ceil(messageLength / 40) + newlineCount;
-
-			// 通常は1行で収まるように設計されているため、追加行がある場合のみ高さを増加
-			return baseHeight + Math.max(0, textLines - 1) * 16;
+			// メッセージの種類に応じて最低限の高さを設定（実測値で自動調整される）
+			return message.type === MessageType.SUPERCHAT ? 40 : 22;
 		},
 		[sortedMessages],
 	);
@@ -115,7 +95,7 @@ export function CommentList({
 		getScrollElement: () => parentElement,
 		estimateSize: estimateItemSize,
 		overscan: 10, // スクロール時により多くのアイテムを事前に描画
-		gap: 0, // アイテム間のギャップを0に設定
+		gap: 2, // アイテム間のギャップを2pxに設定
 	});
 
 	// 親要素の設定
@@ -259,7 +239,7 @@ export function CommentList({
 								key={virtualItem.key}
 								data-index={virtualItem.index}
 								ref={virtualizer.measureElement}
-								className="absolute top-1.5 left-1 w-full"
+								className="absolute left-1 w-full"
 								style={{
 									height: `${virtualItem.size}px`,
 									transform: `translateY(${virtualItem.start}px)`,
