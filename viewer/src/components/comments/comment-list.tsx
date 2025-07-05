@@ -308,7 +308,7 @@ function CommentItem({ comment }: CommentItemProps) {
 							{comment.display_name}
 						</span>
 						<span className="px-1 py-0 rounded-full bg-black/40 text-white font-medium text-xs md:text-sm flex-shrink-0 leading-none">
-							{(comment as SuperchatMessage).superchat.amount} SUI
+							{(comment as SuperchatMessage).superchat.amount} {(comment as SuperchatMessage).superchat.coin}
 						</span>
 					</div>
 					<div className="font-medium text-white text-xs md:text-sm mt-0.5 leading-tight whitespace-pre-wrap break-words break-all w-full">
