@@ -28,10 +28,6 @@ export const metadata: Metadata = {
 	title: "SUIperCHAT - Viewer",
 	description: "SUIブロックチェーンを使用したスーパーチャットサービス",
 	authors: [{ name: "SUIperCHAT Team" }],
-	icons: {
-		icon: "/favicon.ico",
-		apple: "/apple-touch-icon.png",
-	},
 };
 
 /**
