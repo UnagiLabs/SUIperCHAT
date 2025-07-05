@@ -615,26 +615,26 @@ export function SuperchatForm({
 						ref={formRef}
 						onSubmit={form.handleSubmit(on_submit)}
 						className={cn(
-							has_tip ? "p-1 pb-2 space-y-1" : "px-1 py-1.5 space-y-0",
-							isMobileKeyboardFixed ? "px-2 py-2" : "",
+							has_tip ? "p-3 pb-4 space-y-3" : "px-3 py-3 pb-4 space-y-2",
+							isMobileKeyboardFixed ? "px-4 py-4" : "",
 						)}
 						style={mobileKeyboardStyle}
 					>
 						<div
 							className={cn(
 								"flex items-center justify-between",
-								has_tip ? "mb-0.5" : "",
+								has_tip ? "mb-2" : "mb-1",
 							)}
 						>
 							<FormField
 								control={form.control}
 								name="display_name"
 								render={({ field }) => (
-									<FormItem className="flex-grow mr-1">
+									<FormItem className="flex-grow mr-2">
 										<Input
 											placeholder="Display Name"
 											{...field}
-											className="text-base md:text-xs h-10 md:h-6"
+											className="text-base md:text-sm h-12 md:h-8"
 											onChange={(e) => {
 												field.onChange(e);
 												updateUsername(e.target.value);
@@ -651,7 +651,7 @@ export function SuperchatForm({
 								<button
 									type="button"
 									onClick={() => set_has_tip(false)}
-									className={`px-1.5 py-0.5 text-sm md:text-xs rounded-md transition-colors ${
+									className={`px-1.5 py-0.5 text-sm md:text-sm rounded-md transition-colors ${
 										!has_tip
 											? "bg-card shadow-sm"
 											: "text-muted-foreground hover:bg-secondary/80"
@@ -662,7 +662,7 @@ export function SuperchatForm({
 								<button
 									type="button"
 									onClick={() => set_has_tip(true)}
-									className={`px-1.5 py-0.5 text-sm md:text-xs rounded-md transition-colors ${
+									className={`px-1.5 py-0.5 text-sm md:text-sm rounded-md transition-colors ${
 										has_tip
 											? "bg-card shadow-sm"
 											: "text-muted-foreground hover:bg-secondary/80"
@@ -674,7 +674,7 @@ export function SuperchatForm({
 						</div>
 
 						{has_tip && (
-							<div className="flex items-center gap-1 mb-0.5">
+							<div className="flex items-center gap-2 mb-2">
 								<FormField
 									control={form.control}
 									name="coinTypeArg"
@@ -684,7 +684,7 @@ export function SuperchatForm({
 												value={coinField.value}
 												onValueChange={coinField.onChange}
 											>
-												<SelectTrigger className="w-16 text-base md:text-xs h-10 md:h-6">
+												<SelectTrigger className="w-20 text-base md:text-sm h-12 md:h-8">
 													<SelectValue placeholder="Coin" />
 												</SelectTrigger>
 												<SelectContent>
@@ -761,7 +761,7 @@ export function SuperchatForm({
 														}
 														handleInputBlur();
 													}}
-													className="text-base md:text-xs h-10 md:h-6"
+													className="text-base md:text-sm h-12 md:h-8"
 												/>
 												<FormMessage />
 											</FormItem>
@@ -781,7 +781,7 @@ export function SuperchatForm({
 							)}
 						/>
 
-						<div className="flex items-start">
+						<div className="flex items-start gap-2">
 							<FormField
 								control={form.control}
 								name="message"
@@ -790,7 +790,7 @@ export function SuperchatForm({
 										<Textarea
 											placeholder="Enter message..."
 											{...field}
-											className="text-base md:text-xs min-h-10 md:min-h-6 max-h-24 py-1 px-3 resize-none overflow-hidden"
+											className="text-base md:text-sm min-h-12 md:min-h-8 max-h-32 py-2 px-3 resize-none overflow-hidden"
 											style={{ height: "auto" }}
 											onInput={handleTextareaResize}
 											onFocus={handleInputFocus}
@@ -802,7 +802,7 @@ export function SuperchatForm({
 							/>
 							<Button
 								type="submit"
-								className="ml-1 h-10 md:h-6 px-2"
+								className="ml-2 h-12 md:h-8 px-3"
 								disabled={isPending}
 								size="sm"
 							>
