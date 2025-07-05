@@ -634,7 +634,7 @@ export function SuperchatForm({
 										<Input
 											placeholder="Display Name"
 											{...field}
-											className="text-base md:text-xs h-10 md:h-6"
+											className="text-base md:text-sm h-10 md:h-6"
 											onChange={(e) => {
 												field.onChange(e);
 												updateUsername(e.target.value);
@@ -651,7 +651,7 @@ export function SuperchatForm({
 								<button
 									type="button"
 									onClick={() => set_has_tip(false)}
-									className={`px-1.5 py-0.5 text-sm md:text-xs rounded-md transition-colors ${
+									className={`px-1.5 py-0.5 text-sm md:text-sm rounded-md transition-colors ${
 										!has_tip
 											? "bg-card shadow-sm"
 											: "text-muted-foreground hover:bg-secondary/80"
@@ -662,7 +662,7 @@ export function SuperchatForm({
 								<button
 									type="button"
 									onClick={() => set_has_tip(true)}
-									className={`px-1.5 py-0.5 text-sm md:text-xs rounded-md transition-colors ${
+									className={`px-1.5 py-0.5 text-sm md:text-sm rounded-md transition-colors ${
 										has_tip
 											? "bg-card shadow-sm"
 											: "text-muted-foreground hover:bg-secondary/80"
@@ -684,7 +684,7 @@ export function SuperchatForm({
 												value={coinField.value}
 												onValueChange={coinField.onChange}
 											>
-												<SelectTrigger className="w-16 text-base md:text-xs h-10 md:h-6">
+												<SelectTrigger className="w-16 text-base md:text-sm h-10 md:h-6">
 													<SelectValue placeholder="Coin" />
 												</SelectTrigger>
 												<SelectContent>
@@ -761,7 +761,7 @@ export function SuperchatForm({
 														}
 														handleInputBlur();
 													}}
-													className="text-base md:text-xs h-10 md:h-6"
+													className="text-base md:text-sm h-10 md:h-6"
 												/>
 												<FormMessage />
 											</FormItem>
@@ -790,7 +790,7 @@ export function SuperchatForm({
 										<Textarea
 											placeholder="Enter message..."
 											{...field}
-											className="text-base md:text-xs min-h-10 md:min-h-6 max-h-24 py-1 px-3 resize-none overflow-hidden"
+											className="text-base md:text-sm min-h-10 md:min-h-6 max-h-24 py-1 px-3 resize-none overflow-hidden"
 											style={{ height: "auto" }}
 											onInput={handleTextareaResize}
 											onFocus={handleInputFocus}
