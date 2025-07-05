@@ -296,7 +296,7 @@ function CommentItem({ comment }: CommentItemProps) {
 			className={cn(
 				is_superchat
 					? "py-0.5 px-1.5 text-sm shadow-sm border-b border-border/5"
-					: "py-0 px-1 text-xs hover:bg-secondary/5 transition-colors border-b border-border/5",
+					: "py-0 px-1 text-xs md:text-base hover:bg-secondary/5 transition-colors border-b border-border/5",
 				is_superchat ? `${getSuperchatBgColor()} text-white` : "",
 			)}
 		>
@@ -304,14 +304,14 @@ function CommentItem({ comment }: CommentItemProps) {
 				// スーパーチャット表示
 				<>
 					<div className="flex items-center justify-between gap-0.5 mb-0">
-						<span className="font-semibold text-white text-xs leading-tight">
+						<span className="font-semibold text-white text-xs md:text-base leading-tight">
 							{comment.display_name}
 						</span>
-						<span className="px-1 py-0 rounded-full bg-black/40 text-white font-medium text-xs flex-shrink-0 leading-none">
+						<span className="px-1 py-0 rounded-full bg-black/40 text-white font-medium text-xs md:text-base flex-shrink-0 leading-none">
 							{(comment as SuperchatMessage).superchat.amount} SUI
 						</span>
 					</div>
-					<div className="font-medium text-white text-xs mt-0.5 leading-tight whitespace-pre-wrap break-words break-all w-full">
+					<div className="font-medium text-white text-xs md:text-base mt-0.5 leading-tight whitespace-pre-wrap break-words break-all w-full">
 						{comment.message}
 					</div>
 				</>
@@ -319,10 +319,10 @@ function CommentItem({ comment }: CommentItemProps) {
 				// 通常コメント表示
 				<div className="flex items-start leading-none py-0 w-full">
 					<div className="flex-grow">
-						<span className="font-semibold mr-0.5 text-xs">
+						<span className="font-semibold mr-0.5 text-xs md:text-base">
 							{comment.display_name}:
 						</span>
-						<span className="text-xs whitespace-pre-wrap break-words break-all overflow-hidden">
+						<span className="text-xs md:text-base whitespace-pre-wrap break-words break-all overflow-hidden">
 							{comment.message}
 						</span>
 					</div>
