@@ -44,6 +44,7 @@ import {
 } from "@/lib/constants"; // 定数をインポート
 import { fromContractValue, toContractValue } from "@/lib/utils"; // ユーティリティをインポート
 import { cn } from "@/lib/utils";
+import { playSuperchatSound, enableAudioContext } from "@/lib/audio-utils"; // 音声ユーティリティをインポート
 // Sui SDK インポート
 import {
 	useCurrentAccount,
@@ -436,6 +437,9 @@ export function SuperchatForm({
 								},
 							);
 
+							// SUIperCHATの効果音を再生
+							playSuperchatSound(values.amount);
+
 							toast.success("Super Chat sent successfully!", {
 								description: `Transaction digest: ${digest.substring(0, 8)}...`,
 							});
@@ -539,6 +543,8 @@ export function SuperchatForm({
 	// 入力フィールドのフォーカス/ブラーハンドラー
 	const handleInputFocus = useCallback(() => {
 		setIsInputFocused(true);
+		// 音声コンテキストを有効化（ユーザーインタラクション時）
+		enableAudioContext();
 	}, []);
 
 	const handleInputBlur = useCallback(() => {
