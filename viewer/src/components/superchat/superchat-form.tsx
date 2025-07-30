@@ -668,7 +668,7 @@ export function SuperchatForm({
 											: "text-muted-foreground hover:bg-secondary/80"
 									}`}
 								>
-									SuperChat
+									SUIperCHAT
 								</button>
 							</div>
 						</div>
