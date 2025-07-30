@@ -173,7 +173,7 @@ export function CommentList({
 	return (
 		<div className={cn("h-full flex flex-col", className)}>
 			<div className="text-sm font-medium py-0.5 px-2 border-b sticky top-0 bg-background z-10">
-				コメント
+				Comment
 			</div>
 
 			<ScrollArea
@@ -196,8 +196,8 @@ export function CommentList({
 						<Loader2 className="h-4 w-4 animate-spin mr-2" />
 						<span className="text-sm text-muted-foreground">
 							{sortedMessages.length === 0
-								? "コメント履歴を読み込み中..."
-								: "過去のコメントを読み込み中..."}
+								? "Loading comment history..."
+								: "Loading previous comments..."}
 						</span>
 					</div>
 				)}
@@ -206,14 +206,14 @@ export function CommentList({
 				{historyError && (
 					<div className="flex items-center justify-center py-1 border-b">
 						<span className="text-sm text-red-500 mr-2">
-							エラー: {historyError}
+							Error: {historyError}
 						</span>
 						<button
 							type="button"
 							onClick={() => actions.requestHistory()}
 							className="text-sm text-primary hover:underline"
 						>
-							再試行
+							Retry
 						</button>
 					</div>
 				)}
@@ -246,7 +246,7 @@ export function CommentList({
 				{/* メッセージがない場合の表示 */}
 				{sortedMessages.length === 0 && !isLoadingHistory && (
 					<div className="text-center py-1 text-muted-foreground text-sm">
-						コメントはまだありません
+						No comments yet
 					</div>
 				)}
 			</ScrollArea>

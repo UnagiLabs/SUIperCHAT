@@ -92,7 +92,7 @@ export default function CommentHistoryTable({
 								key={comment.id}
 								className={
 									comment.message_type === "SUPERCHAT"
-										? "bg-amber-50 dark:bg-amber-950/30"
+										? "bg-[#4DA2FF]/10 dark:bg-[#4DA2FF]/20"
 										: ""
 								}
 							>
