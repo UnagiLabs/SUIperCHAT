@@ -151,7 +151,7 @@ export function ViewerLayout({
 	// スーパーチャットエリアの高さ（NoTipモードとデバイスに応じて調整）
 	const getSuperchatHeight = useCallback(() => {
 		// モバイルの場合は入力要素が大きくなるため高さを調整
-		const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
+		const isMobile = is_mounted && window_width <= 768;
 
 		if (!has_tip) {
 			// NoTipモードの場合は最小限の高さにする

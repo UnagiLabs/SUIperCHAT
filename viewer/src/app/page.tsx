@@ -16,6 +16,7 @@
 import { CommentList } from "@/components/comments/comment-list";
 import { ViewerHeader } from "@/components/layout/viewer-header";
 import { ViewerLayout } from "@/components/layout/viewer-layout";
+import { StampAnimation } from "@/components/stamp/stamp-animation";
 import { Superchat } from "@/components/superchat/superchat";
 import { VideoPlayer } from "@/components/video/video-player";
 import WebSocketUrlHandler from "@/components/websocket/websocket-url-handler";
@@ -82,6 +83,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 					}
 				/>
 			</main>
+			{/* スタンプアニメーション */}
+			<StampAnimation />
 		</div>
 	);
 }
