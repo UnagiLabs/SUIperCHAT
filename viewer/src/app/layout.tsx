@@ -61,7 +61,7 @@ export default function RootLayout({
 	const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || "不明"; // 環境変数からバージョンを取得
 
 	return (
-		<html lang="ja" className="dark">
+		<html lang="ja" suppressHydrationWarning>
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} antialiased h-full overflow-hidden`}
 			>
