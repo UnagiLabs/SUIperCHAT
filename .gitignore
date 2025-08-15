@@ -5,7 +5,7 @@ suiperchat_streamer_app/dev.db-wal
 diff_main.txt
 suiperchat_streamer_app/dev.db
 
-docs/
+docs/publish_data.md
 .DS_Store
 
 # YoYo AI version control directory
