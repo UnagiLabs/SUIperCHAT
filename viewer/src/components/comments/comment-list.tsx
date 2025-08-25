@@ -173,7 +173,7 @@ export function CommentList({
 	return (
 		<div className={cn("h-full flex flex-col", className)}>
 			<div className="text-sm font-medium py-0.5 px-2 border-b sticky top-0 bg-background z-10">
-				コメント
+				Comment
 			</div>
 
 			<ScrollArea
@@ -196,8 +196,8 @@ export function CommentList({
 						<Loader2 className="h-4 w-4 animate-spin mr-2" />
 						<span className="text-sm text-muted-foreground">
 							{sortedMessages.length === 0
-								? "コメント履歴を読み込み中..."
-								: "過去のコメントを読み込み中..."}
+								? "Loading comment history..."
+								: "Loading previous comments..."}
 						</span>
 					</div>
 				)}
@@ -206,14 +206,14 @@ export function CommentList({
 				{historyError && (
 					<div className="flex items-center justify-center py-1 border-b">
 						<span className="text-sm text-red-500 mr-2">
-							エラー: {historyError}
+							Error: {historyError}
 						</span>
 						<button
 							type="button"
 							onClick={() => actions.requestHistory()}
 							className="text-sm text-primary hover:underline"
 						>
-							再試行
+							Retry
 						</button>
 					</div>
 				)}
@@ -246,7 +246,7 @@ export function CommentList({
 				{/* メッセージがない場合の表示 */}
 				{sortedMessages.length === 0 && !isLoadingHistory && (
 					<div className="text-center py-1 text-muted-foreground text-sm">
-						コメントはまだありません
+						No comments yet
 					</div>
 				)}
 			</ScrollArea>
@@ -279,16 +279,47 @@ function CommentItem({ comment }: CommentItemProps) {
 
 		const amount = (comment as SuperchatMessage).superchat.amount;
 
-		// 金額に応じてグラデーションカラーを返す
-		if (amount >= 50)
-			return "bg-gradient-to-r from-yellow-500 to-amber-600 shadow-[0_1px_3px_rgba(255,215,0,0.3)]";
-		if (amount >= 20)
-			return "bg-gradient-to-r from-red-500 to-red-600 shadow-[0_1px_3px_rgba(255,0,0,0.3)]";
-		if (amount >= 10)
-			return "bg-gradient-to-r from-blue-500 to-blue-600 shadow-[0_1px_3px_rgba(0,0,255,0.3)]";
-		if (amount >= 5)
-			return "bg-gradient-to-r from-green-500 to-green-600 shadow-[0_1px_3px_rgba(0,255,0,0.3)]";
-		return "bg-gradient-to-r from-purple-500 to-purple-600 shadow-[0_1px_3px_rgba(128,0,128,0.3)]";
+		// 金額に応じて青系の色を返す
+		if (amount >= 1) {
+			// 1 SUI以上: #4DA2FF
+			return "bg-[#4DA2FF] shadow-[0_1px_3px_rgba(77,162,255,0.3)]";
+		} else {
+			// 1 SUI未満 (0.1など): #C0E6FF
+			return "bg-[#C0E6FF] shadow-[0_1px_3px_rgba(192,230,255,0.3)]";
+		}
+	};
+
+	// 支援額に応じた名前の装飾を取得
+	const getNameDecoration = () => {
+		if (!is_superchat) return null;
+
+		const amount = (comment as SuperchatMessage).superchat.amount;
+		const textColor = amount >= 1 ? "text-white" : "text-gray-800"; // 金額に応じてテキスト色を変更
+
+		if (amount >= 50) {
+			// 50 SUI以上：ダイヤモンド級装飾
+			return (
+				<span className={`font-bold text-xs md:text-sm leading-tight ${textColor}`}>
+					💎 {comment.display_name} 💎
+				</span>
+			);
+		}
+		
+		if (amount >= 20) {
+			// 20 SUI以上：プラチナ級装飾
+			return (
+				<span className={`font-bold text-xs md:text-sm leading-tight ${textColor}`}>
+					🌟 {comment.display_name} 🌟
+				</span>
+			);
+		}
+
+		// 20 SUI未満：ゴールド級装飾
+		return (
+			<span className={`font-bold text-xs md:text-sm leading-tight ${textColor}`}>
+				✨ {comment.display_name} ✨
+			</span>
+		);
 	};
 
 	return (
@@ -297,31 +328,31 @@ function CommentItem({ comment }: CommentItemProps) {
 				is_superchat
 					? "py-0.5 px-1.5 text-sm shadow-sm border-b border-border/5"
 					: "py-0 px-1 text-xs md:text-sm hover:bg-secondary/5 transition-colors border-b border-border/5",
-				is_superchat ? `${getSuperchatBgColor()} text-white` : "",
+				is_superchat ? `${getSuperchatBgColor()} ${(comment as SuperchatMessage).superchat.amount >= 1 ? 'text-white' : 'text-gray-800'}` : "",
 			)}
 		>
 			{is_superchat ? (
 				// スーパーチャット表示
 				<>
-					<div className="flex items-center justify-between gap-0.5 mb-0">
-						<span className="font-semibold text-white text-xs md:text-sm leading-tight">
-							{comment.display_name}
-						</span>
+					<div className="flex items-center justify-between gap-0.5 mb-1.5">
+						{getNameDecoration()}
 						<span className="px-1 py-0 rounded-full bg-black/40 text-white font-medium text-xs md:text-sm flex-shrink-0 leading-none">
 							{(comment as SuperchatMessage).superchat.amount} {(comment as SuperchatMessage).superchat.coin}
 						</span>
 					</div>
-					<div className="font-medium text-white text-xs md:text-sm mt-0.5 leading-tight whitespace-pre-wrap break-words break-all w-full">
+					<div className={`font-medium text-xs md:text-sm leading-tight whitespace-pre-wrap break-words break-all w-full ${(comment as SuperchatMessage).superchat.amount >= 1 ? 'text-white' : 'text-gray-800'}`}>
 						{comment.message}
 					</div>
 				</>
 			) : (
 				// 通常コメント表示
-				<div className="flex items-start leading-none py-0 w-full">
-					<div className="flex-grow">
-						<span className="font-semibold mr-0.5 text-xs md:text-sm">
+				<div className="flex flex-col py-0 w-full">
+					<div className="mb-1">
+						<span className="font-semibold text-xs md:text-sm">
 							{comment.display_name}:
 						</span>
+					</div>
+					<div>
 						<span className="text-xs md:text-sm whitespace-pre-wrap break-words break-all overflow-hidden">
 							{comment.message}
 						</span>

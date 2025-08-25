@@ -3,6 +3,7 @@ import ServerControl from "@/components/features/dashboard/ServerControl";
 import StreamerConfig from "@/components/features/dashboard/StreamerConfig";
 import UrlDisplay from "@/components/features/dashboard/UrlDisplay";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner"; // shadcn/uiのsonnerコンポーネント
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 /**
  * SUIperCHAT ルートページコンポーネント (配信者ダッシュボード)
  *
@@ -30,9 +31,12 @@ export default function RootPage(): React.ReactNode {
 	return (
 		<div className="min-h-screen max-h-screen overflow-hidden">
 			<div className="max-w-[1200px] mx-auto p-4 h-screen flex flex-col">
-				<h1 className="text-3xl font-bold mb-4 flex-shrink-0">
-					SUIperCHAT Streamer
-				</h1>
+				<div className="flex items-center justify-between mb-4 flex-shrink-0">
+					<h1 className="text-3xl font-bold">
+						SUIperCHAT Streamer
+					</h1>
+					<ThemeToggle />
+				</div>
 
 				<div className="flex gap-6 flex-grow min-h-0">
 					{/* 左側のカラム - 既存のダッシュボードコンポーネント（固定幅494px） */}
