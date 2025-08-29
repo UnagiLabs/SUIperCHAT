@@ -11,3 +11,5 @@ docs/publish_data.md
 # YoYo AI version control directory
 .yoyo/
 vscode_cli.tar.gz
+
+.serena/
