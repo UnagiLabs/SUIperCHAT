@@ -6,7 +6,8 @@
 		"dev": "next dev --turbopack",
 		"build": "next build",
 		"start": "next start",
-		"check": "biome check src --write"
+		"check": "biome check src --write",
+		"mock-ws": "node mock-websocket-server.js"
 	},
 	"dependencies": {
 		"@hookform/resolvers": "^5.0.1",

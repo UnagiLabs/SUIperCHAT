@@ -13,6 +13,7 @@
 
 "use client";
 
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { HeaderWalletButton } from "@/components/wallet/header-wallet-button";
 import { useAspectRatio } from "@/hooks/useAspectRatio";
 import { cn } from "@/lib/utils";
@@ -62,7 +63,10 @@ export function ViewerHeader({
 					>
 						SUIperCHAT
 					</h1>
-					<HeaderWalletButton />
+					<div className="flex items-center gap-2">
+						<ThemeToggle />
+						<HeaderWalletButton />
+					</div>
 				</div>
 			</header>
 		</>

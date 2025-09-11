@@ -17,6 +17,7 @@ import {
 } from "@mysten/dapp-kit";
 import { getFullnodeUrl } from "@mysten/sui/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
 import type React from "react";
 import { type ReactNode, useState } from "react";
 
@@ -46,12 +47,19 @@ export function ClientProviders({
 	});
 
 	return (
-		<QueryClientProvider client={queryClient}>
-			<SuiClientProvider networks={networkConfig} defaultNetwork="mainnet">
-				<WalletProvider>
-					<WebSocketProvider>{children}</WebSocketProvider>
-				</WalletProvider>
-			</SuiClientProvider>
-		</QueryClientProvider>
+		<ThemeProvider 
+			attribute="class" 
+			defaultTheme="system" 
+			enableSystem
+			disableTransitionOnChange
+		>
+			<QueryClientProvider client={queryClient}>
+				<SuiClientProvider networks={networkConfig} defaultNetwork="mainnet">
+					<WalletProvider>
+						<WebSocketProvider>{children}</WebSocketProvider>
+					</WalletProvider>
+				</SuiClientProvider>
+			</QueryClientProvider>
+		</ThemeProvider>
 	);
 }

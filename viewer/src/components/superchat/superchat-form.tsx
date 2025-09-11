@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useMobileKeyboard } from "@/hooks/useMobileKeyboard";
-import { Send } from "lucide-react";
+import { Heart, Send, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -88,6 +88,15 @@ const superchat_form_schema = z.object({
 
 // フォームの入力値の型
 type SuperchatFormValues = z.infer<typeof superchat_form_schema>;
+
+// スタンプの定義
+const STAMPS = [
+	{ id: "heart", icon: Heart, label: "ハート", color: "text-red-500" },
+	{ id: "like", icon: ThumbsUp, label: "いいね", color: "text-blue-500" },
+	{ id: "star", icon: Star, label: "星", color: "text-yellow-500" },
+	{ id: "poop", icon: () => <span className="text-2xl">💩</span>, label: "うんち", color: "" },
+	{ id: "dislike", icon: ThumbsDown, label: "よくないね", color: "text-gray-500" },
+];
 
 // ウォレットエラーの型
 interface WalletError extends Error {
@@ -165,6 +174,8 @@ export function SuperchatForm({
 	const [has_tip, set_has_tip] = useState(false);
 	// 入力フィールドがフォーカス中かどうかの状態
 	const [isInputFocused, setIsInputFocused] = useState(false);
+	// スタンプの状態
+	const [selectedStamp, setSelectedStamp] = useState<string | null>(null);
 
 	// WebSocketコンテキストを取得
 	const { actions } = useWebSocket();
@@ -250,6 +261,29 @@ export function SuperchatForm({
 		// Tipモードが変わったら高さも変わるので通知
 		notifyHeightChange();
 	}, [has_tip, on_tip_mode_change, notifyHeightChange]);
+
+	/**
+	 * スタンプを送信する処理
+	 */
+	async function sendStamp(stampId: string, displayName: string) {
+		try {
+			// スタンプメッセージとしてWebSocketで送信
+			actions.sendChatMessage(displayName, "", {
+				stamp: stampId,
+			});
+
+			toast.success("Stamp sent!");
+
+			// スタンプアニメーションを表示するためのイベント発火
+			window.dispatchEvent(new CustomEvent("stampSent", { detail: { stampId } }));
+
+			// スタンプ選択をリセット
+			setSelectedStamp(null);
+		} catch (error) {
+			console.error("Failed to send stamp:", error);
+			toast.error("Failed to send stamp");
+		}
+	}
 
 	/**
 	 * Tipmodeなしで通常メッセージを送信する処理
@@ -554,9 +588,18 @@ export function SuperchatForm({
 
 	// モバイルキーボード表示時のスタイル設定
 	const isMobileKeyboardFixed = isKeyboardVisible && isInputFocused;
-	// 画面幅で横画面かどうかを判定
-	const isLandscape =
-		typeof window !== "undefined" && window.innerWidth > window.innerHeight;
+	// 画面幅で横画面かどうかを判定（クライアントサイドでのみ）
+	const [isLandscape, setIsLandscape] = useState(false);
+	
+	useEffect(() => {
+		const updateOrientation = () => {
+			setIsLandscape(window.innerWidth > window.innerHeight);
+		};
+		
+		updateOrientation();
+		window.addEventListener("resize", updateOrientation);
+		return () => window.removeEventListener("resize", updateOrientation);
+	}, []);
 
 	// キーボード高さを微調整（余白を減らすため）
 	const adjustedKeyboardHeight = keyboardHeight > 0 ? keyboardHeight - 20 : 0;
@@ -671,6 +714,46 @@ export function SuperchatForm({
 									SuperChat
 								</button>
 							</div>
+						</div>
+
+						{/* スタンプ選択ボタン */}
+						<div className="flex items-center gap-1 mb-2">
+							{STAMPS.map((stamp) => {
+								const Icon = stamp.icon;
+								return (
+									<button
+										key={stamp.id}
+										type="button"
+										onClick={() => {
+											if (selectedStamp === stamp.id) {
+												setSelectedStamp(null);
+											} else {
+												setSelectedStamp(stamp.id);
+												// すぐに送信
+												const displayName = form.getValues("display_name");
+												if (displayName) {
+													sendStamp(stamp.id, displayName);
+												} else {
+													toast.error("Please enter your display name first");
+													setSelectedStamp(null);
+												}
+											}
+										}}
+										className={`p-2 rounded-lg transition-all ${
+											selectedStamp === stamp.id
+												? "bg-primary text-primary-foreground scale-110"
+												: "bg-secondary hover:bg-secondary/80"
+										}`}
+										title={stamp.label}
+									>
+										{typeof Icon === "function" && Icon.name !== "Icon" ? (
+											<Icon />
+										) : (
+											<Icon className={`h-5 w-5 ${stamp.color}`} />
+										)}
+									</button>
+								);
+							})}
 						</div>
 
 						{has_tip && (

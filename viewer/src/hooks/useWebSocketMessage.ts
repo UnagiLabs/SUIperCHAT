@@ -141,7 +141,7 @@ export function useWebSocketMessageHandler({
 	 * @param message メッセージ内容
 	 */
 	const sendChatMessage = useCallback(
-		(displayName: string, message: string) => {
+		(displayName: string, message: string, extra?: { stamp?: string }) => {
 			if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
 				console.error(
 					"チャットメッセージを送信できません: WebSocket接続がありません",
@@ -156,6 +156,7 @@ export function useWebSocketMessageHandler({
 					display_name: displayName,
 					message: message,
 					timestamp: Date.now(),
+					...(extra?.stamp && { stamp: extra.stamp }),
 				};
 
 				console.debug("チャットメッセージ送信:", chatMessage);
